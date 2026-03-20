@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate, Link, Navigate, useBeforeUnload } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1842,6 +1842,45 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
   const sessionChanged = run.sessionIdBefore && run.sessionIdAfter && run.sessionIdBefore !== run.sessionIdAfter;
   const sessionId = run.sessionIdAfter || run.sessionIdBefore;
   const hasNonZeroExit = run.exitCode !== null && run.exitCode !== 0;
+  const logViewerRef = useRef<LogViewerHandle | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyRunDetails = useCallback(() => {
+    const parts: string[] = [];
+
+    // Timestamps & duration
+    if (startTime) {
+      parts.push(`${startTime}${endTime ? ` → ${endTime}` : ""}`);
+      parts.push(`${relativeTime(run.startedAt!)}${run.finishedAt ? ` → ${relativeTime(run.finishedAt)}` : ""}`);
+      if (displayDurationSec !== null) {
+        parts.push(`Duration: ${displayDurationSec >= 60 ? `${Math.floor(displayDurationSec / 60)}m ${displayDurationSec % 60}s` : `${displayDurationSec}s`}`);
+      }
+    }
+
+    // Error info
+    if (run.error) {
+      parts.push(`${run.error}${run.errorCode ? ` (${run.errorCode})` : ""}`);
+    }
+    if (hasNonZeroExit) {
+      parts.push(`Exit code ${run.exitCode}${run.signal ? ` (signal: ${run.signal})` : ""}`);
+    }
+
+    // stderr excerpt
+    if (run.stderrExcerpt) {
+      parts.push("stderr");
+      parts.push(redactHomePathUserSegments(run.stderrExcerpt));
+    }
+
+    // LogViewer content (invocation, transcript, failure details, events)
+    const logText = logViewerRef.current?.getCopyText();
+    if (logText) parts.push(logText);
+
+    const text = parts.join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [startTime, endTime, run, displayDurationSec, hasNonZeroExit]);
 
   return (
     <div className="space-y-4 min-w-0">
@@ -1887,6 +1926,15 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
                   {retryRun.isPending ? "Retrying…" : "Retry"}
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-6 px-2"
+                onClick={handleCopyRunDetails}
+              >
+                {copied ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
             </div>
             {resumeRun.isError && (
               <div className="text-xs text-destructive">
@@ -2098,7 +2146,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
       )}
 
       {/* Log viewer */}
-      <LogViewer run={run} adapterType={adapterType} />
+      <LogViewer run={run} adapterType={adapterType} copyRef={logViewerRef} />
       <ScrollToBottom />
     </div>
   );
@@ -2110,7 +2158,7 @@ interface LogViewerHandle {
   getCopyText: () => string;
 }
 
-const LogViewer = forwardRef<LogViewerHandle, { run: HeartbeatRun; adapterType: string }>(function LogViewer({ run, adapterType }, ref) {
+function LogViewer({ run, adapterType, copyRef }: { run: HeartbeatRun; adapterType: string; copyRef?: React.MutableRefObject<LogViewerHandle | null> }) {
   const [events, setEvents] = useState<HeartbeatRunEvent[]>([]);
   const [logLines, setLogLines] = useState<Array<{ ts: string; stream: "stdout" | "stderr" | "system"; chunk: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -2478,67 +2526,78 @@ const LogViewer = forwardRef<LogViewerHandle, { run: HeartbeatRun; adapterType: 
   const adapter = useMemo(() => getUIAdapter(adapterType), [adapterType]);
   const transcript = useMemo(() => buildTranscript(logLines, adapter.parseStdoutLine), [logLines, adapter]);
 
-  useImperativeHandle(ref, () => ({
-    getCopyText: () => {
-      const parts: string[] = [];
+  // Expose copy-text builder to parent via mutable ref prop.
+  const getCopyText = useCallback(() => {
+    const parts: string[] = [];
 
-      // Invocation
-      if (adapterInvokePayload) {
-        parts.push("Invocation");
-        if (typeof adapterInvokePayload.adapterType === "string")
-          parts.push(`Adapter: ${adapterInvokePayload.adapterType}`);
-        if (typeof adapterInvokePayload.cwd === "string")
-          parts.push(`Working dir: ${adapterInvokePayload.cwd}`);
-        if (typeof adapterInvokePayload.command === "string") {
-          const cmd = [
-            adapterInvokePayload.command,
-            ...(Array.isArray(adapterInvokePayload.commandArgs)
-              ? adapterInvokePayload.commandArgs.filter((v): v is string => typeof v === "string")
-              : []),
-          ].join(" ");
-          parts.push(`Command: ${cmd}`);
-        }
-        if (adapterInvokePayload.env !== undefined)
-          parts.push(`Environment\n${formatEnvForDisplay(adapterInvokePayload.env)}`);
-        parts.push("");
+    // Invocation
+    if (adapterInvokePayload) {
+      parts.push("Invocation");
+      if (typeof adapterInvokePayload.adapterType === "string")
+        parts.push(`Adapter: ${adapterInvokePayload.adapterType}`);
+      if (typeof adapterInvokePayload.cwd === "string")
+        parts.push(`Working dir: ${adapterInvokePayload.cwd}`);
+      if (typeof adapterInvokePayload.command === "string") {
+        const cmd = [
+          adapterInvokePayload.command,
+          ...(Array.isArray(adapterInvokePayload.commandArgs)
+            ? adapterInvokePayload.commandArgs.filter((v): v is string => typeof v === "string")
+            : []),
+        ].join(" ");
+        parts.push(`Command: ${cmd}`);
       }
+      if (adapterInvokePayload.env !== undefined)
+        parts.push(`Environment\n${formatEnvForDisplay(adapterInvokePayload.env)}`);
+      parts.push("");
+    }
 
-      // Transcript
-      if (transcript.length > 0) {
-        parts.push(`Transcript (${transcript.length})`);
-        for (const entry of transcript) {
-          const label = entry.stream === "stderr" ? "stderr" : entry.stream === "system" ? "system" : "stdout";
-          parts.push(`${label}: ${entry.content}`);
-        }
-        parts.push("");
-      }
-
-      // Failure details
-      if (run.status === "failed" || run.status === "timed_out") {
-        parts.push("Failure details");
-        if (run.error) parts.push(`Error: ${redactHomePathUserSegments(run.error)}`);
-        if (run.stderrExcerpt?.trim()) parts.push(`stderr excerpt\n${redactHomePathUserSegments(run.stderrExcerpt)}`);
-        if (run.resultJson) parts.push(`adapter result JSON\n${JSON.stringify(redactHomePathUserSegmentsInValue(run.resultJson), null, 2)}`);
-        if (run.stdoutExcerpt?.trim() && !run.resultJson) parts.push(`stdout excerpt\n${redactHomePathUserSegments(run.stdoutExcerpt)}`);
-        parts.push("");
-      }
-
-      // Events
-      if (events.length > 0) {
-        parts.push(`Events (${events.length})`);
-        for (const evt of events) {
-          const time = new Date(evt.createdAt).toLocaleTimeString("en-US", { hour12: false });
-          const stream = evt.stream ? `[${evt.stream}]` : "";
-          const msg = evt.message
-            ? redactHomePathUserSegments(evt.message)
-            : evt.payload ? JSON.stringify(redactHomePathUserSegmentsInValue(evt.payload)) : "";
-          parts.push(`${time} ${stream} ${msg}`.trim());
+    // Transcript
+    if (transcript.length > 0) {
+      parts.push(`Transcript (${transcript.length})`);
+      for (const entry of transcript) {
+        if (entry.kind === "tool_call") {
+          parts.push(`[tool_call] ${entry.name}: ${JSON.stringify(entry.input)}`);
+        } else if (entry.kind === "tool_result") {
+          parts.push(`[tool_result] ${entry.toolName ?? entry.toolUseId}: ${entry.content}`);
+        } else if (entry.kind === "init") {
+          parts.push(`[init] model=${entry.model} session=${entry.sessionId}`);
+        } else {
+          parts.push(`[${entry.kind}] ${entry.text}`);
         }
       }
+      parts.push("");
+    }
 
-      return parts.join("\n");
-    },
-  }), [adapterInvokePayload, transcript, events, run]);
+    // Failure details
+    if (run.status === "failed" || run.status === "timed_out") {
+      parts.push("Failure details");
+      if (run.error) parts.push(`Error: ${redactHomePathUserSegments(run.error)}`);
+      if (run.stderrExcerpt?.trim()) parts.push(`stderr excerpt\n${redactHomePathUserSegments(run.stderrExcerpt)}`);
+      if (run.resultJson) parts.push(`adapter result JSON\n${JSON.stringify(redactHomePathUserSegmentsInValue(run.resultJson), null, 2)}`);
+      if (run.stdoutExcerpt?.trim() && !run.resultJson) parts.push(`stdout excerpt\n${redactHomePathUserSegments(run.stdoutExcerpt)}`);
+      parts.push("");
+    }
+
+    // Events
+    if (events.length > 0) {
+      parts.push(`Events (${events.length})`);
+      for (const evt of events) {
+        const time = new Date(evt.createdAt).toLocaleTimeString("en-US", { hour12: false });
+        const stream = evt.stream ? `[${evt.stream}]` : "";
+        const msg = evt.message
+          ? redactHomePathUserSegments(evt.message)
+          : evt.payload ? JSON.stringify(redactHomePathUserSegmentsInValue(evt.payload)) : "";
+        parts.push(`${time} ${stream} ${msg}`.trim());
+      }
+    }
+
+    return parts.join("\n");
+  }, [adapterInvokePayload, transcript, events, run]);
+
+  useEffect(() => {
+    if (copyRef) copyRef.current = { getCopyText };
+    return () => { if (copyRef) copyRef.current = null; };
+  }, [copyRef, getCopyText]);
 
   useEffect(() => {
     setTranscriptMode("nice");
