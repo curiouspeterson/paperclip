@@ -171,6 +171,14 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
     return ids;
   }, [liveRuns]);
 
+  const liveAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const run of liveRuns ?? []) {
+      ids.add(run.agentId);
+    }
+    return ids;
+  }, [liveRuns]);
+
   const { data: issues, isLoading, error } = useQuery({
     queryKey: queryKeys.issues.listByProject(companyId, projectId),
     queryFn: () => issuesApi.list(companyId, { projectId }),
@@ -193,6 +201,7 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
       error={error as Error | null}
       agents={agents}
       liveIssueIds={liveIssueIds}
+      liveAgentIds={liveAgentIds}
       projectId={projectId}
       viewStateKey={`paperclip:project-view:${projectId}`}
       onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}

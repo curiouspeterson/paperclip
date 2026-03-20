@@ -65,6 +65,14 @@ export function Issues() {
     return ids;
   }, [liveRuns]);
 
+  const liveAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const run of liveRuns ?? []) {
+      ids.add(run.agentId);
+    }
+    return ids;
+  }, [liveRuns]);
+
   const issueLinkState = useMemo(
     () =>
       createIssueDetailLocationState(
@@ -103,6 +111,7 @@ export function Issues() {
       error={error as Error | null}
       agents={agents}
       liveIssueIds={liveIssueIds}
+      liveAgentIds={liveAgentIds}
       viewStateKey="paperclip:issues-view"
       issueLinkState={issueLinkState}
       initialAssignees={searchParams.get("assignee") ? [searchParams.get("assignee")!] : undefined}

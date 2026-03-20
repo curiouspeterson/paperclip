@@ -4,6 +4,7 @@ import type { IssueComment, Agent } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
 import { Check, Copy, Paperclip } from "lucide-react";
 import { Identity } from "./Identity";
+import { HeartbeatButton } from "./HeartbeatButton";
 import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySelector";
 import { MarkdownBody } from "./MarkdownBody";
 import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./MarkdownEditor";
@@ -48,6 +49,7 @@ interface CommentThreadProps {
   currentAssigneeValue?: string;
   suggestedAssigneeValue?: string;
   mentions?: MentionOption[];
+  liveAgentIds?: Set<string>;
 }
 
 const CLOSED_STATUSES = new Set(["done", "cancelled"]);
@@ -125,12 +127,14 @@ const TimelineList = memo(function TimelineList({
   companyId,
   projectId,
   highlightCommentId,
+  liveAgentIds,
 }: {
   timeline: TimelineItem[];
   agentMap?: Map<string, Agent>;
   companyId?: string | null;
   projectId?: string | null;
   highlightCommentId?: string | null;
+  liveAgentIds?: Set<string>;
 }) {
   if (timeline.length === 0) {
     return <p className="text-sm text-muted-foreground">No comments or runs yet.</p>;
@@ -144,12 +148,18 @@ const TimelineList = memo(function TimelineList({
           return (
             <div key={`run:${run.runId}`} className="border border-border bg-accent/20 p-3 overflow-hidden min-w-0 rounded-sm">
               <div className="flex items-center justify-between mb-2">
-                <Link to={`/agents/${run.agentId}`} className="hover:underline">
-                  <Identity
-                    name={agentMap?.get(run.agentId)?.name ?? run.agentId.slice(0, 8)}
-                    size="sm"
+                <span className="inline-flex items-center gap-1">
+                  <Link to={`/agents/${run.agentId}`} className="hover:underline">
+                    <Identity
+                      name={agentMap?.get(run.agentId)?.name ?? run.agentId.slice(0, 8)}
+                      size="sm"
+                    />
+                  </Link>
+                  <HeartbeatButton
+                    agentId={run.agentId}
+                    isAlive={liveAgentIds?.has(run.agentId) ?? false}
                   />
-                </Link>
+                </span>
                 <span className="text-xs text-muted-foreground">
                   {formatDateTime(run.startedAt ?? run.createdAt)}
                 </span>
@@ -178,12 +188,18 @@ const TimelineList = memo(function TimelineList({
           >
             <div className="flex items-center justify-between mb-1">
               {comment.authorAgentId ? (
-                <Link to={`/agents/${comment.authorAgentId}`} className="hover:underline">
-                  <Identity
-                    name={agentMap?.get(comment.authorAgentId)?.name ?? comment.authorAgentId.slice(0, 8)}
-                    size="sm"
+                <span className="inline-flex items-center gap-1">
+                  <Link to={`/agents/${comment.authorAgentId}`} className="hover:underline">
+                    <Identity
+                      name={agentMap?.get(comment.authorAgentId)?.name ?? comment.authorAgentId.slice(0, 8)}
+                      size="sm"
+                    />
+                  </Link>
+                  <HeartbeatButton
+                    agentId={comment.authorAgentId}
+                    isAlive={liveAgentIds?.has(comment.authorAgentId) ?? false}
                   />
-                </Link>
+                </span>
               ) : (
                 <Identity name="You" size="sm" />
               )}
@@ -272,6 +288,7 @@ export function CommentThread({
   currentAssigneeValue = "",
   suggestedAssigneeValue,
   mentions: providedMentions,
+  liveAgentIds,
 }: CommentThreadProps) {
   const [body, setBody] = useState("");
   const [reopen, setReopen] = useState(true);
@@ -403,6 +420,7 @@ export function CommentThread({
         companyId={companyId}
         projectId={projectId}
         highlightCommentId={highlightCommentId}
+        liveAgentIds={liveAgentIds}
       />
 
       {liveRunSlot}

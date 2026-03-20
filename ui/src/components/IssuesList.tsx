@@ -22,6 +22,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { CircleDot, Plus, Filter, ArrowUpDown, Layers, Check, X, ChevronRight, List, Columns3, User, Search } from "lucide-react";
 import { KanbanBoard } from "./KanbanBoard";
+import { HeartbeatButton } from "./HeartbeatButton";
+import { Link } from "@/lib/router";
 import type { Issue } from "@paperclipai/shared";
 
 /* ── Helpers ── */
@@ -151,6 +153,7 @@ interface IssuesListProps {
   error?: Error | null;
   agents?: Agent[];
   liveIssueIds?: Set<string>;
+  liveAgentIds?: Set<string>;
   projectId?: string;
   viewStateKey: string;
   issueLinkState?: unknown;
@@ -166,6 +169,7 @@ export function IssuesList({
   error,
   agents,
   liveIssueIds,
+  liveAgentIds,
   projectId,
   viewStateKey,
   issueLinkState,
@@ -724,7 +728,19 @@ export function IssuesList({
                             }}
                           >
                             {issue.assigneeAgentId && agentName(issue.assigneeAgentId) ? (
-                              <Identity name={agentName(issue.assigneeAgentId)!} size="sm" />
+                              <span className="inline-flex items-center gap-1">
+                                <Link
+                                  to={`/agents/${issue.assigneeAgentId}`}
+                                  className="hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Identity name={agentName(issue.assigneeAgentId)!} size="sm" />
+                                </Link>
+                                <HeartbeatButton
+                                  agentId={issue.assigneeAgentId}
+                                  isAlive={liveAgentIds?.has(issue.assigneeAgentId) ?? false}
+                                />
+                              </span>
                             ) : issue.assigneeUserId ? (
                               <span className="inline-flex items-center gap-1.5 text-xs">
                                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">

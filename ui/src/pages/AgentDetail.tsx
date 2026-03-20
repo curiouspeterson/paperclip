@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate, Link, Navigate, useBeforeUnload } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -60,6 +60,7 @@ import {
   Eye,
   EyeOff,
   Copy,
+  Check,
   ChevronRight,
   ChevronDown,
   ArrowLeft,
@@ -2105,7 +2106,11 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
 
 /* ---- Log Viewer ---- */
 
-function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: string }) {
+interface LogViewerHandle {
+  getCopyText: () => string;
+}
+
+const LogViewer = forwardRef<LogViewerHandle, { run: HeartbeatRun; adapterType: string }>(function LogViewer({ run, adapterType }, ref) {
   const [events, setEvents] = useState<HeartbeatRunEvent[]>([]);
   const [logLines, setLogLines] = useState<Array<{ ts: string; stream: "stdout" | "stderr" | "system"; chunk: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -2472,6 +2477,68 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
 
   const adapter = useMemo(() => getUIAdapter(adapterType), [adapterType]);
   const transcript = useMemo(() => buildTranscript(logLines, adapter.parseStdoutLine), [logLines, adapter]);
+
+  useImperativeHandle(ref, () => ({
+    getCopyText: () => {
+      const parts: string[] = [];
+
+      // Invocation
+      if (adapterInvokePayload) {
+        parts.push("Invocation");
+        if (typeof adapterInvokePayload.adapterType === "string")
+          parts.push(`Adapter: ${adapterInvokePayload.adapterType}`);
+        if (typeof adapterInvokePayload.cwd === "string")
+          parts.push(`Working dir: ${adapterInvokePayload.cwd}`);
+        if (typeof adapterInvokePayload.command === "string") {
+          const cmd = [
+            adapterInvokePayload.command,
+            ...(Array.isArray(adapterInvokePayload.commandArgs)
+              ? adapterInvokePayload.commandArgs.filter((v): v is string => typeof v === "string")
+              : []),
+          ].join(" ");
+          parts.push(`Command: ${cmd}`);
+        }
+        if (adapterInvokePayload.env !== undefined)
+          parts.push(`Environment\n${formatEnvForDisplay(adapterInvokePayload.env)}`);
+        parts.push("");
+      }
+
+      // Transcript
+      if (transcript.length > 0) {
+        parts.push(`Transcript (${transcript.length})`);
+        for (const entry of transcript) {
+          const label = entry.stream === "stderr" ? "stderr" : entry.stream === "system" ? "system" : "stdout";
+          parts.push(`${label}: ${entry.content}`);
+        }
+        parts.push("");
+      }
+
+      // Failure details
+      if (run.status === "failed" || run.status === "timed_out") {
+        parts.push("Failure details");
+        if (run.error) parts.push(`Error: ${redactHomePathUserSegments(run.error)}`);
+        if (run.stderrExcerpt?.trim()) parts.push(`stderr excerpt\n${redactHomePathUserSegments(run.stderrExcerpt)}`);
+        if (run.resultJson) parts.push(`adapter result JSON\n${JSON.stringify(redactHomePathUserSegmentsInValue(run.resultJson), null, 2)}`);
+        if (run.stdoutExcerpt?.trim() && !run.resultJson) parts.push(`stdout excerpt\n${redactHomePathUserSegments(run.stdoutExcerpt)}`);
+        parts.push("");
+      }
+
+      // Events
+      if (events.length > 0) {
+        parts.push(`Events (${events.length})`);
+        for (const evt of events) {
+          const time = new Date(evt.createdAt).toLocaleTimeString("en-US", { hour12: false });
+          const stream = evt.stream ? `[${evt.stream}]` : "";
+          const msg = evt.message
+            ? redactHomePathUserSegments(evt.message)
+            : evt.payload ? JSON.stringify(redactHomePathUserSegmentsInValue(evt.payload)) : "";
+          parts.push(`${time} ${stream} ${msg}`.trim());
+        }
+      }
+
+      return parts.join("\n");
+    },
+  }), [adapterInvokePayload, transcript, events, run]);
 
   useEffect(() => {
     setTranscriptMode("nice");

@@ -265,6 +265,21 @@ export function IssueDetail() {
     refetchInterval: 3000,
   });
 
+  const { data: companyLiveRuns } = useQuery({
+    queryKey: queryKeys.liveRuns(selectedCompanyId!),
+    queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 10_000,
+  });
+
+  const liveAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const run of companyLiveRuns ?? []) {
+      ids.add(run.agentId);
+    }
+    return ids;
+  }, [companyLiveRuns]);
+
   const hasLiveRuns = (liveRuns ?? []).length > 0 || !!activeRun;
   const sourceBreadcrumb = useMemo(
     () => readIssueDetailBreadcrumb(location.state) ?? { label: "Issues", href: "/issues" },
@@ -588,7 +603,7 @@ export function IssueDetail() {
   useEffect(() => {
     if (issue) {
       openPanel(
-        <IssueProperties issue={issue} onUpdate={(data) => updateIssue.mutate(data)} />
+        <IssueProperties issue={issue} onUpdate={(data) => updateIssue.mutate(data)} liveAgentIds={liveAgentIds} />
       );
     }
     return () => closePanel();
@@ -1024,6 +1039,7 @@ export function IssueDetail() {
               await uploadAttachment.mutateAsync(file);
             }}
             liveRunSlot={<LiveRunWidget issueId={issueId!} companyId={issue.companyId} />}
+            liveAgentIds={liveAgentIds}
           />
         </TabsContent>
 
@@ -1161,7 +1177,7 @@ export function IssueDetail() {
           </SheetHeader>
           <ScrollArea className="flex-1 overflow-y-auto">
             <div className="px-4 pb-4">
-              <IssueProperties issue={issue} onUpdate={(data) => updateIssue.mutate(data)} inline />
+              <IssueProperties issue={issue} onUpdate={(data) => updateIssue.mutate(data)} liveAgentIds={liveAgentIds} inline />
             </div>
           </ScrollArea>
         </SheetContent>
