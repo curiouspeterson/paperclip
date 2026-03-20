@@ -13,6 +13,7 @@ import {
   sessionCodec as codexSessionCodec,
   getQuotaWindows as codexGetQuotaWindows,
   listCodexModels,
+  normalizeConfigForPersistence as codexNormalizeConfigForPersistence,
 } from "@paperclipai/adapter-codex-local/server";
 import { agentConfigurationDoc as codexAgentConfigurationDoc, models as codexModels } from "@paperclipai/adapter-codex-local";
 import {
@@ -20,12 +21,14 @@ import {
   testEnvironment as cursorTestEnvironment,
   sessionCodec as cursorSessionCodec,
   listCursorModels,
+  normalizeConfigForPersistence as cursorNormalizeConfigForPersistence,
 } from "@paperclipai/adapter-cursor-local/server";
 import { agentConfigurationDoc as cursorAgentConfigurationDoc, models as cursorModels } from "@paperclipai/adapter-cursor-local";
 import {
   execute as geminiExecute,
   testEnvironment as geminiTestEnvironment,
   sessionCodec as geminiSessionCodec,
+  normalizeConfigForPersistence as geminiNormalizeConfigForPersistence,
 } from "@paperclipai/adapter-gemini-local/server";
 import { agentConfigurationDoc as geminiAgentConfigurationDoc, models as geminiModels } from "@paperclipai/adapter-gemini-local";
 import {
@@ -91,6 +94,7 @@ const codexLocalAdapter: ServerAdapterModule = {
   supportsLocalAgentJwt: true,
   agentConfigurationDoc: codexAgentConfigurationDoc,
   getQuotaWindows: codexGetQuotaWindows,
+  normalizeConfigForPersistence: codexNormalizeConfigForPersistence,
 };
 
 const cursorLocalAdapter: ServerAdapterModule = {
@@ -103,6 +107,7 @@ const cursorLocalAdapter: ServerAdapterModule = {
   listModels: listCursorModels,
   supportsLocalAgentJwt: true,
   agentConfigurationDoc: cursorAgentConfigurationDoc,
+  normalizeConfigForPersistence: cursorNormalizeConfigForPersistence,
 };
 
 const geminiLocalAdapter: ServerAdapterModule = {
@@ -114,6 +119,7 @@ const geminiLocalAdapter: ServerAdapterModule = {
   models: geminiModels,
   supportsLocalAgentJwt: true,
   agentConfigurationDoc: geminiAgentConfigurationDoc,
+  normalizeConfigForPersistence: geminiNormalizeConfigForPersistence,
 };
 
 const openclawGatewayAdapter: ServerAdapterModule = {
@@ -123,6 +129,9 @@ const openclawGatewayAdapter: ServerAdapterModule = {
   models: openclawGatewayModels,
   supportsLocalAgentJwt: false,
   agentConfigurationDoc: openclawGatewayAgentConfigurationDoc,
+  normalizeJoinDefaults: openclawNormalizeJoinDefaults,
+  normalizeConfigForPersistence: async ({ config }) =>
+    normalizeOpenClawConfigForPersistence(config),
 };
 
 const openCodeLocalAdapter: ServerAdapterModule = {

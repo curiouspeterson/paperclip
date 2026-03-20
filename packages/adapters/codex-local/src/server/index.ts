@@ -13,7 +13,27 @@ export {
   fetchWithTimeout,
   codexHomeDir,
 } from "./quota.js";
-import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
+import type { AdapterConfigNormalizationInput, AdapterSessionCodec } from "@paperclipai/adapter-utils";
+import {
+  DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
+  DEFAULT_CODEX_LOCAL_MODEL,
+} from "../index.js";
+
+export async function normalizeConfigForPersistence({
+  config,
+}: AdapterConfigNormalizationInput): Promise<Record<string, unknown>> {
+  const next = { ...config };
+  if (!(typeof next.model === "string" && next.model.trim().length > 0)) {
+    next.model = DEFAULT_CODEX_LOCAL_MODEL;
+  }
+  const hasBypassFlag =
+    typeof next.dangerouslyBypassApprovalsAndSandbox === "boolean" ||
+    typeof next.dangerouslyBypassSandbox === "boolean";
+  if (!hasBypassFlag) {
+    next.dangerouslyBypassApprovalsAndSandbox = DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX;
+  }
+  return next;
+}
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

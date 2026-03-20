@@ -297,50 +297,6 @@ export function agentRoutes(db: Db) {
     };
   }
 
-  function generateEd25519PrivateKeyPem(): string {
-    const { privateKey } = generateKeyPairSync("ed25519");
-    return privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  }
-
-  function ensureGatewayDeviceKey(
-    adapterType: string | null | undefined,
-    adapterConfig: Record<string, unknown>,
-  ): Record<string, unknown> {
-    if (adapterType !== "openclaw_gateway") return adapterConfig;
-    const disableDeviceAuth = parseBooleanLike(adapterConfig.disableDeviceAuth) === true;
-    if (disableDeviceAuth) return adapterConfig;
-    if (asNonEmptyString(adapterConfig.devicePrivateKeyPem)) return adapterConfig;
-    return { ...adapterConfig, devicePrivateKeyPem: generateEd25519PrivateKeyPem() };
-  }
-
-  function applyCreateDefaultsByAdapterType(
-    adapterType: string | null | undefined,
-    adapterConfig: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const next = { ...adapterConfig };
-    if (adapterType === "codex_local") {
-      if (!asNonEmptyString(next.model)) {
-        next.model = DEFAULT_CODEX_LOCAL_MODEL;
-      }
-      const hasBypassFlag =
-        typeof next.dangerouslyBypassApprovalsAndSandbox === "boolean" ||
-        typeof next.dangerouslyBypassSandbox === "boolean";
-      if (!hasBypassFlag) {
-        next.dangerouslyBypassApprovalsAndSandbox = DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX;
-      }
-      return ensureGatewayDeviceKey(adapterType, next);
-    }
-    if (adapterType === "gemini_local" && !asNonEmptyString(next.model)) {
-      next.model = DEFAULT_GEMINI_LOCAL_MODEL;
-      return ensureGatewayDeviceKey(adapterType, next);
-    }
-    // OpenCode requires explicit model selection — no default
-    if (adapterType === "cursor" && !asNonEmptyString(next.model)) {
-      next.model = DEFAULT_CURSOR_LOCAL_MODEL;
-    }
-    return ensureGatewayDeviceKey(adapterType, next);
-  }
-
   async function assertAdapterConfigConstraints(
     companyId: string,
     adapterType: string | null | undefined,
@@ -840,10 +796,11 @@ export function agentRoutes(db: Db) {
     await assertCanCreateAgentsForCompany(req, companyId);
     const sourceIssueIds = parseSourceIssueIds(req.body);
     const { sourceIssueId: _sourceIssueId, sourceIssueIds: _sourceIssueIds, ...hireInput } = req.body;
-    const requestedAdapterConfig = applyCreateDefaultsByAdapterType(
-      hireInput.adapterType,
-      ((hireInput.adapterConfig ?? {}) as Record<string, unknown>),
-    );
+    const rawAdapterConfig = (hireInput.adapterConfig ?? {}) as Record<string, unknown>;
+    const hireAdapter = hireInput.adapterType ? findServerAdapter(hireInput.adapterType) : null;
+    const requestedAdapterConfig = hireAdapter?.normalizeConfigForPersistence
+      ? await hireAdapter.normalizeConfigForPersistence({ companyId, mode: "create", config: rawAdapterConfig })
+      : rawAdapterConfig;
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       companyId,
       requestedAdapterConfig,
@@ -986,10 +943,11 @@ export function agentRoutes(db: Db) {
       assertBoard(req);
     }
 
-    const requestedAdapterConfig = applyCreateDefaultsByAdapterType(
-      req.body.adapterType,
-      ((req.body.adapterConfig ?? {}) as Record<string, unknown>),
-    );
+    const createRawConfig = (req.body.adapterConfig ?? {}) as Record<string, unknown>;
+    const createAdapter = req.body.adapterType ? findServerAdapter(req.body.adapterType) : null;
+    const requestedAdapterConfig = createAdapter?.normalizeConfigForPersistence
+      ? await createAdapter.normalizeConfigForPersistence({ companyId, mode: "create", config: createRawConfig })
+      : createRawConfig;
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       companyId,
       requestedAdapterConfig,
@@ -1218,10 +1176,10 @@ export function agentRoutes(db: Db) {
       const rawEffectiveAdapterConfig = Object.prototype.hasOwnProperty.call(patchData, "adapterConfig")
         ? (asRecord(patchData.adapterConfig) ?? {})
         : (asRecord(existing.adapterConfig) ?? {});
-      const effectiveAdapterConfig = applyCreateDefaultsByAdapterType(
-        requestedAdapterType,
-        rawEffectiveAdapterConfig,
-      );
+      const patchAdapter = requestedAdapterType ? findServerAdapter(requestedAdapterType) : null;
+      const effectiveAdapterConfig = patchAdapter?.normalizeConfigForPersistence
+        ? await patchAdapter.normalizeConfigForPersistence({ companyId: existing.companyId, mode: "update", config: rawEffectiveAdapterConfig })
+        : rawEffectiveAdapterConfig;
       const normalizedEffectiveAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
         existing.companyId,
         effectiveAdapterConfig,

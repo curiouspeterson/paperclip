@@ -7,7 +7,18 @@ export {
   detectGeminiAuthRequired,
   isGeminiTurnLimitResult,
 } from "./parse.js";
-import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
+import type { AdapterConfigNormalizationInput, AdapterSessionCodec } from "@paperclipai/adapter-utils";
+import { DEFAULT_GEMINI_LOCAL_MODEL } from "../index.js";
+
+export async function normalizeConfigForPersistence({
+  config,
+}: AdapterConfigNormalizationInput): Promise<Record<string, unknown>> {
+  const next = { ...config };
+  if (!(typeof next.model === "string" && next.model.trim().length > 0)) {
+    next.model = DEFAULT_GEMINI_LOCAL_MODEL;
+  }
+  return next;
+}
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
