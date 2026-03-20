@@ -3,6 +3,6 @@
   "outputDirectory": "ui/dist",
   "framework": null,
   "rewrites": [
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|sw\\.js|site\\.webmanifest|favicon|.*\\.[a-z]+$).*)", "destination": "/index.html" }
   ]
 }

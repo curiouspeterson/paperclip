@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Romance Unzipped | Podcast for Romance Book Lovers</title>
+    <meta
+      name="description"
+      content="Romance Unzipped is the podcast for readers who want funny, smart, honest conversations about romance books, chemistry, tropes, and the stories that stay with them."
+    />
+    <meta property="og:title" content="Romance Unzipped" />
+    <meta
+      property="og:description"
+      content="Funny, smart, honest conversations about romance books, chemistry, and the stories that stay with us."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://romanceunzippedpodcast.com/" />
+    <meta name="theme-color" content="#b84f4a" />
+    <style>
+      :root {
+        --bg: #f8efe6;
+        --bg-2: #f3ddd0;
+        --paper: rgba(255, 250, 246, 0.84);
+        --paper-strong: #fff9f5;
+        --ink: #231717;
+        --muted: #634341;
+        --accent: #b84f4a;
+        --accent-deep: #7f2f2d;
+        --gold: #e5b66d;
+        --line: rgba(64, 28, 27, 0.14);
+        --shadow: 0 22px 60px rgba(86, 32, 30, 0.14);
+        --radius-lg: 28px;
+        --radius-md: 18px;
+        --max: 1160px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(229, 182, 109, 0.34), transparent 30%),
+          radial-gradient(circle at top right, rgba(184, 79, 74, 0.2), transparent 28%),
+          linear-gradient(180deg, var(--bg) 0%, #f7e9df 42%, #f6ede8 100%);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .page-shell {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .page-shell::before,
+      .page-shell::after {
+        content: "";
+        position: absolute;
+        inset: auto;
+        width: 28rem;
+        height: 28rem;
+        border-radius: 50%;
+        filter: blur(70px);
+        pointer-events: none;
+        opacity: 0.45;
+      }
+
+      .page-shell::before {
+        top: -9rem;
+        right: -8rem;
+        background: rgba(184, 79, 74, 0.22);
+      }
+
+      .page-shell::after {
+        bottom: 8rem;
+        left: -10rem;
+        background: rgba(229, 182, 109, 0.2);
+      }
+
+      .container {
+        width: min(calc(100% - 2rem), var(--max));
+        margin: 0 auto;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.45rem 0.8rem;
+        border: 1px solid rgba(184, 79, 74, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 249, 245, 0.72);
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        font-size: 0.79rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-deep);
+      }
+
+      .dot {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent), var(--gold));
+      }
+
+      .hero {
+        padding: 3.25rem 0 2rem;
+      }
+
+      .hero-grid {
+        display: grid;
+        gap: 1.6rem;
+        align-items: stretch;
+      }
+
+      .hero-main,
+      .hero-side,
+      .section-card,
+      .footer-card {
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        background: var(--paper);
+        backdrop-filter: blur(12px);
+      }
+
+      .hero-main {
+        position: relative;
+        padding: 2rem;
+        border-radius: 34px;
+        overflow: hidden;
+      }
+
+      .hero-main::after {
+        content: "";
+        position: absolute;
+        inset: auto -10% -15% auto;
+        width: 18rem;
+        height: 18rem;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(184, 79, 74, 0.16), transparent 62%);
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 0.98;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin-top: 1rem;
+        font-size: clamp(3rem, 8vw, 6.2rem);
+        letter-spacing: -0.05em;
+      }
+
+      .lead {
+        max-width: 37rem;
+        margin-top: 1.15rem;
+        font-size: clamp(1.1rem, 2vw, 1.45rem);
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .hero-copy {
+        margin-top: 1.4rem;
+        max-width: 40rem;
+        font-size: 1.02rem;
+        line-height: 1.72;
+        color: rgba(35, 23, 23, 0.86);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.85rem;
+        margin-top: 1.8rem;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3rem;
+        padding: 0.9rem 1.25rem;
+        border-radius: 999px;
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        font-size: 0.98rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+      }
+
+      .button-primary {
+        color: #fff8f5;
+        background: linear-gradient(135deg, var(--accent) 0%, #cf6b5c 100%);
+        box-shadow: 0 12px 24px rgba(150, 60, 56, 0.28);
+      }
+
+      .button-secondary {
+        border: 1px solid rgba(184, 79, 74, 0.22);
+        background: rgba(255, 251, 248, 0.88);
+        color: var(--accent-deep);
+      }
+
+      .social-proof {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.4rem;
+        margin-top: 1.35rem;
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      .hero-side {
+        padding: 1.35rem;
+        border-radius: 26px;
+      }
+
+      .hero-side h2 {
+        font-size: 0.92rem;
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-deep);
+      }
+
+      .feature-title {
+        margin-top: 0.8rem;
+        font-size: clamp(1.8rem, 4vw, 2.6rem);
+        line-height: 1.05;
+      }
+
+      .feature-copy {
+        margin-top: 0.85rem;
+        line-height: 1.72;
+        color: var(--muted);
+      }
+
+      .quote-chip {
+        margin-top: 1.2rem;
+        padding: 1rem 1.05rem;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid rgba(184, 79, 74, 0.12);
+        font-size: 0.98rem;
+        line-height: 1.6;
+      }
+
+      .section {
+        padding: 1rem 0;
+      }
+
+      .section-card {
+        padding: 1.5rem;
+        border-radius: var(--radius-lg);
+      }
+
+      .section-grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .section-heading {
+        margin-bottom: 1rem;
+      }
+
+      .section-heading p {
+        margin: 0.5rem 0 0;
+        max-width: 42rem;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+
+      .label {
+        margin-bottom: 0.5rem;
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-deep);
+      }
+
+      .platforms {
+        display: grid;
+        gap: 0.85rem;
+      }
+
+      .platform {
+        padding: 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(64, 28, 27, 0.1);
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .platform strong,
+      .episode-card strong,
+      .hosts-card strong {
+        display: block;
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        font-size: 1rem;
+      }
+
+      .platform span,
+      .episode-card p,
+      .hosts-card p,
+      .community-card p,
+      .newsletter-card p {
+        display: block;
+        margin-top: 0.45rem;
+        line-height: 1.65;
+        color: var(--muted);
+      }
+
+      .episode-card,
+      .hosts-card,
+      .newsletter-card,
+      .community-card {
+        padding: 1.25rem;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(64, 28, 27, 0.1);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .episode-card h3,
+      .hosts-card h3,
+      .newsletter-card h3,
+      .community-card h3 {
+        margin-top: 0.15rem;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+      }
+
+      .episode-meta {
+        margin-top: 0.8rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+      }
+
+      .episode-grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .episode-feature {
+        overflow: hidden;
+      }
+
+      .video-frame {
+        aspect-ratio: 16 / 9;
+        width: 100%;
+        border: 0;
+        border-radius: 20px;
+        background: #1a1111;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+
+      .episode-list {
+        display: grid;
+        gap: 0.85rem;
+      }
+
+      .episode-link {
+        display: block;
+        padding: 1rem 1.05rem;
+        border-radius: 18px;
+        border: 1px solid rgba(64, 28, 27, 0.1);
+        background: rgba(255, 255, 255, 0.72);
+        transition: transform 120ms ease, border-color 120ms ease;
+      }
+
+      .episode-link:hover {
+        transform: translateY(-1px);
+        border-color: rgba(184, 79, 74, 0.28);
+      }
+
+      .episode-link strong {
+        display: block;
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        font-size: 1rem;
+      }
+
+      .episode-link span {
+        display: block;
+        margin-top: 0.4rem;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .host-list {
+        display: grid;
+        gap: 0.85rem;
+        margin-top: 1rem;
+      }
+
+      .host-blurb {
+        padding: 1rem;
+        border-radius: 16px;
+        border: 1px solid rgba(64, 28, 27, 0.08);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .host-blurb strong {
+        display: block;
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+      }
+
+      .host-blurb span {
+        display: block;
+        margin-top: 0.35rem;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      .bullet-list {
+        display: grid;
+        gap: 0.75rem;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+
+      .bullet-list li {
+        padding: 0.95rem 1rem;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(64, 28, 27, 0.08);
+        line-height: 1.6;
+      }
+
+      .newsletter-inline {
+        margin-top: 1rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.7rem 0.95rem;
+        border-radius: 999px;
+        border: 1px solid rgba(184, 79, 74, 0.16);
+        background: rgba(255, 251, 248, 0.86);
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        font-size: 0.92rem;
+        color: var(--accent-deep);
+      }
+
+      .footer {
+        padding: 1.25rem 0 3rem;
+      }
+
+      .footer-card {
+        display: grid;
+        gap: 1rem;
+        padding: 1.25rem 1.4rem;
+        border-radius: 24px;
+      }
+
+      .footer-title {
+        font-size: 1.35rem;
+      }
+
+      .footer-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1rem;
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+        color: var(--muted);
+      }
+
+      .footer-links a {
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.18em;
+      }
+
+      .footer small {
+        color: var(--muted);
+        font-family: "Trebuchet MS", "Avenir Next", sans-serif;
+      }
+
+      @media (min-width: 820px) {
+        .hero-grid {
+          grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+        }
+
+        .section-grid.two-up {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .episode-grid {
+          grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+        }
+
+        .platforms {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .footer-card {
+          grid-template-columns: 1.2fr 1fr;
+          align-items: end;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <main>
+        <section class="hero">
+          <div class="container hero-grid">
+            <div class="hero-main">
+              <div class="eyebrow"><span class="dot"></span>For romance readers who want more than blurbs</div>
+              <h1>Romance Unzipped</h1>
+              <p class="lead">
+                Funny, smart, honest conversations about romance books, chemistry, tropes, and the stories that stay with
+                us.
+              </p>
+              <p class="hero-copy">
+                Annie and Hollie are co-authors, long-time friends, and unapologetic romance readers. Each episode takes one
+                book at a time and pulls it apart for tension, payoff, character chemistry, reader feelings, and the exact
+                moments worth arguing about after the last page.
+              </p>
+              <div class="actions">
+                <a class="button button-primary" href="https://www.youtube.com/@RomanceUnzipped" target="_blank" rel="noreferrer">Watch on YouTube</a>
+                <a class="button button-secondary" href="https://anchor.fm/s/101c8b4d0/podcast/rss" target="_blank" rel="noreferrer">Grab the RSS Feed</a>
+              </div>
+              <div class="social-proof">
+                <span>YouTube: @RomanceUnzipped</span>
+                <span>Instagram: @romanceunzipped</span>
+                <span>Warm takes, sharp opinions, no fake promo voice</span>
+              </div>
+            </div>
+
+            <aside class="hero-side">
+              <h2>Start Here</h2>
+              <p class="feature-title" id="feature-title">Truth and Measure by Roslyn Sinclair</p>
+              <p class="feature-copy" id="feature-copy">
+                The newest featured episode leans into fashion, desire, reader chemistry, and all the little details that make
+                a romance conversation feel alive instead of generic.
+              </p>
+              <div class="quote-chip" id="feature-quote">
+                “If you are overwhelmed by the world...” was one of the standout lines from the latest batch review, and it
+                perfectly captures the kind of specific, reader-first conversation this show is built for.
+              </div>
+              <div class="actions">
+                <a class="button button-primary" id="feature-link" href="https://www.youtube.com/watch?v=H5fSuLMbSTo" target="_blank" rel="noreferrer">Watch the Latest Episode</a>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="container">
+            <div class="section-card">
+              <div class="section-heading">
+                <div class="label">Listen Wherever You Like</div>
+                <h2>Choose your lane and drop in.</h2>
+                <p>Start with full video on YouTube, follow the show on Instagram, or subscribe directly by RSS.</p>
+              </div>
+              <div class="platforms">
+                <a class="platform" href="https://www.youtube.com/@RomanceUnzipped" target="_blank" rel="noreferrer">
+                  <strong>YouTube</strong>
+                  <span>Full video episodes, the easiest first stop for new listeners, and the clearest way to catch the full conversation.</span>
+                </a>
+                <a class="platform" href="https://www.instagram.com/romanceunzipped/" target="_blank" rel="noreferrer">
+                  <strong>Instagram</strong>
+                  <span>Clips, hooks, and the warmest entry point if you want the vibe before committing to a full episode.</span>
+                </a>
+                <a class="platform" href="https://anchor.fm/s/101c8b4d0/podcast/rss" target="_blank" rel="noreferrer">
+                  <strong>RSS Feed</strong>
+                  <span>Use the raw feed in any podcast app while Spotify and Apple podcast links get finalized and cleaned up.</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="container section-grid two-up">
+            <div class="section-card episode-card">
+              <div class="label">Latest Episode</div>
+              <h3>Reader talk with actual specifics</h3>
+              <p>
+                Romance Unzipped works best when the conversation gets concrete: what the book is doing, why the chemistry lands,
+                where the emotional payoff shows up, and what made Annie and Hollie stop and say “wait, hold on.”
+              </p>
+              <div class="actions">
+                <a class="button button-primary" href="https://www.youtube.com/watch?v=H5fSuLMbSTo" target="_blank" rel="noreferrer">Play the Latest Episode</a>
+              </div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-heading">
+                <div class="label">Why Readers Come Back</div>
+                <h2>Book-club energy without the homework.</h2>
+              </div>
+              <ul class="bullet-list">
+                <li>Honest reactions to romance books everyone should be talking about.</li>
+                <li>Funny, sharp breakdowns of chemistry, craft, tropes, and emotional payoff.</li>
+                <li>A show made by romance readers for romance readers, without generic podcast filler.</li>
+                <li>Enough warmth to feel welcoming, enough specificity to feel worth your time.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="container">
+            <div class="section-card">
+              <div class="section-heading">
+                <div class="label">Featured Watch</div>
+                <h2>Start with the full conversation, not just the clip.</h2>
+                <p>
+                  The clips are for discovery. The full episode is where Annie and Hollie actually get into the chemistry,
+                  tension, reader frustration, and the exact scene that made the whole book click.
+                </p>
+              </div>
+              <div class="episode-grid">
+                <div class="episode-card episode-feature">
+                  <iframe
+                    id="featured-embed"
+                    class="video-frame"
+                    src="https://www.youtube.com/embed/H5fSuLMbSTo"
+                    title="Romance Unzipped latest episode"
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                  ></iframe>
+                  <div class="episode-meta">
+                    <span class="pill">Latest upload</span>
+                    <span class="pill">Full video episode</span>
+                    <span class="pill">Best first watch</span>
+                  </div>
+                </div>
+                <div class="episode-list" id="recent-episodes">
+                  <a class="episode-link" href="https://www.youtube.com/watch?v=H5fSuLMbSTo" target="_blank" rel="noreferrer">
+                    <strong>29. Truth and Measure by Roslyn Sinclair</strong>
+                    <span>Sharp fashion, desire, chemistry, and the kind of reader detail that makes the show feel specific instead of generic.</span>
+                  </a>
+                  <a class="episode-link" href="https://www.youtube.com/watch?v=auGAHns-6Jk" target="_blank" rel="noreferrer">
+                    <strong>28. I Think They Love You by Julian Winters</strong>
+                    <span>Funny, affectionate conversation with sibling dynamics, side characters, and the exact moments the book starts to win.</span>
+                  </a>
+                  <a class="episode-link" href="https://www.youtube.com/@RomanceUnzipped/videos" target="_blank" rel="noreferrer">
+                    <strong>See the full video archive</strong>
+                    <span>Browse every upload on the channel if you want to pick by author, premise, or mood.</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="container section-grid two-up">
+            <div class="section-card hosts-card">
+              <div class="label">Meet the Hosts</div>
+              <h3>Annie and Hollie</h3>
+              <p>
+                Co-authors, long-time friends, and the kind of readers who will happily derail into chemistry, tension,
+                emotional payoff, or the one scene that changed the whole book.
+              </p>
+              <p>
+                Sometimes the conversation gets thoughtful. Sometimes it gets chaotic. It always comes back to the books.
+              </p>
+              <div class="host-list">
+                <div class="host-blurb">
+                  <strong>Annie</strong>
+                  <span>Brings author instincts, reader precision, and a willingness to linger on the details that actually make a romance land.</span>
+                </div>
+                <div class="host-blurb">
+                  <strong>Hollie</strong>
+                  <span>Brings fast reactions, sharp humor, and the kind of honest reader energy that keeps the conversation from sounding polished to death.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-card newsletter-card">
+              <div class="label">Newsletter</div>
+              <h3>Inbox version, minus the spammy energy</h3>
+              <p>
+                The newsletter is being wired for episode drops, romance recommendations, and behind-the-scenes notes from Annie
+                and Hollie. Until the public signup flow is finalized, the best way to get looped in is to follow the active
+                channels and use email for direct contact.
+              </p>
+              <div class="newsletter-inline">
+                <span class="pill">Mailchimp flow verified</span>
+                <span class="pill">Public signup page next</span>
+                <a class="pill" href="mailto:romanceunzipped@gmail.com">romanceunzipped@gmail.com</a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="container">
+            <div class="section-card community-card">
+              <div class="label">Community</div>
+              <h3>Follow the conversation where it already feels natural.</h3>
+              <p>
+                Instagram is live. YouTube is active. The Fable book club now exists as a private, invite-only space while
+                the public community flow gets tightened up. This page stays honest about what is live now and what is still
+                intentionally gated.
+              </p>
+              <div class="actions">
+                <a class="button button-secondary" href="https://www.instagram.com/romanceunzipped/" target="_blank" rel="noreferrer">Follow on Instagram</a>
+                <a class="button button-secondary" href="https://www.youtube.com/@RomanceUnzipped" target="_blank" rel="noreferrer">Open the YouTube Channel</a>
+                <a class="button button-secondary" href="mailto:romanceunzipped@gmail.com?subject=Fable%20Club%20Invite">Request a Fable Invite</a>
+                <a class="button button-secondary" href="mailto:romanceunzipped@gmail.com">Email the Show</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div>
+              <div class="label">Romance Unzipped</div>
+              <p class="footer-title">Funny, smart, honest romance-book talk.</p>
+            </div>
+            <div>
+              <div class="footer-links">
+                <a href="https://www.youtube.com/@RomanceUnzipped" target="_blank" rel="noreferrer">YouTube</a>
+                <a href="https://www.instagram.com/romanceunzipped/" target="_blank" rel="noreferrer">Instagram</a>
+                <a href="mailto:romanceunzipped@gmail.com?subject=Fable%20Club%20Invite">Fable Invite</a>
+                <a href="https://anchor.fm/s/101c8b4d0/podcast/rss" target="_blank" rel="noreferrer">RSS</a>
+                <a href="mailto:romanceunzipped@gmail.com">romanceunzipped@gmail.com</a>
+              </div>
+              <small>&copy; <span id="year">2026</span> Romance Unzipped</small>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+    <script>
+      async function hydrateHomepageFromPipeline() {
+        try {
+          const response = await fetch("./homepage-data.json", { cache: "no-cache" });
+          if (!response.ok) {
+            return;
+          }
+          const payload = await response.json();
+          const featured = payload && payload.featured;
+          const recent = (payload && payload.recent) || [];
+
+          if (featured) {
+            const featureTitle = document.getElementById("feature-title");
+            const featureCopy = document.getElementById("feature-copy");
+            const featureQuote = document.getElementById("feature-quote");
+            const featureLink = document.getElementById("feature-link");
+            const featuredEmbed = document.getElementById("featured-embed");
+
+            if (featureTitle) featureTitle.textContent = featured.title || featureTitle.textContent;
+            if (featureCopy) featureCopy.textContent = featured.hero_summary || featureCopy.textContent;
+            if (featureQuote) featureQuote.textContent = `“${featured.featured_quote || featureQuote.textContent.replace(/^“|”$/g, "")}”`;
+            if (featureLink && featured.public_url) featureLink.href = featured.public_url;
+            if (featuredEmbed && featured.embed_url) {
+              featuredEmbed.src = featured.embed_url;
+              featuredEmbed.title = featured.title || featuredEmbed.title;
+            }
+          }
+
+          if (recent.length) {
+            const recentRoot = document.getElementById("recent-episodes");
+            if (recentRoot) {
+              recentRoot.innerHTML = recent
+                .map((episode, index) => {
+                  const strong = escapeHtml(episode.title || `Episode ${index + 1}`);
+                  const summary = escapeHtml(episode.recent_summary || episode.hero_summary || "");
+                  const url = escapeAttribute(episode.public_url || "#");
+                  return `<a class="episode-link" href="${url}" target="_blank" rel="noreferrer"><strong>${strong}</strong><span>${summary}</span></a>`;
+                })
+                .join("");
+            }
+          }
+        } catch (_error) {
+          // Keep the baked-in fallback content if the generated data file is missing.
+        }
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function escapeAttribute(value) {
+        return escapeHtml(value);
+      }
+
+      document.getElementById("year").textContent = String(new Date().getFullYear());
+      void hydrateHomepageFromPipeline();
+    </script>
+  </body>
+</html>
