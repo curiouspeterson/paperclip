@@ -1,11 +1,12 @@
 import { Command } from "commander";
 import type { Agent } from "@paperclipai/shared";
 import {
-  removeMaintainerOnlySkillSymlinks,
-  resolvePaperclipSkillsDir,
-} from "@paperclipai/adapter-utils/server-utils";
-import fs from "node:fs/promises";
-import os from "node:os";
+  codexSkillsHome,
+  claudeSkillsHome,
+  installSkillsForTarget,
+  type SkillsInstallSummary,
+} from "@paperclipai/adapter-utils/local-skills";
+import { resolvePaperclipSkillsDir } from "@paperclipai/adapter-utils/server-utils";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -34,112 +35,7 @@ interface CreatedAgentKey {
   createdAt: string;
 }
 
-interface SkillsInstallSummary {
-  tool: "codex" | "claude";
-  target: string;
-  linked: string[];
-  removed: string[];
-  skipped: string[];
-  failed: Array<{ name: string; error: string }>;
-}
-
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
-
-function codexSkillsHome(): string {
-  const fromEnv = process.env.CODEX_HOME?.trim();
-  const base = fromEnv && fromEnv.length > 0 ? fromEnv : path.join(os.homedir(), ".codex");
-  return path.join(base, "skills");
-}
-
-function claudeSkillsHome(): string {
-  const fromEnv = process.env.CLAUDE_HOME?.trim();
-  const base = fromEnv && fromEnv.length > 0 ? fromEnv : path.join(os.homedir(), ".claude");
-  return path.join(base, "skills");
-}
-
-async function installSkillsForTarget(
-  sourceSkillsDir: string,
-  targetSkillsDir: string,
-  tool: "codex" | "claude",
-): Promise<SkillsInstallSummary> {
-  const summary: SkillsInstallSummary = {
-    tool,
-    target: targetSkillsDir,
-    linked: [],
-    removed: [],
-    skipped: [],
-    failed: [],
-  };
-
-  await fs.mkdir(targetSkillsDir, { recursive: true });
-  const entries = await fs.readdir(sourceSkillsDir, { withFileTypes: true });
-  summary.removed = await removeMaintainerOnlySkillSymlinks(
-    targetSkillsDir,
-    entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name),
-  );
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const source = path.join(sourceSkillsDir, entry.name);
-    const target = path.join(targetSkillsDir, entry.name);
-    const existing = await fs.lstat(target).catch(() => null);
-    if (existing) {
-      if (existing.isSymbolicLink()) {
-        let linkedPath: string | null = null;
-        try {
-          linkedPath = await fs.readlink(target);
-        } catch (err) {
-          await fs.unlink(target);
-          try {
-            await fs.symlink(source, target);
-            summary.linked.push(entry.name);
-            continue;
-          } catch (linkErr) {
-            summary.failed.push({
-              name: entry.name,
-              error:
-                err instanceof Error && linkErr instanceof Error
-                  ? `${err.message}; then ${linkErr.message}`
-                  : err instanceof Error
-                    ? err.message
-                    : `Failed to recover broken symlink: ${String(err)}`,
-            });
-            continue;
-          }
-        }
-
-        const resolvedLinkedPath = path.isAbsolute(linkedPath)
-          ? linkedPath
-          : path.resolve(path.dirname(target), linkedPath);
-        const linkedTargetExists = await fs
-          .stat(resolvedLinkedPath)
-          .then(() => true)
-          .catch(() => false);
-
-        if (!linkedTargetExists) {
-          await fs.unlink(target);
-        } else {
-          summary.skipped.push(entry.name);
-          continue;
-        }
-      } else {
-        summary.skipped.push(entry.name);
-        continue;
-      }
-    }
-
-    try {
-      await fs.symlink(source, target);
-      summary.linked.push(entry.name);
-    } catch (err) {
-      summary.failed.push({
-        name: entry.name,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  return summary;
-}
 
 function buildAgentEnvExports(input: {
   apiBase: string;
