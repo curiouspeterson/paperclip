@@ -1,0 +1,8 @@
+{
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "ui/dist",
+  "framework": null,
+  "rewrites": [
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
+}
