@@ -1,4 +1,10 @@
 export { execute, ensureCursorSkillsInjected } from "./execute.js";
+export {
+  listCursorModels,
+  parseCursorModelsOutput,
+  resetCursorModelsCacheForTests,
+  setCursorModelsRunnerForTests,
+} from "./models.js";
 export { testEnvironment } from "./test.js";
 export { parseCursorJsonl, isCursorUnknownSessionError } from "./parse.js";
 import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";

@@ -8,11 +8,13 @@ export type {
   AgentPermissions,
   AgentKeyCreated,
   AgentConfigRevision,
+} from "./agent.js";
+export type {
   AdapterEnvironmentCheckLevel,
   AdapterEnvironmentTestStatus,
   AdapterEnvironmentCheck,
   AdapterEnvironmentTestResult,
-} from "./agent.js";
+} from "./adapter-environment.js";
 export type { AssetImage } from "./asset.js";
 export type { Project, ProjectCodebase, ProjectCodebaseOrigin, ProjectGoalRef, ProjectWorkspace } from "./project.js";
 export type {

@@ -20,3 +20,11 @@ export {
   type RunDatabaseRestoreOptions,
 } from "./backup-lib.js";
 export * from "./schema/index.js";
+export {
+  createSecretOps,
+  type SecretActorRef,
+  type SecretRecord,
+  type CreateSecretValueInput,
+  type RotateSecretValueInput,
+  type SecretOps,
+} from "./secret-ops.js";

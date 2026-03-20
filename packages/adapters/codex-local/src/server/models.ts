@@ -1,6 +1,5 @@
-import type { AdapterModel } from "./types.js";
-import { models as codexFallbackModels } from "@paperclipai/adapter-codex-local";
-import { readConfigFile } from "../config-file.js";
+import type { AdapterModel } from "@paperclipai/adapter-utils";
+import { models as codexFallbackModels } from "../index.js";
 
 const OPENAI_MODELS_ENDPOINT = "https://api.openai.com/v1/models";
 const OPENAI_MODELS_TIMEOUT_MS = 5000;
@@ -31,14 +30,14 @@ function mergedWithFallback(models: AdapterModel[]): AdapterModel[] {
   ]).sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true, sensitivity: "base" }));
 }
 
-function resolveOpenAiApiKey(): string | null {
+function resolveOpenAiApiKey(config?: Record<string, unknown>): string | null {
+  // 1. From agent config (passed via AdapterModelDiscoveryContext)
+  const configKey = typeof config?.apiKey === "string" ? config.apiKey.trim() : null;
+  if (configKey) return configKey;
+  // 2. From environment
   const envKey = process.env.OPENAI_API_KEY?.trim();
   if (envKey) return envKey;
-
-  const config = readConfigFile();
-  if (config?.llm?.provider !== "openai") return null;
-  const configKey = config.llm.apiKey?.trim();
-  return configKey && configKey.length > 0 ? configKey : null;
+  return null;
 }
 
 async function fetchOpenAiModels(apiKey: string): Promise<AdapterModel[]> {
@@ -70,8 +69,10 @@ async function fetchOpenAiModels(apiKey: string): Promise<AdapterModel[]> {
   }
 }
 
-export async function listCodexModels(): Promise<AdapterModel[]> {
-  const apiKey = resolveOpenAiApiKey();
+export async function listCodexModels(
+  ctx?: { config?: Record<string, unknown> },
+): Promise<AdapterModel[]> {
+  const apiKey = resolveOpenAiApiKey(ctx?.config);
   const fallback = dedupeModels(codexFallbackModels);
   if (!apiKey) return fallback;
 
@@ -99,6 +100,6 @@ export async function listCodexModels(): Promise<AdapterModel[]> {
   return fallback;
 }
 
-export function resetCodexModelsCacheForTests() {
+export function resetCodexModelsCacheForTests(): void {
   cached = null;
 }

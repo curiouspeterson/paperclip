@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
-import { agents, createDb } from "@paperclipai/db";
-import { secretService } from "../server/src/services/secrets.js";
+import { agents, createDb, createSecretOps } from "@paperclipai/db";
 
 const SENSITIVE_ENV_KEY_RE =
   /(api[-_]?key|access[-_]?token|auth(?:_?token)?|authorization|bearer|secret|passwd|password|credential|jwt|private[-_]?key|cookie|connectionstring)/i;
@@ -36,7 +35,7 @@ async function main() {
 
   const apply = process.argv.includes("--apply");
   const db = createDb(dbUrl);
-  const secrets = secretService(db);
+  const secrets = createSecretOps(db);
 
   const allAgents = await db.select().from(agents);
   let changedAgents = 0;

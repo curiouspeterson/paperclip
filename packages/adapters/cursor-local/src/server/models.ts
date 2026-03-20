@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { models as cursorFallbackModels } from "@paperclipai/adapter-cursor-local";
-import type { AdapterModel } from "./types.js";
+import type { AdapterModel } from "@paperclipai/adapter-utils";
+import { models as cursorFallbackModels } from "../index.js";
 
 const CURSOR_MODELS_TIMEOUT_MS = 5_000;
 const CURSOR_MODELS_CACHE_TTL_MS = 60_000;
@@ -41,13 +41,13 @@ function isLikelyModelId(raw: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value);
 }
 
-function pushModelId(target: AdapterModel[], raw: string) {
+function pushModelId(target: AdapterModel[], raw: string): void {
   const id = sanitizeModelId(raw);
   if (!isLikelyModelId(id)) return;
   target.push({ id, label: id });
 }
 
-function collectFromJsonValue(value: unknown, target: AdapterModel[]) {
+function collectFromJsonValue(value: unknown, target: AdapterModel[]): void {
   if (typeof value === "string") {
     pushModelId(target, value);
     return;
@@ -161,10 +161,12 @@ export async function listCursorModels(): Promise<AdapterModel[]> {
   return dedupeModels(cursorFallbackModels);
 }
 
-export function resetCursorModelsCacheForTests() {
+export function resetCursorModelsCacheForTests(): void {
   cached = null;
 }
 
-export function setCursorModelsRunnerForTests(runner: (() => CursorModelsCommandResult) | null) {
+export function setCursorModelsRunnerForTests(
+  runner: (() => CursorModelsCommandResult) | null,
+): void {
   cursorModelsRunner = runner ?? defaultCursorModelsRunner;
 }

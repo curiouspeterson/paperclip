@@ -1,4 +1,5 @@
 export { execute, ensureCodexSkillsInjected } from "./execute.js";
+export { listCodexModels, resetCodexModelsCacheForTests } from "./models.js";
 export { testEnvironment } from "./test.js";
 export { parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
 export {

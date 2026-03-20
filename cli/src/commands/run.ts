@@ -1,6 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { bootstrapCeoInvite } from "./auth-bootstrap-ceo.js";
@@ -141,22 +139,28 @@ function getMissingModuleSpecifier(err: unknown): string | null {
 function maybeEnableUiDevMiddleware(entrypoint: string): void {
   if (process.env.PAPERCLIP_UI_DEV_MIDDLEWARE !== undefined) return;
   const normalized = entrypoint.replaceAll("\\", "/");
-  if (normalized.endsWith("/server/src/index.ts") || normalized.endsWith("@paperclipai/server/src/index.ts")) {
+  if (
+    normalized.endsWith("/server/src/index.ts") ||
+    normalized.endsWith("@paperclipai/server/src/index.ts")
+  ) {
     process.env.PAPERCLIP_UI_DEV_MIDDLEWARE = "true";
   }
 }
 
 async function importServerEntry(): Promise<StartedServer> {
-  // Dev mode: try local workspace path (monorepo with tsx)
-  const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-  const devEntry = path.resolve(projectRoot, "server/src/index.ts");
-  if (fs.existsSync(devEntry)) {
-    maybeEnableUiDevMiddleware(devEntry);
-    const mod = await import(pathToFileURL(devEntry).href);
-    return await startServerFromModule(mod, devEntry);
+  // Resolve the entrypoint URL so we can detect dev (source) vs prod (dist) builds.
+  // In the monorepo with tsx, @paperclipai/server resolves to server/src/index.ts;
+  // in production it resolves to the compiled dist entry.
+  let resolvedEntry = "@paperclipai/server";
+  try {
+    if (typeof import.meta.resolve === "function") {
+      resolvedEntry = import.meta.resolve("@paperclipai/server");
+    }
+  } catch {
+    // ignore — resolve failure is non-fatal; we still attempt the import below
   }
+  maybeEnableUiDevMiddleware(resolvedEntry);
 
-  // Production mode: import the published @paperclipai/server package
   try {
     const mod = await import("@paperclipai/server");
     return await startServerFromModule(mod, "@paperclipai/server");
@@ -165,8 +169,7 @@ async function importServerEntry(): Promise<StartedServer> {
     const missingServerEntrypoint = !missingSpecifier || missingSpecifier === "@paperclipai/server";
     if (isModuleNotFoundError(err) && missingServerEntrypoint) {
       throw new Error(
-        `Could not locate a Paperclip server entrypoint.\n` +
-          `Tried: ${devEntry}, @paperclipai/server\n` +
+        `Could not locate the @paperclipai/server entrypoint.\n` +
           `${formatError(err)}`,
       );
     }

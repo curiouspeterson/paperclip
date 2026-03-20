@@ -212,6 +212,47 @@ export interface ProviderQuotaResult {
   windows: QuotaWindow[];
 }
 
+// ---------------------------------------------------------------------------
+// Adapter config normalization and join-defaults hooks
+// ---------------------------------------------------------------------------
+
+export interface AdapterModelDiscoveryContext {
+  companyId?: string;
+  config?: Record<string, unknown>;
+}
+
+export interface AdapterConfigNormalizationInput {
+  companyId: string;
+  mode: "create" | "update";
+  config: Record<string, unknown>;
+}
+
+export interface AdapterJoinDefaultsDiagnostic {
+  code: string;
+  level: "info" | "warn";
+  message: string;
+  hint?: string;
+}
+
+export interface AdapterJoinDefaultsInput {
+  adapterType: string;
+  defaultsPayload: unknown;
+  paperclipApiUrl?: string | null;
+  inboundHeaders?: Record<string, string>;
+  deployment?: {
+    mode: "local_trusted" | "authenticated";
+    exposure: "private" | "public";
+    bindHost: string;
+    allowedHostnames: string[];
+  };
+}
+
+export interface AdapterJoinDefaultsResult {
+  normalized: Record<string, unknown> | null;
+  diagnostics: AdapterJoinDefaultsDiagnostic[];
+  fatalErrors: string[];
+}
+
 export interface ServerAdapterModule {
   type: string;
   execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult>;
@@ -220,7 +261,7 @@ export interface ServerAdapterModule {
   sessionManagement?: import("./session-compaction.js").AdapterSessionManagement;
   supportsLocalAgentJwt?: boolean;
   models?: AdapterModel[];
-  listModels?: () => Promise<AdapterModel[]>;
+  listModels?: (ctx?: AdapterModelDiscoveryContext) => Promise<AdapterModel[]>;
   agentConfigurationDoc?: string;
   /**
    * Optional lifecycle hook when an agent is approved/hired (join-request or hire_agent approval).
@@ -236,6 +277,22 @@ export interface ServerAdapterModule {
    * without knowing provider-specific credential paths or API shapes.
    */
   getQuotaWindows?: () => Promise<ProviderQuotaResult>;
+  /**
+   * Optional: normalize adapter config before persistence (create or update).
+   * Adapters use this to inject defaults (e.g. model, device key) without
+   * requiring the server route layer to switch on adapter type.
+   */
+  normalizeConfigForPersistence?: (
+    input: AdapterConfigNormalizationInput,
+  ) => Promise<Record<string, unknown>>;
+  /**
+   * Optional: normalize join-defaults payload on accept/replay.
+   * Adapters use this to fold in provider-specific fields (e.g. gateway auth
+   * headers, device keys) without requiring the route layer to branch.
+   */
+  normalizeJoinDefaults?: (
+    input: AdapterJoinDefaultsInput,
+  ) => Promise<AdapterJoinDefaultsResult>;
 }
 
 // ---------------------------------------------------------------------------

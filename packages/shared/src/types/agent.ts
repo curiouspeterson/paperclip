@@ -78,20 +78,13 @@ export interface AgentConfigRevision {
   createdAt: Date;
 }
 
-export type AdapterEnvironmentCheckLevel = "info" | "warn" | "error";
-export type AdapterEnvironmentTestStatus = "pass" | "warn" | "fail";
-
-export interface AdapterEnvironmentCheck {
-  code: string;
-  level: AdapterEnvironmentCheckLevel;
-  message: string;
-  detail?: string | null;
-  hint?: string | null;
-}
-
-export interface AdapterEnvironmentTestResult {
-  adapterType: string;
-  status: AdapterEnvironmentTestStatus;
-  checks: AdapterEnvironmentCheck[];
-  testedAt: string;
-}
+// Adapter environment check types are defined once in @paperclipai/adapter-utils
+// and re-exported from packages/shared/src/types/adapter-environment.ts.
+// They are re-exported from this module for backwards-compatibility of existing
+// consumers that import them via ./agent.ts.
+export type {
+  AdapterEnvironmentCheckLevel,
+  AdapterEnvironmentTestStatus,
+  AdapterEnvironmentCheck,
+  AdapterEnvironmentTestResult,
+} from "./adapter-environment.js";

@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Context Packer — Romance Unzipped</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        :root {
+            --bg: #0c0a09;
+            --panel: #1c1917;
+            --border: #292524;
+            --accent: #e11d48;
+            --accent-dim: #9f1239;
+            --accent-glow: rgba(225, 29, 72, 0.12);
+            --teal: #0d9488;
+            --teal-dim: #115e59;
+            --amber: #d97706;
+            --text: #e7e5e4;
+            --text-dim: #a8a29e;
+            --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+            --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-sans);
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .tag {
+            background: var(--accent-dim);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-left: 10px;
+            color: white;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+
+        .tag.teal { background: var(--teal-dim); }
+
+        .preset-info {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .preset-info code {
+            color: var(--teal);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 0.8rem;
+        }
+
+        .input-group label {
+            margin-right: 8px;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+        }
+
+        .input-group input, .input-group select {
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+        }
+
+        .input-group input { width: 54px; text-align: right; }
+        .input-group select { cursor: pointer; }
+        .input-group select option { background: var(--panel); }
+
+        .estimate-badge {
+            background: var(--accent-glow);
+            color: var(--accent);
+            border: 1px solid var(--accent-dim);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-right: auto;
+            display: none;
+            font-family: var(--font-mono);
+        }
+
+        button {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-family: var(--font-sans);
+            font-weight: 500;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        button:hover { border-color: var(--accent); background: rgba(225,29,72,0.06); }
+        button.primary { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; }
+        button.primary:hover { background: var(--accent-dim); }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        button.download-all { background: var(--teal); border-color: var(--teal-dim); color: white; display: none; }
+        button.download-all:hover { background: var(--teal-dim); }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            gap: 16px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(255,255,255,0.015);
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 8px;
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            line-height: 1.5;
+        }
+
+        .tree-item {
+            padding: 1px 4px;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            color: var(--text-dim);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border-radius: 3px;
+        }
+
+        .tree-item:hover { background: rgba(255,255,255,0.03); }
+        .tree-item.priority-3 { color: var(--accent); font-weight: 500; }
+        .tree-item.priority-2 { color: var(--amber); }
+
+        .preview-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            align-items: center;
+            overflow-y: auto;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            width: 100%;
+            margin-bottom: 16px;
+        }
+
+        .stat-card {
+            background: rgba(0,0,0,0.25);
+            padding: 10px 8px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .stat-val {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text);
+            font-family: var(--font-mono);
+        }
+
+        .stat-label {
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            margin-top: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .progress-bar {
+            height: 3px;
+            background: var(--border);
+            width: 100%;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            border-radius: 2px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.08s; }
+
+        .artifacts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100%;
+            max-width: 640px;
+        }
+
+        .artifact {
+            background: var(--border);
+            padding: 10px 12px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            border: 1px solid transparent;
+            transition: border-color 0.15s;
+        }
+
+        .artifact:hover { border-color: var(--accent); }
+
+        .file-tree::-webkit-scrollbar { width: 6px; }
+        .file-tree::-webkit-scrollbar-track { background: transparent; }
+        .file-tree::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .preview-area::-webkit-scrollbar { width: 6px; }
+        .preview-area::-webkit-scrollbar-track { background: transparent; }
+        .preview-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .legend {
+            display: flex;
+            gap: 14px;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            padding: 6px 12px;
+            border-top: 1px solid var(--border);
+        }
+        .legend span::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        .legend .p3::before { background: var(--accent); }
+        .legend .p2::before { background: var(--amber); }
+        .legend .p1::before { background: var(--text-dim); }
+
+        .placeholder-text {
+            margin-top: 40px;
+            color: var(--text-dim);
+            text-align: center;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            max-width: 400px;
+        }
+        .placeholder-text code {
+            color: var(--teal);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="header">
+        <div style="display:flex; align-items:center;">
+            <h1>Context Packer</h1>
+            <span class="tag">Romance Unzipped</span>
+            <span class="tag teal">Paperclip + Hermes + Pipeline</span>
+        </div>
+        <div class="preset-info">
+            <span>Preset: <code>ru-full-stack</code></span>
+        </div>
+    </header>
+
+    <div class="controls">
+        <button onclick="selectFolder()" class="primary">Select project root</button>
+
+        <div class="input-group">
+            <label>Part size</label>
+            <input type="number" id="partSizeMB" value="2" min="0.1" step="0.1" onchange="updateEstimates()">
+            <span style="color:var(--text-dim); margin-left:2px; font-size:0.75rem">MB</span>
+        </div>
+
+        <div class="input-group">
+            <label>Delimiter</label>
+            <select id="delimiterStyle">
+                <option value="separator">============ / FILE:</option>
+                <option value="xml"><<<FILE>>> / <<<END>>></option>
+            </select>
+        </div>
+
+        <div id="estimateDisplay" class="estimate-badge">~0 parts</div>
+
+        <button onclick="processFiles()" id="processBtn" disabled>Pack</button>
+        <button onclick="downloadAllZip()" id="zipBtn" class="download-all">Download all (.zip)</button>
+
+        <div id="status" style="margin-left:auto; font-size:0.8rem; color:var(--text-dim);">
+            Waiting for folder...
+        </div>
+    </div>
+
+    <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+
+    <div class="layout">
+        <aside class="panel">
+            <div class="panel-header">
+                <span>Included files</span>
+                <span id="fileCount" style="font-family:var(--font-mono); font-size:0.75rem;">0</span>
+            </div>
+            <div class="file-tree" id="treeView">
+                <div class="placeholder-text" style="padding:16px;">
+                    <p style="margin-bottom:8px; font-weight:500; color:var(--text);">Scans these roots:</p>
+                    <code>bin/ cli/ server/ ui/ packages/ doc/ docs/ .agents/ .claude/ skills/ tests/ scripts/ gateway/ cron/ agent/ tools/ environments/ hermes_cli/</code>
+                    <p style="margin-top:12px;">Plus root config: <code>package.json tsconfig.json pyproject.toml docker-compose*.yml Dockerfile AGENTS.md</code></p>
+                </div>
+            </div>
+            <div class="legend">
+                <span class="p3">Pipeline + server core</span>
+                <span class="p2">Agent configs + skills</span>
+                <span class="p1">Everything else</span>
+            </div>
+        </aside>
+
+        <main class="panel">
+            <div class="panel-header">
+                <span>Output artifacts</span>
+                <span id="byteDisplay" style="font-family:var(--font-mono); font-size:0.75rem;">2.0 MB / part</span>
+            </div>
+            <div class="preview-area" id="previewArea">
+                <div class="stats-grid" id="statsGrid" style="opacity:0.3">
+                    <div class="stat-card">
+                        <div class="stat-val" id="statFiles">0</div>
+                        <div class="stat-label">Files</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="statSize">0</div>
+                        <div class="stat-label">Total MB</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="statParts">0</div>
+                        <div class="stat-label">Parts</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="statDensity">0%</div>
+                        <div class="stat-label">Core density</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="statTokens">0</div>
+                        <div class="stat-label">Est. tokens</div>
+                    </div>
+                </div>
+                <div id="artifactsContainer" class="artifacts-list"></div>
+                <div id="placeholderText" class="placeholder-text">
+                    Stats and download links appear here after packing.
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════
+        // ROMANCE UNZIPPED PRESET — ru-full-stack
+        // Covers: Paperclip (TS monorepo) + Hermes Agent
+        // (Python) + RU pipeline scripts (Python/Bash)
+        // ═══════════════════════════════════════════════
+
+        // --- Root directories to scan ---
+        // Paperclip monorepo
+        const PAPERCLIP_DIRS = [
+            'cli', 'server', 'ui', 'packages', 'doc', 'docs',
+            'skills', 'releases', 'report', 'scripts', 'tests',
+        ];
+        // Hermes Agent
+        const HERMES_DIRS = [
+            'agent', 'tools', 'gateway', 'cron', 'hermes_cli',
+            'environments', 'datagen-config-examples',
+        ];
+        // RU pipeline + shared
+        const RU_DIRS = [
+            'bin',
+        ];
+        // Agent skill/config dirs (dotfiles)
+        const DOTDIRS = ['.agents', '.claude', '.changeset', '.github'];
+
+        const ALLOWED_ROOT_DIRS = [
+            ...PAPERCLIP_DIRS, ...HERMES_DIRS, ...RU_DIRS, ...DOTDIRS,
+            'docker',
+        ];
+
+        // --- Root-level files to include ---
+        const ALLOWED_ROOT_FILES = [
+            // Paperclip
+            'package.json', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.base.json',
+            'vitest.config.ts', 'Dockerfile', 'Dockerfile.onboard-smoke',
+            'docker-compose.yml', 'docker-compose.quickstart.yml', 'docker-compose.untrusted-review.yml',
+            // Hermes
+            'pyproject.toml', 'requirements.txt', 'cli.py', 'run_agent.py', 'model_tools.py',
+            'toolsets.py', 'toolset_distributions.py', 'batch_runner.py', 'trajectory_compressor.py',
+            'hermes_constants.py', 'hermes_state.py', 'hermes_time.py', 'mini_swe_runner.py',
+            'rl_cli.py', 'cli-config.yaml.example', 'setup-hermes.sh',
+            // Shared docs
+            'AGENTS.md', 'CONTRIBUTING.md', 'README.md', 'TODO.md',
+            '.env.example', '.npmrc', '.mailmap', '.gitmodules',
+        ];
+
+        // --- Always skip ---
+        const GLOBAL_BLOCK_FILES = [
+            '.DS_Store', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+            '.env', '.env.local', '.env.production', '.env.development',
+            'CHANGELOG.md',
+        ];
+
+        const BLOCK_EXTENSIONS = [
+            '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.bmp',
+            '.mp4', '.mov', '.webm', '.mp3', '.wav', '.m4a', '.ogg',
+            '.pdf', '.zip', '.tar', '.gz', '.bz2', '.7z', '.woff', '.woff2', '.ttf', '.eot',
+            '.map', '.log', '.lock', '.pyc', '.pyo', '.class', '.o', '.so', '.dylib',
+            '.min.js', '.min.css', '.chunk.js',
+        ];
+
+        const BLOCK_DIRS = [
+            'node_modules', 'dist', 'build', '.git', '.next', '__pycache__',
+            '.venv', 'venv', '.mypy_cache', '.pytest_cache', '.ruff_cache',
+            'coverage', '.turbo', '.vercel', 'egg-info',
+        ];
+
+        // --- Priority scoring ---
+        // Score 3 = Pipeline core + server routes (what you're actively building)
+        // Score 2 = Agent configs, skills, plans (architectural context)
+        // Score 1 = Everything else (included but lower priority)
+        const PRIORITY_RULES = [
+            // RU pipeline scripts — the code you wrote
+            { test: p => p.startsWith('bin/'), score: 3 },
+            // Paperclip server core
+            { test: p => p.startsWith('server/src/routes/'), score: 3 },
+            { test: p => p.startsWith('server/src/middleware/'), score: 3 },
+            { test: p => p.startsWith('server/src/auth/'), score: 3 },
+            { test: p => p.startsWith('server/src/adapters/'), score: 3 },
+            { test: p => p.startsWith('server/src/storage/'), score: 3 },
+            { test: p => p.startsWith('server/src/secrets/'), score: 3 },
+            { test: p => p.startsWith('server/src/realtime/'), score: 3 },
+            // Paperclip CLI commands
+            { test: p => p.startsWith('cli/src/commands/'), score: 3 },
+            // Hermes core agent loop
+            { test: p => p.startsWith('agent/'), score: 3 },
+            { test: p => p.startsWith('tools/'), score: 3 },
+            // Root config files
+            { test: p => p === 'package.json' || p === 'pyproject.toml', score: 3 },
+            { test: p => p === 'AGENTS.md' || p === 'README.md', score: 3 },
+            // Agent skills + plans (architectural docs)
+            { test: p => p.startsWith('.agents/'), score: 2 },
+            { test: p => p.startsWith('.claude/'), score: 2 },
+            { test: p => p.startsWith('doc/plans/'), score: 2 },
+            { test: p => p.startsWith('doc/spec/'), score: 2 },
+            { test: p => p.startsWith('doc/plugins/'), score: 2 },
+            { test: p => p.startsWith('docs/'), score: 2 },
+            // Hermes gateway + cron
+            { test: p => p.startsWith('gateway/'), score: 2 },
+            { test: p => p.startsWith('cron/'), score: 2 },
+            { test: p => p.startsWith('hermes_cli/'), score: 2 },
+            // Docker configs
+            { test: p => p.includes('docker-compose'), score: 2 },
+            { test: p => p.includes('Dockerfile'), score: 2 },
+        ];
+
+        // State
+        let rootHandle;
+        let allFiles = [];
+        let generatedParts = [];
+        let totalProjectSize = 0;
+
+        const els = {
+            processBtn: document.getElementById('processBtn'),
+            zipBtn: document.getElementById('zipBtn'),
+            status: document.getElementById('status'),
+            treeView: document.getElementById('treeView'),
+            progressBar: document.getElementById('progressBar'),
+            progressFill: document.getElementById('progressFill'),
+            artifactsContainer: document.getElementById('artifactsContainer'),
+            placeholderText: document.getElementById('placeholderText'),
+            statsGrid: document.getElementById('statsGrid'),
+            fileCount: document.getElementById('fileCount'),
+            byteDisplay: document.getElementById('byteDisplay'),
+            estimateDisplay: document.getElementById('estimateDisplay'),
+            statFiles: document.getElementById('statFiles'),
+            statSize: document.getElementById('statSize'),
+            statParts: document.getElementById('statParts'),
+            statDensity: document.getElementById('statDensity'),
+            statTokens: document.getElementById('statTokens'),
+        };
+
+        function updateEstimates() {
+            if (allFiles.length === 0) return;
+            const mbValue = parseFloat(document.getElementById('partSizeMB').value);
+            if (!mbValue || mbValue <= 0) return;
+            const maxBytes = mbValue * 1024 * 1024;
+            const estParts = Math.ceil((totalProjectSize * 1.08) / maxBytes);
+            els.estimateDisplay.style.display = 'block';
+            els.estimateDisplay.textContent = `~${estParts} parts / ~${Math.round(totalProjectSize / 4).toLocaleString()} tokens`;
+            els.byteDisplay.textContent = `${mbValue} MB / part`;
+        }
+
+        async function selectFolder() {
+            if (!window.showDirectoryPicker) return alert("Requires Chrome or Edge (File System Access API).");
+            try {
+                rootHandle = await window.showDirectoryPicker();
+                els.status.textContent = "Scanning...";
+                els.progressBar.style.display = 'block';
+                els.progressFill.style.width = '15%';
+                els.zipBtn.style.display = 'none';
+                els.artifactsContainer.innerHTML = '';
+                allFiles = [];
+                totalProjectSize = 0;
+
+                await scanDir(rootHandle, "", true);
+
+                allFiles.sort((a, b) => {
+                    if (a.score !== b.score) return b.score - a.score;
+                    return a.path.localeCompare(b.path);
+                });
+
+                renderTree();
+                updateEstimates();
+
+                els.status.textContent = `${allFiles.length} files from ${rootHandle.name}`;
+                els.fileCount.textContent = allFiles.length;
+                els.processBtn.disabled = false;
+                els.progressBar.style.display = 'none';
+            } catch (e) {
+                console.error(e);
+                els.status.textContent = "Cancelled";
+            }
+        }
+
+        async function scanDir(dirHandle, pathPrefix, isRoot) {
+            for await (const entry of dirHandle.values()) {
+                const fullPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
+
+                if (entry.kind === 'directory') {
+                    if (isRoot) {
+                        if (!ALLOWED_ROOT_DIRS.includes(entry.name)) continue;
+                    } else {
+                        const dirName = entry.name;
+                        if (BLOCK_DIRS.includes(dirName)) continue;
+                        if (dirName.endsWith('.egg-info')) continue;
+                    }
+                    await scanDir(entry, fullPath, false);
+                }
+                else if (entry.kind === 'file') {
+                    if (isRoot && !ALLOWED_ROOT_FILES.includes(entry.name)) continue;
+                    if (shouldSkipFile(entry.name)) continue;
+
+                    const file = await entry.getFile();
+                    if (file.size > 1_500_000) continue; // 1.5MB cap per file
+
+                    const score = calculateScore(fullPath);
+                    allFiles.push({ path: fullPath, handle: entry, size: file.size, score });
+                    totalProjectSize += file.size;
+                }
+            }
+        }
+
+        function shouldSkipFile(name) {
+            if (GLOBAL_BLOCK_FILES.includes(name)) return true;
+            const dotIdx = name.lastIndexOf('.');
+            if (dotIdx === -1) return false;
+            const ext = name.substring(dotIdx);
+            if (BLOCK_EXTENSIONS.includes(ext)) return true;
+            // Block minified bundles
+            if (name.endsWith('.min.js') || name.endsWith('.min.css')) return true;
+            return false;
+        }
+
+        function calculateScore(path) {
+            for (const rule of PRIORITY_RULES) {
+                if (rule.test(path)) return rule.score;
+            }
+            return 1;
+        }
+
+        function renderTree() {
+            const limit = 600;
+            const display = allFiles.slice(0, limit);
+            let html = display.map(f => {
+                const cls = f.score === 3 ? 'priority-3' : f.score === 2 ? 'priority-2' : '';
+                const icon = f.score === 3 ? '&#9733; ' : f.score === 2 ? '&#9671; ' : '';
+                const size = f.size < 1024 ? `${f.size}B` : `${(f.size/1024).toFixed(1)}K`;
+                return `<div class="tree-item ${cls}" title="${f.path} (${size})">${icon}${f.path}</div>`;
+            }).join('');
+            if (allFiles.length > limit) {
+                html += `<div style="padding:8px; color:var(--text-dim); font-size:0.72rem;">...and ${allFiles.length - limit} more</div>`;
+            }
+            els.treeView.innerHTML = html;
+        }
+
+        function generateAsciiTree(files) {
+            const tree = {};
+            files.forEach(f => {
+                const parts = f.path.split('/');
+                let current = tree;
+                parts.forEach((part, i) => {
+                    if (!current[part]) current[part] = (i === parts.length - 1) ? null : {};
+                    if (current[part] !== null) current = current[part];
+                });
+            });
+            let output = "";
+            function traverse(node, prefix = "") {
+                const keys = Object.keys(node).sort((a, b) => {
+                    const aDir = node[a] !== null;
+                    const bDir = node[b] !== null;
+                    if (aDir !== bDir) return aDir ? -1 : 1;
+                    return a.localeCompare(b);
+                });
+                keys.forEach((key, i) => {
+                    const isLast = i === keys.length - 1;
+                    output += `${prefix}${isLast ? "└── " : "├── "}${key}\n`;
+                    if (node[key] !== null) {
+                        traverse(node[key], prefix + (isLast ? "    " : "│   "));
+                    }
+                });
+            }
+            traverse(tree);
+            return output;
+        }
+
+        function getDelimiter() {
+            return document.getElementById('delimiterStyle').value;
+        }
+
+        function wrapFile(path, text) {
+            if (getDelimiter() === 'xml') {
+                return `\n<<<FILE path="${path}">>>\n${text}\n<<<END FILE>>>\n`;
+            }
+            const sep = "=" .repeat(60);
+            return `\n${sep}\nFILE: ${path}\n${sep}\n\n${text}\n\n`;
+        }
+
+        async function processFiles() {
+            els.processBtn.disabled = true;
+            els.status.textContent = "Packing...";
+            els.progressBar.style.display = 'block';
+            els.progressFill.style.width = '0%';
+
+            const mbValue = parseFloat(document.getElementById('partSizeMB').value);
+            const MAX_PART_SIZE = mbValue * 1024 * 1024;
+
+            let currentPartIndex = 1;
+            let currentPartContent = "";
+            let currentPartSize = 0;
+            let currentPartFiles = [];
+
+            generatedParts = [];
+            let packedSize = 0;
+            let coreBytes = 0;
+            let manifestMap = [];
+
+            // Part 1 header
+            const header = `PROJECT STRUCTURE:\n==================\n\n${generateAsciiTree(allFiles)}\n\n`;
+            currentPartContent = header;
+            currentPartSize = new Blob([header]).size;
+
+            for (let i = 0; i < allFiles.length; i++) {
+                const fileObj = allFiles[i];
+                const file = await fileObj.handle.getFile();
+                const text = await file.text();
+                const fileBlock = wrapFile(fileObj.path, text);
+                const blockSize = new Blob([fileBlock]).size;
+
+                if (currentPartSize + blockSize > MAX_PART_SIZE && currentPartSize > 0) {
+                    savePart(currentPartIndex, currentPartContent, currentPartFiles);
+                    currentPartIndex++;
+                    currentPartContent = `Part: ${currentPartIndex}\nProject: ${rootHandle.name}\n\n`;
+                    currentPartSize = 0;
+                    currentPartFiles = [];
+                }
+
+                currentPartContent += fileBlock;
+                currentPartSize += blockSize;
+                currentPartFiles.push(fileObj.path);
+                packedSize += blockSize;
+                if (fileObj.score === 3) coreBytes += blockSize;
+
+                let partEntry = manifestMap.find(m => m.part === currentPartIndex);
+                if (!partEntry) { partEntry = { part: currentPartIndex, files: [] }; manifestMap.push(partEntry); }
+                partEntry.files.push(fileObj.path);
+
+                els.progressFill.style.width = `${Math.round((i / allFiles.length) * 100)}%`;
+            }
+
+            if (currentPartSize > 0) savePart(currentPartIndex, currentPartContent, currentPartFiles);
+
+            const manifestContent = generateManifest(manifestMap, allFiles, packedSize);
+            generatedParts.push({ name: 'manifest.txt', content: manifestContent, size: manifestContent.length });
+
+            renderArtifacts(packedSize, coreBytes);
+            els.status.textContent = "Done";
+            els.processBtn.disabled = false;
+            els.zipBtn.style.display = 'flex';
+            els.progressBar.style.display = 'none';
+        }
+
+        function savePart(index, content, fileList) {
+            generatedParts.push({
+                name: `combined_codebase_${String(index).padStart(2, '0')}.txt`,
+                content, size: new Blob([content]).size, files: fileList
+            });
+        }
+
+        function generateManifest(map, files, totalBytes) {
+            let t = `MANIFEST — ${rootHandle.name}\n`;
+            t += `Generated: ${new Date().toISOString()}\n`;
+            t += `Files: ${files.length} | Parts: ${map.length} | Size: ${(totalBytes / 1024 / 1024).toFixed(2)} MB\n`;
+            t += `Est. tokens: ~${Math.round(totalBytes / 4).toLocaleString()}\n\n`;
+
+            t += `=== ARCHITECTURE MAP ===\n`;
+            t += `bin/              -> RU EPISODE PIPELINE (intake, transcript, clips, social, approval)\n`;
+            t += `server/src/       -> PAPERCLIP SERVER (routes, auth, adapters, storage, middleware)\n`;
+            t += `cli/src/          -> PAPERCLIP CLI (commands, config, checks, prompts)\n`;
+            t += `packages/         -> SHARED PACKAGES (adapters, plugins, core types)\n`;
+            t += `agent/ + tools/   -> HERMES AGENT (core loop, tool implementations)\n`;
+            t += `gateway/ + cron/  -> HERMES OPS (messaging platforms, scheduled jobs)\n`;
+            t += `.agents/ .claude/ -> AGENT SKILLS (adapter creation, design guide, PR reports)\n`;
+            t += `doc/plans/        -> ARCHITECTURE PLANS (dated decision docs)\n\n`;
+
+            t += `=== PRIORITY LEGEND ===\n`;
+            t += `Score 3 (core)    -> Pipeline scripts, server routes, agent loop, CLI commands\n`;
+            t += `Score 2 (context) -> Skills, plans, gateway, cron, Docker configs\n`;
+            t += `Score 1 (support) -> Docs, UI, tests, misc\n\n`;
+
+            t += `=== FILE TREE ===\n`;
+            t += generateAsciiTree(files);
+
+            t += `\n=== PART MAPPING ===\n`;
+            map.forEach(p => {
+                t += `\n[Part ${p.part}] (${p.files.length} files)\n`;
+                p.files.forEach(f => t += `  ${f}\n`);
+            });
+            return t;
+        }
+
+        async function downloadAllZip() {
+            if (generatedParts.length === 0) return;
+            els.zipBtn.disabled = true;
+            els.zipBtn.textContent = "Zipping...";
+            const zip = new JSZip();
+            generatedParts.forEach(p => zip.file(p.name, p.content));
+            const blob = await zip.generateAsync({ type: "blob" });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${rootHandle.name}_codebase_bundle.zip`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            els.zipBtn.disabled = false;
+            els.zipBtn.textContent = "Download all (.zip)";
+        }
+
+        function renderArtifacts(totalSize, coreBytes) {
+            els.placeholderText.style.display = 'none';
+            els.statsGrid.style.opacity = '1';
+            els.artifactsContainer.innerHTML = '';
+
+            els.statFiles.textContent = allFiles.length;
+            els.statSize.textContent = (totalSize / 1024 / 1024).toFixed(2);
+            els.statParts.textContent = generatedParts.length - 1;
+            const density = totalSize > 0 ? Math.round((coreBytes / totalSize) * 100) : 0;
+            els.statDensity.textContent = `${density}%`;
+            els.statTokens.textContent = `~${Math.round(totalSize / 4).toLocaleString()}`;
+
+            const manifest = generatedParts.find(p => p.name === 'manifest.txt');
+            els.artifactsContainer.appendChild(createRow(manifest, true));
+            generatedParts.filter(p => p.name !== 'manifest.txt').forEach(p => els.artifactsContainer.appendChild(createRow(p, false)));
+        }
+
+        function createRow(part, isManifest) {
+            const div = document.createElement('div');
+            div.className = 'artifact';
+            const info = document.createElement('div');
+            const sizeMB = (part.size / 1024 / 1024).toFixed(2);
+            const filesNote = part.files ? ` &middot; ${part.files.length} files` : '';
+            info.innerHTML = `
+                <div style="font-weight:500; color:${isManifest ? 'var(--accent)' : 'var(--text)'}">${part.name}</div>
+                <div style="font-size:0.7rem; color:var(--text-dim)">${sizeMB} MB${filesNote}</div>`;
+            const btn = document.createElement('button');
+            btn.innerText = "Download";
+            btn.onclick = () => {
+                const blob = new Blob([part.content], { type: 'text/plain' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = part.name;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            };
+            div.appendChild(info);
+            div.appendChild(btn);
+            return div;
+        }
+    </script>
+</body>
+</html>
