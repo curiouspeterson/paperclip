@@ -7,13 +7,46 @@ export type {
   CreateMailchimpCampaignResult,
   SendMailchimpCampaignResult,
 } from "./integration.js";
-export type { InstanceExperimentalSettings, InstanceSettings } from "./instance.js";
+export type { InstanceExperimentalSettings, InstanceGeneralSettings, InstanceSettings } from "./instance.js";
+export type {
+  CompanySkillSourceType,
+  CompanySkillTrustLevel,
+  CompanySkillCompatibility,
+  CompanySkillSourceBadge,
+  CompanySkillFileInventoryEntry,
+  CompanySkill,
+  CompanySkillListItem,
+  CompanySkillUsageAgent,
+  CompanySkillDetail,
+  CompanySkillUpdateStatus,
+  CompanySkillImportRequest,
+  CompanySkillImportResult,
+  CompanySkillProjectScanRequest,
+  CompanySkillProjectScanSkipped,
+  CompanySkillProjectScanConflict,
+  CompanySkillProjectScanResult,
+  CompanySkillCreateRequest,
+  CompanySkillFileDetail,
+  CompanySkillFileUpdateRequest,
+} from "./company-skill.js";
+export type {
+  AgentSkillSyncMode,
+  AgentSkillState,
+  AgentSkillOrigin,
+  AgentSkillEntry,
+  AgentSkillSnapshot,
+  AgentSkillSyncRequest,
+} from "./adapter-skills.js";
 export type {
   Agent,
   AgentAccessState,
   AgentChainOfCommandEntry,
   AgentDetail,
   AgentPermissions,
+  AgentInstructionsBundleMode,
+  AgentInstructionsFileSummary,
+  AgentInstructionsFileDetail,
+  AgentInstructionsBundle,
   AgentKeyCreated,
   AgentConfigRevision,
 } from "./agent.js";
@@ -103,6 +136,16 @@ export type {
   StoredSecretVersionMaterial,
   LocalEncryptedSecretVersionMaterial,
 } from "./secret-material.js";
+export type {
+  Routine,
+  RoutineTrigger,
+  RoutineRun,
+  RoutineTriggerSecretMaterial,
+  RoutineDetail,
+  RoutineRunSummary,
+  RoutineExecutionIssueOrigin,
+  RoutineListItem,
+} from "./routine.js";
 export type { CostEvent, CostSummary, CostByAgent, CostByProviderModel, CostByBiller, CostByAgentModel, CostWindowSpendRow, CostByProject } from "./cost.js";
 export type { FinanceEvent, FinanceSummary, FinanceByBiller, FinanceByKind } from "./finance.js";
 export type {
@@ -127,18 +170,27 @@ export type {
 export type { QuotaWindow, ProviderQuotaResult } from "./quota.js";
 export type {
   CompanyPortabilityInclude,
-  CompanyPortabilitySecretRequirement,
+  CompanyPortabilityEnvInput,
+  CompanyPortabilityFileEntry,
   CompanyPortabilityCompanyManifestEntry,
   CompanyPortabilityAgentManifestEntry,
+  CompanyPortabilitySkillManifestEntry,
+  CompanyPortabilityProjectManifestEntry,
+  CompanyPortabilityIssueManifestEntry,
   CompanyPortabilityManifest,
   CompanyPortabilityExportResult,
+  CompanyPortabilityExportPreviewFile,
+  CompanyPortabilityExportPreviewResult,
   CompanyPortabilitySource,
   CompanyPortabilityImportTarget,
   CompanyPortabilityAgentSelection,
   CompanyPortabilityCollisionStrategy,
   CompanyPortabilityPreviewRequest,
   CompanyPortabilityPreviewAgentPlan,
+  CompanyPortabilityPreviewProjectPlan,
+  CompanyPortabilityPreviewIssuePlan,
   CompanyPortabilityPreviewResult,
+  CompanyPortabilityAdapterOverride,
   CompanyPortabilityImportRequest,
   CompanyPortabilityImportResult,
   CompanyPortabilityExportRequest,

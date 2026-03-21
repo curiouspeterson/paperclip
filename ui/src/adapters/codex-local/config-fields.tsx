@@ -23,6 +23,7 @@ export function CodexLocalConfigFields({
   eff,
   mark,
   models,
+  hideInstructionsFile,
 }: AdapterConfigFieldsProps) {
   const bypassEnabled =
     config.dangerouslyBypassApprovalsAndSandbox === true || config.dangerouslyBypassSandbox === true;
@@ -38,30 +39,32 @@ export function CodexLocalConfigFields({
 
   return (
     <>
-      <Field label="Agent instructions file" hint={instructionsFileHint}>
-        <div className="flex items-center gap-2">
-          <DraftInput
-            value={
-              isCreate
-                ? values!.instructionsFilePath ?? ""
-                : eff(
-                    "adapterConfig",
-                    "instructionsFilePath",
-                    String(config.instructionsFilePath ?? ""),
-                  )
-            }
-            onCommit={(v) =>
-              isCreate
-                ? set!({ instructionsFilePath: v })
-                : mark("adapterConfig", "instructionsFilePath", v || undefined)
-            }
-            immediate
-            className={inputClass}
-            placeholder="/absolute/path/to/AGENTS.md"
-          />
-          <ChoosePathButton />
-        </div>
-      </Field>
+      {!hideInstructionsFile && (
+        <Field label="Agent instructions file" hint={instructionsFileHint}>
+          <div className="flex items-center gap-2">
+            <DraftInput
+              value={
+                isCreate
+                  ? values!.instructionsFilePath ?? ""
+                  : eff(
+                      "adapterConfig",
+                      "instructionsFilePath",
+                      String(config.instructionsFilePath ?? ""),
+                    )
+              }
+              onCommit={(v) =>
+                isCreate
+                  ? set!({ instructionsFilePath: v })
+                  : mark("adapterConfig", "instructionsFilePath", v || undefined)
+              }
+              immediate
+              className={inputClass}
+              placeholder="/absolute/path/to/AGENTS.md"
+            />
+            <ChoosePathButton />
+          </div>
+        </Field>
+      )}
       <Field
         label="External skill directories"
         hint="Optional newline-separated directories containing extra skills, such as a checked-out Superpowers pack. Each directory can be a single skill or a folder of skill subdirectories."

@@ -10,21 +10,37 @@ import { openClawGatewayUIAdapter } from "./openclaw-gateway";
 import { processUIAdapter } from "./process";
 import { httpUIAdapter } from "./http";
 
-const adaptersByType = new Map<string, UIAdapterModule>(
-  [
-    claudeLocalUIAdapter,
-    codexLocalUIAdapter,
-    geminiLocalUIAdapter,
-    hermesLocalUIAdapter,
-    openCodeLocalUIAdapter,
-    piLocalUIAdapter,
-    cursorLocalUIAdapter,
-    openClawGatewayUIAdapter,
-    processUIAdapter,
-    httpUIAdapter,
-  ].map((a) => [a.type, a]),
-);
+const uiAdapters: UIAdapterModule[] = [
+  claudeLocalUIAdapter,
+  codexLocalUIAdapter,
+  geminiLocalUIAdapter,
+  openCodeLocalUIAdapter,
+  piLocalUIAdapter,
+  cursorLocalUIAdapter,
+  openClawGatewayUIAdapter,
+  processUIAdapter,
+  httpUIAdapter,
+];
+
+  const adaptersByType = new Map<string, UIAdapterModule>(
+    [
+      claudeLocalUIAdapter,
+      codexLocalUIAdapter,
+      geminiLocalUIAdapter,
+      hermesLocalUIAdapter,
+      openCodeLocalUIAdapter,
+      piLocalUIAdapter,
+      cursorLocalUIAdapter,
+      openClawGatewayUIAdapter,
+      processUIAdapter,
+      httpUIAdapter,
+    ].map((a) => [a.type, a]),
+  );
 
 export function getUIAdapter(type: string): UIAdapterModule {
   return adaptersByType.get(type) ?? processUIAdapter;
+}
+
+export function listUIAdapters(): UIAdapterModule[] {
+  return [...uiAdapters];
 }

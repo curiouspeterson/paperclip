@@ -5,6 +5,7 @@ export {
   resetCursorModelsCacheForTests,
   setCursorModelsRunnerForTests,
 } from "./models.js";
+export { listCursorSkills, syncCursorSkills } from "./skills.js";
 export { testEnvironment } from "./test.js";
 export { parseCursorJsonl, isCursorUnknownSessionError } from "./parse.js";
 import type { AdapterConfigNormalizationInput, AdapterSessionCodec } from "@paperclipai/adapter-utils";

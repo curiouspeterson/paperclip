@@ -25,7 +25,7 @@ export const help: Record<string, string> = {
   reportsTo: "The agent this one reports to in the org hierarchy.",
   capabilities: "Describes what this agent can do. Shown in the org chart and used for task routing.",
   adapterType: "How this agent runs: local CLI (Claude/Codex/OpenCode), OpenClaw Gateway, spawned process, or generic HTTP webhook.",
-  cwd: "Default working directory fallback for local adapters. Use an absolute path on the machine running Paperclip.",
+  cwd: "Deprecated legacy working directory fallback for local adapters. Existing agents may still carry this value, but new configurations should use project workspaces instead.",
   promptTemplate: "Sent on every heartbeat. Keep this small and dynamic. Use it for current-task framing, not large static instructions. Supports {{ agent.id }}, {{ agent.name }}, {{ agent.role }} and other template variables.",
   browserAutomationProvider: "Optional browser runtime exposed to process workers. Use page_agent or lightpanda only when the worker knows how to consume Paperclip's browser env contract.",
   browserAutomationCommand: "Optional override command for the browser runtime executable or launcher script.",

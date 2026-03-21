@@ -25,6 +25,7 @@ import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { costService } from "./costs.js";
+import { companySkillService } from "./company-skills.js";
 import { budgetService, type BudgetEnforcementScope } from "./budgets.js";
 import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir, resolveManagedProjectWorkspaceDir } from "../home-paths.js";
@@ -720,9 +721,13 @@ function resolveNextSessionState(input: {
 
 export function heartbeatService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
+  const getCurrentUserRedactionOptions = async () => ({
+    enabled: (await instanceSettings.getGeneral()).censorUsernameInLogs,
+  });
 
   const runLogStore = getRunLogStore();
   const secretsSvc = secretService(db);
+  const companySkills = companySkillService(db);
   const issuesSvc = issueService(db);
   const executionWorkspacesSvc = executionWorkspaceService(db);
   const workspaceOperationsSvc = workspaceOperationService(db);
@@ -1318,8 +1323,13 @@ export function heartbeatService(db: Db) {
       payload?: Record<string, unknown>;
     },
   ) {
-    const sanitizedMessage = event.message ? redactCurrentUserText(event.message) : event.message;
-    const sanitizedPayload = event.payload ? redactCurrentUserValue(event.payload) : event.payload;
+    const currentUserRedactionOptions = await getCurrentUserRedactionOptions();
+    const sanitizedMessage = event.message
+      ? redactCurrentUserText(event.message, currentUserRedactionOptions)
+      : event.message;
+    const sanitizedPayload = event.payload
+      ? redactCurrentUserValue(event.payload, currentUserRedactionOptions)
+      : event.payload;
 
     await db.insert(heartbeatRunEvents).values({
       companyId: run.companyId,
@@ -1941,6 +1951,11 @@ export function heartbeatService(db: Db) {
       agent.companyId,
       mergedConfig,
     );
+    const runtimeSkillEntries = await companySkills.listRuntimeSkillEntries(agent.companyId);
+    const runtimeConfig = {
+      ...resolvedConfig,
+      paperclipRuntimeSkills: runtimeSkillEntries,
+    };
     const issueRef = issueContext
       ? {
           id: issueContext.id,
@@ -1968,7 +1983,7 @@ export function heartbeatService(db: Db) {
         repoUrl: resolvedWorkspace.repoUrl,
         repoRef: resolvedWorkspace.repoRef,
       },
-      config: resolvedConfig,
+      config: runtimeConfig,
       issue: issueRef,
       agent: {
         id: agent.id,
@@ -2133,7 +2148,11 @@ export function heartbeatService(db: Db) {
       repoRef: executionWorkspace.repoRef,
       branchName: executionWorkspace.branchName,
       worktreePath: executionWorkspace.worktreePath,
-      agentHome: resolveDefaultAgentWorkspaceDir(agent.id),
+      agentHome: await (async () => {
+        const home = resolveDefaultAgentWorkspaceDir(agent.id);
+        await fs.mkdir(home, { recursive: true });
+        return home;
+      })(),
     };
     context.paperclipWorkspaces = resolvedWorkspace.workspaceHints;
     const runtimeServiceIntents = (() => {
@@ -2254,8 +2273,9 @@ export function heartbeatService(db: Db) {
         })
         .where(eq(heartbeatRuns.id, runId));
 
+      const currentUserRedactionOptions = await getCurrentUserRedactionOptions();
       const onLog = async (stream: "stdout" | "stderr", chunk: string) => {
-        const sanitizedChunk = redactCurrentUserText(chunk);
+        const sanitizedChunk = redactCurrentUserText(chunk, currentUserRedactionOptions);
         if (stream === "stdout") stdoutExcerpt = appendExcerpt(stdoutExcerpt, sanitizedChunk);
         if (stream === "stderr") stderrExcerpt = appendExcerpt(stderrExcerpt, sanitizedChunk);
         const ts = new Date().toISOString();
@@ -2373,7 +2393,7 @@ export function heartbeatService(db: Db) {
         runId: run.id,
         agent,
         runtime: runtimeForAdapter,
-        config: resolvedConfig,
+        config: runtimeConfig,
         context,
         onLog,
         onMeta: onAdapterMeta,
@@ -2505,6 +2525,7 @@ export function heartbeatService(db: Db) {
             ? null
             : redactCurrentUserText(
                 adapterResult.errorMessage ?? (outcome === "timed_out" ? "Timed out" : "Adapter failed"),
+                currentUserRedactionOptions,
               ),
         errorCode:
           outcome === "timed_out"
@@ -2572,7 +2593,10 @@ export function heartbeatService(db: Db) {
       }
       await finalizeAgentStatus(agent.id, outcome);
     } catch (err) {
-      const message = redactCurrentUserText(err instanceof Error ? err.message : "Unknown adapter failure");
+      const message = redactCurrentUserText(
+        err instanceof Error ? err.message : "Unknown adapter failure",
+        await getCurrentUserRedactionOptions(),
+      );
       logger.error({ err, runId }, "heartbeat execution failed");
 
       let logSummary: { bytes: number; sha256?: string; compressed: boolean } | null = null;
@@ -3610,7 +3634,7 @@ export function heartbeatService(db: Db) {
         store: run.logStore,
         logRef: run.logRef,
         ...result,
-        content: redactCurrentUserText(result.content),
+        content: redactCurrentUserText(result.content, await getCurrentUserRedactionOptions()),
       };
     },
 

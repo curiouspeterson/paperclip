@@ -61,6 +61,7 @@ import {
   MonitorSmartphone,
   MoreHorizontal,
   Paperclip,
+  Repeat,
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
@@ -943,6 +944,16 @@ export function IssueDetail() {
               </span>
               Live
             </span>
+          )}
+
+          {issue.originKind === "routine_execution" && issue.originId && (
+            <Link
+              to={`/routines/${issue.originId}`}
+              className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0 hover:bg-violet-500/20 transition-colors"
+            >
+              <Repeat className="h-3 w-3" />
+              Routine
+            </Link>
           )}
 
           {issue.projectId ? (

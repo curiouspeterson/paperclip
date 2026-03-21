@@ -174,6 +174,7 @@ export function secretService(db: Db) {
 
     getById,
     getByName,
+    resolveSecretValue,
     resolveSecretValueByName,
 
     create: async (
