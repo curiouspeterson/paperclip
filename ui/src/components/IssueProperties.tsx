@@ -55,6 +55,17 @@ function issueModeForExistingWorkspace(mode: string | null | undefined) {
   return "shared_workspace";
 }
 
+function shouldPresentExistingWorkspaceSelection(issue: Issue) {
+  const persistedMode =
+    issue.currentExecutionWorkspace?.mode
+    ?? issue.executionWorkspaceSettings?.mode
+    ?? issue.executionWorkspacePreference;
+  return Boolean(
+    issue.executionWorkspaceId &&
+    (persistedMode === "isolated_workspace" || persistedMode === "operator_branch"),
+  );
+}
+
 interface IssuePropertiesProps {
   issue: Issue;
   onUpdate: (data: Record<string, unknown>) => void;
@@ -271,10 +282,6 @@ export function IssueProperties({ issue, onUpdate, inline, liveAgentIds }: Issue
       ? currentProject?.executionWorkspacePolicy ?? null
       : null;
   const currentProjectSupportsExecutionWorkspace = Boolean(currentProjectExecutionWorkspacePolicy?.enabled);
-  const currentExecutionWorkspaceSelection =
-    issue.executionWorkspacePreference
-    ?? issue.executionWorkspaceSettings?.mode
-    ?? defaultExecutionWorkspaceModeForProject(currentProject);
   const { data: reusableExecutionWorkspaces } = useQuery({
     queryKey: queryKeys.executionWorkspaces.list(companyId!, {
       projectId: issue.projectId ?? undefined,
@@ -301,9 +308,17 @@ export function IssueProperties({ issue, onUpdate, inline, liveAgentIds }: Issue
     }
     return Array.from(seen.values());
   }, [reusableExecutionWorkspaces]);
-  const selectedReusableExecutionWorkspace = deduplicatedReusableWorkspaces.find(
-    (workspace) => workspace.id === issue.executionWorkspaceId,
-  );
+  const selectedReusableExecutionWorkspace =
+    deduplicatedReusableWorkspaces.find((workspace) => workspace.id === issue.executionWorkspaceId)
+    ?? issue.currentExecutionWorkspace
+    ?? null;
+  const currentExecutionWorkspaceSelection = shouldPresentExistingWorkspaceSelection(issue)
+    ? "reuse_existing"
+    : (
+        issue.executionWorkspacePreference
+        ?? issue.executionWorkspaceSettings?.mode
+        ?? defaultExecutionWorkspaceModeForProject(currentProject)
+      );
   const projectLink = (id: string | null) => {
     if (!id) return null;
     const project = projects?.find((p) => p.id === id) ?? null;
@@ -689,7 +704,9 @@ export function IssueProperties({ issue, onUpdate, inline, liveAgentIds }: Issue
               >
                 {EXECUTION_WORKSPACE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {option.value === "reuse_existing" && selectedReusableExecutionWorkspace?.mode === "isolated_workspace"
+                      ? "Existing isolated workspace"
+                      : option.label}
                   </option>
                 ))}
               </select>
