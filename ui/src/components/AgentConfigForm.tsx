@@ -285,7 +285,10 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     adapterType === "codex_local" ||
     adapterType === "gemini_local" ||
     adapterType === "opencode_local" ||
-    adapterType === "cursor";
+    adapterType === "cursor" ||
+    adapterType === "process" ||
+    adapterType === "hermes_local" ||
+    adapterType === "pi_local";
   const uiAdapter = useMemo(() => getUIAdapter(adapterType), [adapterType]);
 
   // Fetch adapter models for the effective adapter type
@@ -366,6 +369,15 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
         : adapterType === "opencode_local"
           ? openCodeThinkingEffortOptions
           : claudeThinkingEffortOptions;
+
+  // Hermes stores thinking effort inside extraArgs (--reasoning-effort <val>)
+  function getHermesThinkingEffort(): string {
+    const args = config.extraArgs;
+    if (!Array.isArray(args)) return "";
+    const idx = args.indexOf("--reasoning-effort");
+    return idx >= 0 && idx + 1 < args.length ? String(args[idx + 1]) : "";
+  }
+
   const currentThinkingEffort = isCreate
     ? val!.thinkingEffort
     : adapterType === "codex_local"
@@ -378,6 +390,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
         ? eff("adapterConfig", "mode", String(config.mode ?? ""))
       : adapterType === "opencode_local"
         ? eff("adapterConfig", "variant", String(config.variant ?? ""))
+      : adapterType === "hermes_local"
+        ? getHermesThinkingEffort()
       : eff("adapterConfig", "effort", String(config.effort ?? ""));
   const showThinkingEffort = adapterType !== "gemini_local";
   const codexSearchEnabled = adapterType === "codex_local"
@@ -634,6 +648,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
             : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Permissions &amp; Configuration</div>
           }
           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+              {adapterType !== "hermes_local" && (
               <Field label="Command" hint={help.localCommand}>
                 <DraftInput
                   value={
@@ -661,6 +676,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   }
                 />
               </Field>
+              )}
 
               <ModelDropdown
                 models={models}
@@ -689,11 +705,26 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   <ThinkingEffortDropdown
                     value={currentThinkingEffort}
                     options={thinkingEffortOptions}
-                    onChange={(v) =>
-                      isCreate
-                        ? set!({ thinkingEffort: v })
-                        : mark("adapterConfig", thinkingEffortKey, v || undefined)
-                    }
+                    onChange={(v) => {
+                      if (isCreate) {
+                        set!({ thinkingEffort: v });
+                      } else if (adapterType === "hermes_local") {
+                        // Hermes consumes --reasoning-effort via extraArgs
+                        const existing = Array.isArray(config.extraArgs)
+                          ? (config.extraArgs as string[]).filter(
+                              (a, i, arr) =>
+                                a !== "--reasoning-effort" &&
+                                (i === 0 || arr[i - 1] !== "--reasoning-effort"),
+                            )
+                          : [];
+                        const next = v
+                          ? [...existing, "--reasoning-effort", v]
+                          : existing;
+                        mark("adapterConfig", "extraArgs", next.length > 0 ? next : undefined);
+                      } else {
+                        mark("adapterConfig", thinkingEffortKey, v || undefined);
+                      }
+                    }}
                     open={thinkingEffortOpen}
                     onOpenChange={setThinkingEffortOpen}
                   />
@@ -939,7 +970,7 @@ function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmentTestRe
 
 /* ---- Internal sub-components ---- */
 
-const ENABLED_ADAPTER_TYPES = new Set(["claude_local", "codex_local", "gemini_local", "opencode_local", "pi_local", "cursor"]);
+const ENABLED_ADAPTER_TYPES = new Set(["claude_local", "codex_local", "gemini_local", "opencode_local", "pi_local", "cursor", "process", "http", "hermes_local", "openclaw_gateway"]);
 
 /** Display list includes all real adapter types plus UI-only coming-soon entries. */
 const ADAPTER_DISPLAY_LIST: { value: string; label: string; comingSoon: boolean }[] = [
