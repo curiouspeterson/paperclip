@@ -351,4 +351,28 @@ describe("issue contract routes", () => {
       RUN_ID,
     );
   });
+
+  it.each(["done", "cancelled"] as const)(
+    "rejects checkout requests from terminal status %s before they reach the service",
+    async (status) => {
+      mockIssueService.getById.mockResolvedValue(makeIssue({
+        status,
+        assigneeAgentId: AGENT_ONE_ID,
+      }));
+
+      const res = await request(
+        createApp({
+          type: "agent",
+          agentId: AGENT_ONE_ID,
+          companyId: COMPANY_ID,
+          runId: RUN_ID,
+        }),
+      )
+        .post("/api/issues/11111111-1111-4111-8111-111111111111/checkout")
+        .send({ agentId: AGENT_ONE_ID, expectedStatuses: [status] });
+
+      expect(res.status).toBe(400);
+      expect(mockIssueService.checkout).not.toHaveBeenCalled();
+    },
+  );
 });

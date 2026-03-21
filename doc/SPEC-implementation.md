@@ -510,7 +510,7 @@ All endpoints are under `/api` and return JSON.
 ```json
 {
   "agentId": "uuid",
-  "expectedStatuses": ["todo", "backlog", "blocked"]
+  "expectedStatuses": ["todo", "backlog", "blocked", "in_review"]
 }
 ```
 
@@ -518,7 +518,8 @@ Server behavior:
 
 1. single SQL update with `WHERE id = ? AND status IN (?) AND (assignee_agent_id IS NULL OR assignee_agent_id = :agentId)`
 2. if updated row count is 0, return `409` with current owner/status
-3. successful checkout sets `assignee_agent_id`, `status = in_progress`, and `started_at`
+3. terminal statuses (`done`, `cancelled`) are not valid checkout sources; closed issues must be reopened first
+4. successful checkout sets `assignee_agent_id`, `status = in_progress`, `started_at`, and clears any stale terminal timestamps
 
 ## 10.5 Projects
 

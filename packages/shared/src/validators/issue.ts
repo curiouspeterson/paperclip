@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { ISSUE_PRIORITIES, ISSUE_STATUSES } from "../constants.js";
+import {
+  ISSUE_CHECKOUT_EXPECTED_STATUSES,
+  ISSUE_PRIORITIES,
+} from "../constants.js";
 
 const ISSUE_MUTABLE_STATUSES = [
   "backlog",
@@ -108,7 +111,7 @@ export type IssueExecutionWorkspaceSettings = z.infer<typeof issueExecutionWorks
 
 export const checkoutIssueSchema = z.object({
   agentId: z.string().uuid(),
-  expectedStatuses: z.array(z.enum(ISSUE_STATUSES)).nonempty(),
+  expectedStatuses: z.array(z.enum(ISSUE_CHECKOUT_EXPECTED_STATUSES)).nonempty(),
 });
 
 export type CheckoutIssue = z.infer<typeof checkoutIssueSchema>;

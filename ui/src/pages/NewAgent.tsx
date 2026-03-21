@@ -44,15 +44,9 @@ const SUPPORTED_ADVANCED_ADAPTER_TYPES = new Set<CreateConfigValues["adapterType
 
 const HERMES_WORKER_SCRIPT = "/Users/adampeterson/GitHub/paperclip/scripts/hermes_paperclip_worker.py";
 const HERMES_PRESET_PROMPT_TEMPLATE =
-  "You are agent {{ agent.name }}. Your role is {{ agent.role }}.\n\nFollow the current task instructions. Keep outputs concise, concrete, and blocker-oriented.";
+  "You are agent {{ agent.name }}.\n\nFollow the current task instructions. Keep outputs concise, concrete, and blocker-oriented.";
 const HERMES_PRESET_SECRET_BINDINGS: Record<string, string> = {
   ZAI_API_KEY: "zai_api_key",
-  APPLEID_PASSWORD: "appleid-password",
-  APPLEID_USERNAME: "appleid-username",
-  OPENROUTER_API_KEY: "openrouter_api_key",
-  SITEGROUND_PASSWORD: "siteground-password",
-  SITEGROUND_USERNAME: "siteground-username",
-  SPOTIFY_RSS_FEED_URL: "spotify-rss-feed-url",
 };
 
 function buildHermesPresetEnvBindings(secrets: CompanySecret[]): Record<string, EnvBinding> {
@@ -172,7 +166,7 @@ export function NewAgent() {
   useEffect(() => {
     const isHermesPreset =
       presetAdapterType === "process" &&
-      (presetTemplate === "hermes_agent" || presetTemplate === "technical_vp");
+      presetTemplate === "hermes_agent";
     if (!isHermesPreset || companySecretsLoading || hermesPresetAppliedRef.current) return;
     hermesPresetAppliedRef.current = true;
 

@@ -19,7 +19,7 @@ import {
   projectWorkspaces,
   projects,
 } from "@paperclipai/db";
-import { extractProjectMentionIds } from "@paperclipai/shared";
+import { extractProjectMentionIds, ISSUE_CHECKOUT_EXPECTED_STATUSES } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
   defaultIssueExecutionWorkspaceSettingsForProject,
@@ -32,6 +32,7 @@ import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallbac
 import { getDefaultCompanyGoal } from "./goals.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
+const ISSUE_CHECKOUT_ALLOWED_STATUS_SET = new Set<string>(ISSUE_CHECKOUT_EXPECTED_STATUSES);
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
 
 function assertTransition(from: string, to: string) {
@@ -989,6 +990,16 @@ export function issueService(db: Db) {
       }),
 
     checkout: async (id: string, agentId: string, expectedStatuses: string[], checkoutRunId: string | null) => {
+      const invalidExpectedStatuses = expectedStatuses.filter(
+        (status) => !ISSUE_CHECKOUT_ALLOWED_STATUS_SET.has(status),
+      );
+      if (invalidExpectedStatuses.length > 0) {
+        throw unprocessable(
+          "Issue checkout expectedStatuses may only include backlog, todo, blocked, or in_review",
+          { invalidExpectedStatuses, allowedExpectedStatuses: ISSUE_CHECKOUT_EXPECTED_STATUSES },
+        );
+      }
+
       const issueCompany = await db
         .select({ companyId: issues.companyId })
         .from(issues)
@@ -1016,6 +1027,8 @@ export function issueService(db: Db) {
           executionRunId: checkoutRunId,
           status: "in_progress",
           startedAt: now,
+          completedAt: null,
+          cancelledAt: null,
           updatedAt: now,
         })
         .where(

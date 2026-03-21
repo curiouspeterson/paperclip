@@ -1967,8 +1967,9 @@ export function heartbeatService(db: Db) {
           executionWorkspacePreference: issueContext.executionWorkspacePreference,
         }
       : null;
-    const existingExecutionWorkspace =
-      issueRef?.executionWorkspaceId ? await executionWorkspacesSvc.getById(issueRef.executionWorkspaceId) : null;
+    const existingExecutionWorkspace = issueRef?.executionWorkspaceId
+      ? await executionWorkspacesSvc.getByIdForCompany(agent.companyId, issueRef.executionWorkspaceId)
+      : null;
     const workspaceOperationRecorder = workspaceOperationsSvc.createRecorder({
       companyId: agent.companyId,
       heartbeatRunId: run.id,
@@ -2001,7 +2002,7 @@ export function heartbeatService(db: Db) {
     let persistedExecutionWorkspace = null;
     try {
       persistedExecutionWorkspace = shouldReuseExisting && existingExecutionWorkspace
-        ? await executionWorkspacesSvc.update(existingExecutionWorkspace.id, {
+        ? await executionWorkspacesSvc.updateForCompany(agent.companyId, existingExecutionWorkspace.id, {
             cwd: executionWorkspace.cwd,
             repoUrl: executionWorkspace.repoUrl,
             baseRef: executionWorkspace.repoRef,
@@ -2095,7 +2096,7 @@ export function heartbeatService(db: Db) {
       existingExecutionWorkspace.id !== persistedExecutionWorkspace.id &&
       existingExecutionWorkspace.status === "active"
     ) {
-      await executionWorkspacesSvc.update(existingExecutionWorkspace.id, {
+      await executionWorkspacesSvc.updateForCompany(agent.companyId, existingExecutionWorkspace.id, {
         status: "idle",
         cleanupReason: null,
       });

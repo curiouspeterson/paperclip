@@ -102,6 +102,20 @@ export function executionWorkspaceService(db: Db) {
         .then((rows) => rows[0] ?? null);
       return row ? toExecutionWorkspace(row) : null;
     },
+
+    updateForCompany: async (
+      companyId: string,
+      id: string,
+      patch: Partial<typeof executionWorkspaces.$inferInsert>,
+    ) => {
+      const row = await db
+        .update(executionWorkspaces)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(and(eq(executionWorkspaces.id, id), eq(executionWorkspaces.companyId, companyId)))
+        .returning()
+        .then((rows) => rows[0] ?? null);
+      return row ? toExecutionWorkspace(row) : null;
+    },
   };
 }
 

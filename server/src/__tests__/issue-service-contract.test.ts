@@ -11,9 +11,11 @@ import {
   ensurePostgresDatabase,
   agents,
   companies,
+  executionWorkspaces,
   goals,
   heartbeatRuns,
   issues,
+  projectWorkspaces,
   projects,
 } from "@paperclipai/db";
 import { issueService } from "../services/issues.js";
@@ -98,6 +100,8 @@ describe("issue service contracts", () => {
 
   afterEach(async () => {
     await db.delete(issues);
+    await db.delete(executionWorkspaces);
+    await db.delete(projectWorkspaces);
     await db.delete(heartbeatRuns);
     await db.delete(goals);
     await db.delete(projects);
@@ -320,6 +324,74 @@ describe("issue service contracts", () => {
     expect(updated?.executionAgentNameKey).toBeNull();
   });
 
+  it.each([
+    { status: "done", timestampField: "completedAt" as const },
+    { status: "cancelled", timestampField: "cancelledAt" as const },
+  ])("rejects checkout from terminal status $status", async ({ status, timestampField }) => {
+    const companyId = await seedCompany("Alpha");
+    const agentId = await seedAgent(companyId);
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const terminalAt = new Date("2026-03-20T12:00:00.000Z");
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      status: "running",
+      startedAt: terminalAt,
+      updatedAt: terminalAt,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Closed issue",
+      status,
+      priority: "medium",
+      [timestampField]: terminalAt,
+    });
+
+    await expect(
+      issueService(db).checkout(issueId, agentId, [status], runId),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("clears stale terminal timestamps when checkout moves an issue to in_progress", async () => {
+    const companyId = await seedCompany("Alpha");
+    const agentId = await seedAgent(companyId);
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const now = new Date("2026-03-20T14:00:00.000Z");
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      status: "running",
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Reclaimed issue",
+      status: "todo",
+      priority: "medium",
+      completedAt: new Date("2026-03-20T12:00:00.000Z"),
+      cancelledAt: new Date("2026-03-20T13:00:00.000Z"),
+    });
+
+    const checkedOut = await issueService(db).checkout(issueId, agentId, ["todo"], runId);
+
+    expect(checkedOut?.status).toBe("in_progress");
+    expect(checkedOut?.completedAt).toBeNull();
+    expect(checkedOut?.cancelledAt).toBeNull();
+  });
+
   it("rejects direct cross-company issue links at the database layer", async () => {
     const companyId = await seedCompany("Alpha");
     const foreignCompanyId = await seedCompany("Beta");
@@ -342,6 +414,50 @@ describe("issue service contracts", () => {
         status: "todo",
         priority: "medium",
         parentId: foreignParentId,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects direct foreign execution workspace links at the database layer", async () => {
+    const companyId = await seedCompany("Alpha");
+    const foreignCompanyId = await seedCompany("Beta");
+    const projectId = randomUUID();
+    const foreignProjectId = randomUUID();
+    const foreignExecutionWorkspaceId = randomUUID();
+    const issueId = randomUUID();
+
+    await db.insert(projects).values({
+      id: projectId,
+      companyId,
+      name: "Alpha project",
+      status: "backlog",
+    });
+    await db.insert(projects).values({
+      id: foreignProjectId,
+      companyId: foreignCompanyId,
+      name: "Beta project",
+      status: "backlog",
+    });
+    await db.insert(executionWorkspaces).values({
+      id: foreignExecutionWorkspaceId,
+      companyId: foreignCompanyId,
+      projectId: foreignProjectId,
+      mode: "shared_workspace",
+      strategyType: "project_primary",
+      name: "Foreign workspace",
+      status: "active",
+      providerType: "local_fs",
+    });
+
+    await expect(
+      db.insert(issues).values({
+        id: issueId,
+        companyId,
+        projectId,
+        title: "Cross-company execution workspace",
+        status: "todo",
+        priority: "medium",
+        executionWorkspaceId: foreignExecutionWorkspaceId,
       }),
     ).rejects.toThrow();
   });
