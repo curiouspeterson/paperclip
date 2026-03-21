@@ -102,7 +102,7 @@ Notes:
 ## Issue Commands
 
 ```sh
-pnpm paperclipai issue list --company-id <company-id> [--status todo,in_progress] [--assignee-agent-id <agent-id>] [--match text]
+pnpm paperclipai issue list --company-id <company-id> [--status todo,in_progress,in_review] [--assignee-agent-id <agent-id>] [--match text]
 pnpm paperclipai issue get <issue-id-or-identifier>
 pnpm paperclipai issue create --company-id <company-id> --title "..." [--description "..."] [--status todo] [--priority high]
 pnpm paperclipai issue update <issue-id> [--status todo|backlog|blocked|in_review|done|cancelled] [--comment "..."]

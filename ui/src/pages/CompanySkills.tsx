@@ -908,13 +908,7 @@ export function CompanySkills() {
         title: "Project skill scan complete",
         body: summary,
       });
-      if (result.conflicts[0]) {
-        pushToast({
-          tone: "warn",
-          title: "Skill conflicts found",
-          body: result.conflicts[0].reason,
-        });
-      } else if (result.warnings[0]) {
+      if (!result.conflicts[0] && result.warnings[0]) {
         pushToast({
           tone: "warn",
           title: "Scan warnings",

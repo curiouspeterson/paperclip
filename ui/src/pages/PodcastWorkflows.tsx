@@ -15,21 +15,21 @@ import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 
-const ROMANCE_UNZIPPED_ROOT = "/Users/adampeterson/GitHub/RomanceUnzipped";
-const ROMANCE_UNZIPPED_BIN = `${ROMANCE_UNZIPPED_ROOT}/bin`;
-const ROMANCE_UNZIPPED_RUNTIME = `${ROMANCE_UNZIPPED_ROOT}/.runtime/ru-podcast`;
+const PAPERCLIP_REPO_ROOT = "/Users/adampeterson/GitHub/paperclip";
+const PAPERCLIP_BIN = `${PAPERCLIP_REPO_ROOT}/bin`;
+const PAPERCLIP_RUNTIME = `${PAPERCLIP_REPO_ROOT}/.runtime/ru-podcast`;
 
 function buildScriptRefs(): PodcastWorkflowScriptRefs {
   return {
-    initializeManifestPath: `${ROMANCE_UNZIPPED_BIN}/initialize_episode_manifest.py`,
-    runLatestYouTubePipelinePath: `${ROMANCE_UNZIPPED_BIN}/run_latest_youtube_pipeline.py`,
-    generateApprovalPacketPath: `${ROMANCE_UNZIPPED_BIN}/generate_approval_packet.py`,
-    generateSocialDraftsPath: `${ROMANCE_UNZIPPED_BIN}/generate_social_drafts.py`,
-    generateBoardReviewPath: `${ROMANCE_UNZIPPED_BIN}/generate_board_review.py`,
-    generateConnectorRunbooksPath: `${ROMANCE_UNZIPPED_BIN}/generate_connector_runbooks.py`,
-    syncBatchToPaperclipPath: `${ROMANCE_UNZIPPED_BIN}/sync_batch_to_paperclip.mjs`,
-    publishEpisodeToHomepagePath: `${ROMANCE_UNZIPPED_BIN}/publish_episode_to_homepage.py`,
-    updateStaticHomepagePath: `${ROMANCE_UNZIPPED_BIN}/update_static_homepage.py`,
+    initializeManifestPath: `${PAPERCLIP_BIN}/initialize_episode_manifest.py`,
+    runLatestYouTubePipelinePath: `${PAPERCLIP_BIN}/run_latest_youtube_pipeline.py`,
+    generateApprovalPacketPath: `${PAPERCLIP_BIN}/generate_approval_packet.py`,
+    generateSocialDraftsPath: `${PAPERCLIP_BIN}/generate_social_drafts.py`,
+    generateBoardReviewPath: `${PAPERCLIP_BIN}/generate_board_review.py`,
+    generateConnectorRunbooksPath: `${PAPERCLIP_BIN}/generate_connector_runbooks.py`,
+    syncBatchToPaperclipPath: `${PAPERCLIP_BIN}/sync_batch_to_paperclip.mjs`,
+    publishEpisodeToHomepagePath: `${PAPERCLIP_BIN}/publish_episode_to_homepage.py`,
+    updateStaticHomepagePath: `${PAPERCLIP_BIN}/update_static_homepage.py`,
   };
 }
 
@@ -77,7 +77,7 @@ function buildSeedWorkflow(type: PodcastWorkflowType): Record<string, unknown> {
     manifest: {
       episodeId: null,
       manifestPath: null,
-      runtimeRoot: ROMANCE_UNZIPPED_RUNTIME,
+      runtimeRoot: PAPERCLIP_RUNTIME,
       sourceMediaPath: null,
       publicUrl: null,
       channelUrl: "https://www.youtube.com/@RomanceUnzipped/videos",
@@ -85,8 +85,8 @@ function buildSeedWorkflow(type: PodcastWorkflowType): Record<string, unknown> {
     stageStatus: stageStatus[type],
     scriptRefs: buildScriptRefs(),
     metadata: {
-      repositoryPath: ROMANCE_UNZIPPED_ROOT,
-      binDirectoryPath: ROMANCE_UNZIPPED_BIN,
+      repositoryPath: PAPERCLIP_REPO_ROOT,
+      binDirectoryPath: PAPERCLIP_BIN,
       origin: "romanceunzipped-first-iteration",
     },
   };
@@ -229,7 +229,7 @@ export function PodcastWorkflows() {
             <h1 className="text-lg font-semibold">Podcast Ops</h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
               Paperclip-native podcast workflows derived from the Romance Unzipped manifest pipeline in
-              <span className="font-mono"> {ROMANCE_UNZIPPED_BIN}</span>.
+              <span className="font-mono"> {PAPERCLIP_BIN}</span>.
               Workflows store the manifest contract, stage status, and runtime script references so the control plane stays authoritative.
             </p>
           </div>

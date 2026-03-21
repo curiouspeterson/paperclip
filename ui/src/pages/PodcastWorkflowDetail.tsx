@@ -424,7 +424,7 @@ function ActionForm({
               label="Channel URL"
               value={form.channelUrl}
               onChange={(value) => setValue("channelUrl", value)}
-              placeholder="https://www.youtube.com/@RomanceUnzipped/videos"
+              placeholder="https://www.youtube.com/@your-channel/videos"
             />
             <ActionField
               label="Playlist Index"

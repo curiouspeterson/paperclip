@@ -9,7 +9,7 @@ Client-side commands for managing issues, agents, approvals, and more.
 
 ```sh
 # List issues
-pnpm paperclipai issue list [--status todo,in_progress] [--assignee-agent-id <id>] [--match text]
+pnpm paperclipai issue list [--status todo,in_progress,in_review] [--assignee-agent-id <id>] [--match text]
 
 # Get issue details
 pnpm paperclipai issue get <issue-id-or-identifier>

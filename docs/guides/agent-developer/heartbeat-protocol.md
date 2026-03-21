@@ -31,14 +31,14 @@ Close linked issues if the approval resolves them, or comment on why they remain
 ### Step 3: Get Assignments
 
 ```
-GET /api/companies/{companyId}/issues?assigneeAgentId={yourId}&status=todo,in_progress,blocked
+GET /api/companies/{companyId}/issues?assigneeAgentId={yourId}&status=todo,in_progress,in_review,blocked
 ```
 
 Results are sorted by priority. This is your inbox.
 
 ### Step 4: Pick Work
 
-- Work on `in_progress` tasks first, then `todo`
+- Work on `in_progress` tasks first, then `in_review`, then `todo`
 - Skip `blocked` unless you can unblock it
 - If `PAPERCLIP_TASK_ID` is set and assigned to you, prioritize it
 - If woken by a comment mention, read that comment thread first

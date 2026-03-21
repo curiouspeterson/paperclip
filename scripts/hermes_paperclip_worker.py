@@ -27,11 +27,10 @@ MAX_PLAN_CHARS = 1600
 MAX_COMMENT_CHARS = 800
 MAX_SUBTASKS = 10
 
-WORKER_SKILL_NAME = "paperclip-worker"
-WORKER_BASE_SKILLS = ["paperclip-worker", "paperclip"]
 REQUIRED_RESPONSE_KEYS = {"status", "comment_markdown", "plan_markdown", "change_summary"}
 BROWSER_AUTOMATION_PROVIDERS = {"playwright", "page_agent", "lightpanda"}
 SUBTASK_ALLOWED_STATUSES = {"backlog", "todo", "in_progress", "blocked"}
+CHECKOUT_EXPECTED_STATUSES = ["todo", "backlog", "blocked", "in_review"]
 SUBTASK_ALLOWED_PRIORITIES = {"critical", "high", "medium", "low"}
 
 
@@ -260,13 +259,6 @@ def browser_automation_summary(config: dict[str, Any] | None) -> str:
     return "\n".join(lines)
 
 
-def resolve_worker_skills(browser_automation: dict[str, Any] | None = None) -> str:
-    skills = list(WORKER_BASE_SKILLS)
-    if browser_automation:
-        skills.append("browser-runtime")
-    return ",".join(skills)
-
-
 def api_request(
     method: str,
     path: str,
@@ -307,7 +299,7 @@ def pick_issue(issues: list[dict[str, Any]]) -> dict[str, Any] | None:
         for issue in issues:
             if issue.get("id") == requested_issue_id:
                 return issue
-    priorities = {"in_progress": 0, "todo": 1, "backlog": 2, "blocked": 3}
+    priorities = {"in_progress": 0, "in_review": 1, "todo": 2, "backlog": 3, "blocked": 4}
     ordered = sorted(
         issues,
         key=lambda issue: (
@@ -463,7 +455,7 @@ def build_company_context(agent: dict[str, Any]) -> str:
     try:
         issues = api_request(
             "GET",
-            f"/companies/{company_id}/issues?status=todo,in_progress,blocked&limit=20",
+            f"/companies/{company_id}/issues?status=todo,in_progress,in_review,blocked&limit=20",
         )
         if isinstance(issues, list) and issues:
             lines = ["Open issues:"]
@@ -700,8 +692,7 @@ def run_hermes(prompt: str, skills_dir: str | None = None) -> dict[str, Any]:
     model = os.environ.get("HERMES_MODEL", "").strip()
     provider = os.environ.get("HERMES_PROVIDER", "").strip()
     browser_automation = resolve_browser_automation()
-    worker_skills = resolve_worker_skills(browser_automation)
-    cmd = [hermes_bin, "chat", "-Q", "--yolo", "--skills", worker_skills, "-q", prompt]
+    cmd = [hermes_bin, "chat", "-Q", "--yolo", "-q", prompt]
     if provider:
         cmd.extend(["--provider", provider])
     if model:
@@ -724,8 +715,7 @@ def run_hermes(prompt: str, skills_dir: str | None = None) -> dict[str, Any]:
     timeout_sec = int(os.environ.get("HERMES_TIMEOUT_SEC", "150"))
     debug(
         "Invoking Hermes "
-        f"(model={model or 'default'}, provider={provider or 'default'}, "
-        f"skills={worker_skills}, timeout={timeout_sec}s)"
+        f"(model={model or 'default'}, provider={provider or 'default'}, timeout={timeout_sec}s)"
     )
     proc = subprocess.Popen(
         cmd,
@@ -804,8 +794,12 @@ def estimate_token_usage(prompt_chars: int, response_chars: int) -> dict[str, in
 
 def normalize_status(value: Any) -> str:
     status = str(value or "").strip().lower()
+    # Hermes still reasons in "in_progress" terms, but Paperclip only accepts
+    # in_review for a checked-out issue that is still open after a heartbeat.
     if status not in {"in_progress", "blocked", "done"}:
-        return "in_progress"
+        return "in_review"
+    if status == "in_progress":
+        return "in_review"
     return status
 
 
@@ -829,7 +823,7 @@ def ensure_issue_checkout(issue: dict[str, Any], agent_id: str) -> bool:
         api_request(
             "POST",
             f"/issues/{issue['id']}/checkout",
-            payload={"agentId": agent_id, "expectedStatuses": ["todo", "backlog", "blocked", "in_progress"]},
+            payload={"agentId": agent_id, "expectedStatuses": CHECKOUT_EXPECTED_STATUSES},
             include_run_id=True,
         )
         return True
@@ -872,6 +866,7 @@ def normalize_subtask_payload(
     raw_subtask: Any,
     index: int,
     valid_agent_ids: set[str] | None = None,
+    allow_assignments: bool = True,
 ) -> dict[str, Any]:
     if not isinstance(raw_subtask, dict):
         raise WorkerError(f"Subtask #{index + 1} must be a JSON object")
@@ -904,19 +899,26 @@ def normalize_subtask_payload(
     if parent_issue.get("executionWorkspaceSettings"):
         payload["executionWorkspaceSettings"] = parent_issue.get("executionWorkspaceSettings")
 
-    assignee_agent_id = str(raw_subtask.get("assigneeAgentId") or "").strip()
-    if assignee_agent_id:
-        if valid_agent_ids is not None and assignee_agent_id not in valid_agent_ids:
-            debug(
-                f"Ignoring invalid assigneeAgentId {assignee_agent_id!r} for subtask {title!r}; "
-                "not found in company agent roster"
-            )
-        else:
-            payload["assigneeAgentId"] = assignee_agent_id
+    if allow_assignments:
+        assignee_agent_id = str(raw_subtask.get("assigneeAgentId") or "").strip()
+        if assignee_agent_id:
+            if valid_agent_ids is not None and assignee_agent_id not in valid_agent_ids:
+                debug(
+                    f"Ignoring invalid assigneeAgentId {assignee_agent_id!r} for subtask {title!r}; "
+                    "not found in company agent roster"
+                )
+            else:
+                payload["assigneeAgentId"] = assignee_agent_id
 
-    assignee_user_id = str(raw_subtask.get("assigneeUserId") or "").strip()
-    if assignee_user_id:
-        payload["assigneeUserId"] = assignee_user_id
+        assignee_user_id = str(raw_subtask.get("assigneeUserId") or "").strip()
+        if assignee_user_id:
+            payload["assigneeUserId"] = assignee_user_id
+    else:
+        if str(raw_subtask.get("assigneeAgentId") or "").strip() or str(raw_subtask.get("assigneeUserId") or "").strip():
+            debug(
+                f"Delegation requested for subtask {title!r}, but this agent lacks tasks:assign; "
+                "creating the subtask unassigned"
+            )
 
     for optional_key in ("assigneeAdapterOverrides", "labelIds"):
         if optional_key in raw_subtask and raw_subtask[optional_key] is not None:
@@ -925,7 +927,12 @@ def normalize_subtask_payload(
     return payload
 
 
-def create_subtasks(parent_issue: dict[str, Any], raw_subtasks: Any) -> list[dict[str, Any]]:
+def create_subtasks(
+    parent_issue: dict[str, Any],
+    raw_subtasks: Any,
+    *,
+    allow_assignments: bool = True,
+) -> list[dict[str, Any]]:
     if raw_subtasks in (None, "", []):
         return []
     if not isinstance(raw_subtasks, list):
@@ -954,10 +961,15 @@ def create_subtasks(parent_issue: dict[str, Any], raw_subtasks: Any) -> list[dic
             for agent in company_agents
             if isinstance(agent, dict) and str(agent.get("id") or "").strip()
         }
-
     created: list[dict[str, Any]] = []
     for index, raw_subtask in enumerate(raw_subtasks):
-        payload = normalize_subtask_payload(parent_issue, raw_subtask, index, valid_agent_ids=valid_agent_ids)
+        payload = normalize_subtask_payload(
+            parent_issue,
+            raw_subtask,
+            index,
+            valid_agent_ids=valid_agent_ids,
+            allow_assignments=allow_assignments,
+        )
         normalized_title = payload["title"].strip().casefold()
         existing = existing_by_title.get(normalized_title)
         if existing:
@@ -1011,7 +1023,7 @@ def fetch_active_issue(agent: dict[str, Any]) -> dict[str, Any] | None:
     query = urllib.parse.urlencode(
         {
             "assigneeAgentId": agent_id,
-            "status": "todo,in_progress,blocked,backlog",
+            "status": "todo,in_progress,in_review,blocked,backlog",
         }
     )
     issues = api_request("GET", f"/companies/{company_id}/issues?{query}")
@@ -1060,6 +1072,9 @@ def main() -> int:
         raise WorkerError("Unable to resolve current Paperclip agent")
 
     debug(f"Resolved agent {agent.get('name') or agent['id']}")
+    can_assign_tasks = bool(
+        isinstance(agent.get("access"), dict) and agent["access"].get("canAssignTasks")
+    )
     issue = fetch_active_issue(agent)
     if issue is None:
         debug("No assigned issue found")
@@ -1084,7 +1099,11 @@ def main() -> int:
     comment_markdown = str(hermes_output.get("comment_markdown") or "").strip()
     plan_markdown = str(hermes_output.get("plan_markdown") or "").strip()
     change_summary = str(hermes_output.get("change_summary") or "").strip()
-    created_subtasks = create_subtasks(issue, hermes_output.get("subtasks"))
+    created_subtasks = create_subtasks(
+        issue,
+        hermes_output.get("subtasks"),
+        allow_assignments=can_assign_tasks,
+    )
     if created_subtasks:
         comment_markdown = append_subtask_summary(comment_markdown, created_subtasks)
 

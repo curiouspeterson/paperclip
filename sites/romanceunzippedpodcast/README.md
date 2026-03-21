@@ -37,9 +37,9 @@ Keep the page simple: one HTML file, no framework runtime, no broken external de
 
 Completed YouTube-backed batch runs now update `homepage-data.json` automatically through:
 
-- `/Users/adampeterson/GitHub/RomanceUnzipped/bin/update_static_homepage.py`
-- `/Users/adampeterson/GitHub/RomanceUnzipped/bin/build_episode_batch.sh` when the batch source is a public YouTube URL
-- `/Users/adampeterson/GitHub/RomanceUnzipped/bin/run_latest_youtube_pipeline.py` when the latest channel upload is newly detected
+- `bin/update_static_homepage.py`
+- `bin/build_episode_batch.sh` when the batch source is a public YouTube URL
+- `bin/run_latest_youtube_pipeline.py` when the latest channel upload is newly detected
 
 The page reads that file at runtime to hydrate:
 
