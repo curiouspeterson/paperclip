@@ -858,15 +858,20 @@ export function issueService(db: Db) {
         assertTransition(existing.status, issueData.status);
       }
 
-      const patch: Partial<typeof issues.$inferInsert> = {
-        ...issueData,
-        updatedAt: new Date(),
-      };
-
       const nextAssigneeAgentId =
         issueData.assigneeAgentId !== undefined ? issueData.assigneeAgentId : existing.assigneeAgentId;
       const nextAssigneeUserId =
         issueData.assigneeUserId !== undefined ? issueData.assigneeUserId : existing.assigneeUserId;
+      const assigneeChanged =
+        (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
+        (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId);
+      const nextStatus = issueData.status ?? (existing.status === "in_progress" && assigneeChanged ? "todo" : undefined);
+
+      const patch: Partial<typeof issues.$inferInsert> = {
+        ...issueData,
+        ...(nextStatus !== undefined ? { status: nextStatus } : {}),
+        updatedAt: new Date(),
+      };
 
       if (nextAssigneeAgentId && nextAssigneeUserId) {
         throw unprocessable("Issue can only have one assignee");
@@ -903,25 +908,22 @@ export function issueService(db: Db) {
         }
       }
 
-      applyStatusSideEffects(issueData.status, patch);
-      if (issueData.status && issueData.status !== "done") {
+      applyStatusSideEffects(nextStatus, patch);
+      if (nextStatus && nextStatus !== "done") {
         patch.completedAt = null;
       }
-      if (issueData.status && issueData.status !== "cancelled") {
+      if (nextStatus && nextStatus !== "cancelled") {
         patch.cancelledAt = null;
       }
-      if (issueData.status && issueData.status !== "in_progress") {
+      if (nextStatus && nextStatus !== "in_progress") {
         patch.checkoutRunId = null;
         patch.executionRunId = null;
         patch.executionLockedAt = null;
         patch.executionAgentNameKey = null;
       }
-      if (
-        (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
-        (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId)
-      ) {
+      if (assigneeChanged) {
         patch.checkoutRunId = null;
-        if (issueData.status === undefined || issueData.status !== "in_progress") {
+        if (nextStatus === undefined || nextStatus !== "in_progress") {
           patch.executionRunId = null;
           patch.executionLockedAt = null;
           patch.executionAgentNameKey = null;

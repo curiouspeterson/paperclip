@@ -87,6 +87,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
   const env: Record<string, string> = { ...buildPaperclipEnv(agent) };
   env.PAPERCLIP_RUN_ID = runId;
+  env.PAPERCLIP_WORKSPACE_CWD = cwd;
   for (const [k, v] of Object.entries(envConfig)) {
     if (typeof v === "string") env[k] = v;
   }
@@ -147,6 +148,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     exitCode: proc.exitCode,
     signal: proc.signal,
     timedOut: false,
+    errorMessage: null,
     ...extracted,
     resultJson: {
       stdout: proc.stdout,

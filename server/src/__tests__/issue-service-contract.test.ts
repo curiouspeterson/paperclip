@@ -3,7 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   applyPendingMigrations,
@@ -253,6 +253,79 @@ describe("issue service contracts", () => {
     const foreignParentId = randomUUID();
     const childId = randomUUID();
 
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL session_replication_role = replica`);
+      await tx.insert(issues).values({
+        id: foreignParentId,
+        companyId: foreignCompanyId,
+        title: "Foreign parent",
+        status: "todo",
+        priority: "medium",
+      });
+      await tx.insert(issues).values({
+        id: childId,
+        companyId,
+        title: "Child",
+        status: "todo",
+        priority: "medium",
+        parentId: foreignParentId,
+      });
+    });
+
+    const ancestors = await issueService(db).getAncestors(companyId, childId);
+    expect(ancestors).toEqual([]);
+  });
+
+  it("demotes an active issue to todo when the assignee changes", async () => {
+    const companyId = await seedCompany("Alpha");
+    const currentAgentId = await seedAgent(companyId, "Current");
+    const nextAgentId = await seedAgent(companyId, "Next");
+    const runId = randomUUID();
+    const issueId = randomUUID();
+    const now = new Date("2026-03-20T12:00:00.000Z");
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId: currentAgentId,
+      invocationSource: "assignment",
+      status: "running",
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Reassign me",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: currentAgentId,
+      checkoutRunId: runId,
+      executionRunId: runId,
+      executionAgentNameKey: "agent",
+      executionLockedAt: now,
+    });
+
+    const updated = await issueService(db).update(issueId, {
+      assigneeAgentId: nextAgentId,
+      assigneeUserId: null,
+    } as any);
+
+    expect(updated?.status).toBe("todo");
+    expect(updated?.assigneeAgentId).toBe(nextAgentId);
+    expect(updated?.checkoutRunId).toBeNull();
+    expect(updated?.executionRunId).toBeNull();
+    expect(updated?.executionLockedAt).toBeNull();
+    expect(updated?.executionAgentNameKey).toBeNull();
+  });
+
+  it("rejects direct cross-company issue links at the database layer", async () => {
+    const companyId = await seedCompany("Alpha");
+    const foreignCompanyId = await seedCompany("Beta");
+    const foreignParentId = randomUUID();
+    const childId = randomUUID();
+
     await db.insert(issues).values({
       id: foreignParentId,
       companyId: foreignCompanyId,
@@ -260,16 +333,16 @@ describe("issue service contracts", () => {
       status: "todo",
       priority: "medium",
     });
-    await db.insert(issues).values({
-      id: childId,
-      companyId,
-      title: "Child",
-      status: "todo",
-      priority: "medium",
-      parentId: foreignParentId,
-    });
 
-    const ancestors = await issueService(db).getAncestors(companyId, childId);
-    expect(ancestors).toEqual([]);
+    await expect(
+      db.insert(issues).values({
+        id: childId,
+        companyId,
+        title: "Cross-company child",
+        status: "todo",
+        priority: "medium",
+        parentId: foreignParentId,
+      }),
+    ).rejects.toThrow();
   });
 });

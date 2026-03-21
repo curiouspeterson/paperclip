@@ -42,6 +42,19 @@ const mockGoalService = vi.hoisted(() => ({
   getDefaultCompanyGoal: vi.fn(),
 }));
 
+const mockDocumentService = vi.hoisted(() => ({
+  getIssueDocumentPayload: vi.fn(),
+  upsertIssueDocument: vi.fn(),
+}));
+
+const mockWorkProductService = vi.hoisted(() => ({
+  listForIssue: vi.fn(),
+  getById: vi.fn(),
+  createForIssue: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
+}));
+
 const mockExecutionWorkspaceService = vi.hoisted(() => ({
   getByIdForCompany: vi.fn(),
 }));
@@ -56,7 +69,7 @@ const RUN_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 vi.mock("../services/index.js", () => ({
   accessService: () => mockAccessService,
   agentService: () => mockAgentService,
-  documentService: () => ({ getIssueDocumentPayload: vi.fn(async () => ({})) }),
+  documentService: () => mockDocumentService,
   executionWorkspaceService: () => mockExecutionWorkspaceService,
   goalService: () => mockGoalService,
   heartbeatService: () => mockHeartbeatService,
@@ -65,7 +78,7 @@ vi.mock("../services/index.js", () => ({
   logActivity: mockLogActivity,
   projectService: () => mockProjectService,
   routineService: () => ({ syncRunStatusForIssue: vi.fn(async () => undefined) }),
-  workProductService: () => ({ listForIssue: vi.fn(async () => []) }),
+  workProductService: () => mockWorkProductService,
 }));
 
 function createApp(actor: Record<string, unknown>) {
@@ -107,6 +120,44 @@ describe("issue contract routes", () => {
     mockProjectService.getByIdForCompany.mockResolvedValue(null);
     mockGoalService.getByIdForCompany.mockResolvedValue(null);
     mockGoalService.getDefaultCompanyGoal.mockResolvedValue(null);
+    mockDocumentService.getIssueDocumentPayload.mockResolvedValue({});
+    mockDocumentService.upsertIssueDocument.mockResolvedValue({
+      created: true,
+      document: {
+        id: "doc-1",
+        issueId: "11111111-1111-4111-8111-111111111111",
+        key: "plan",
+        title: "Plan",
+        format: "markdown",
+        latestRevisionNumber: 1,
+      },
+    });
+    mockWorkProductService.listForIssue.mockResolvedValue([]);
+    mockWorkProductService.getById.mockResolvedValue(null);
+    mockWorkProductService.createForIssue.mockResolvedValue({
+      id: "wp-1",
+      companyId: COMPANY_ID,
+      issueId: "11111111-1111-4111-8111-111111111111",
+      projectId: null,
+      executionWorkspaceId: null,
+      runtimeServiceId: null,
+      type: "artifact",
+      provider: "local",
+      externalId: null,
+      title: "Artifact",
+      url: null,
+      status: "active",
+      reviewState: "none",
+      isPrimary: false,
+      healthStatus: "unknown",
+      summary: null,
+      metadata: null,
+      createdByRunId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockWorkProductService.update.mockResolvedValue(null);
+    mockWorkProductService.remove.mockResolvedValue(null);
     mockExecutionWorkspaceService.getByIdForCompany.mockResolvedValue(null);
   });
 
@@ -174,6 +225,52 @@ describe("issue contract routes", () => {
 
     expect(res.status).toBe(200);
     expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", { title: "Updated title" });
+  });
+
+  it("requires agent ownership for issue document updates", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "todo",
+      assigneeAgentId: AGENT_TWO_ID,
+    }));
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .put("/api/issues/11111111-1111-4111-8111-111111111111/documents/plan")
+      .send({ format: "markdown", body: "# Plan" });
+
+    expect(res.status).toBe(403);
+    expect(mockDocumentService.upsertIssueDocument).not.toHaveBeenCalled();
+  });
+
+  it("requires agent ownership for work product creation", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "todo",
+      assigneeAgentId: AGENT_TWO_ID,
+    }));
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post("/api/issues/11111111-1111-4111-8111-111111111111/work-products")
+      .send({
+        type: "artifact",
+        provider: "local",
+        title: "Artifact",
+      });
+
+    expect(res.status).toBe(403);
+    expect(mockWorkProductService.createForIssue).not.toHaveBeenCalled();
   });
 
   it("scopes issue detail hydration to the issue company", async () => {
@@ -244,13 +341,13 @@ describe("issue contract routes", () => {
       }),
     )
       .post("/api/issues/11111111-1111-4111-8111-111111111111/checkout")
-      .send({ agentId: AGENT_ONE_ID, expectedStatuses: ["todo", "backlog", "blocked"] });
+      .send({ agentId: AGENT_ONE_ID, expectedStatuses: ["todo", "backlog", "blocked", "in_review"] });
 
     expect(res.status).toBe(200);
     expect(mockIssueService.checkout).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
       AGENT_ONE_ID,
-      ["todo", "backlog", "blocked"],
+      ["todo", "backlog", "blocked", "in_review"],
       RUN_ID,
     );
   });

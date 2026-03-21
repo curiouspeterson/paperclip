@@ -486,6 +486,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    if (req.actor.type === "agent" && !(await assertAgentRunCheckoutOwnership(req, res, issue))) {
+      return;
+    }
     const keyParsed = issueDocumentKeySchema.safeParse(String(req.params.key ?? "").trim().toLowerCase());
     if (!keyParsed.success) {
       res.status(400).json({ error: "Invalid document key", details: keyParsed.error.issues });
@@ -593,6 +596,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    if (req.actor.type === "agent" && !(await assertAgentRunCheckoutOwnership(req, res, issue))) {
+      return;
+    }
     const product = await workProductsSvc.createForIssue(issue.id, issue.companyId, {
       ...req.body,
       projectId: req.body.projectId ?? issue.projectId ?? null,
@@ -623,7 +629,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
       res.status(404).json({ error: "Work product not found" });
       return;
     }
-    assertCompanyAccess(req, existing.companyId);
+    const issue = await svc.getById(existing.issueId);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (req.actor.type === "agent" && !(await assertAgentRunCheckoutOwnership(req, res, issue))) {
+      return;
+    }
     const product = await workProductsSvc.update(id, req.body);
     if (!product) {
       res.status(404).json({ error: "Work product not found" });
@@ -651,7 +665,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
       res.status(404).json({ error: "Work product not found" });
       return;
     }
-    assertCompanyAccess(req, existing.companyId);
+    const issue = await svc.getById(existing.issueId);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (req.actor.type === "agent" && !(await assertAgentRunCheckoutOwnership(req, res, issue))) {
+      return;
+    }
     const removed = await workProductsSvc.remove(id);
     if (!removed) {
       res.status(404).json({ error: "Work product not found" });
@@ -659,14 +681,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
     const actor = getActorInfo(req);
     await logActivity(db, {
-      companyId: existing.companyId,
+      companyId: issue.companyId,
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
       runId: actor.runId,
       action: "issue.work_product_deleted",
       entityType: "issue",
-      entityId: existing.issueId,
+      entityId: issue.id,
       details: { workProductId: removed.id, type: removed.type },
     });
     res.json(removed);

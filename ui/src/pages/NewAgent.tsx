@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "@/lib/router";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { agentsApi } from "../api/agents";
+import { secretsApi } from "../api/secrets";
 import { companySkillsApi } from "../api/companySkills";
 import { queryKeys } from "../lib/queryKeys";
 import { AGENT_ROLES } from "@paperclipai/shared";
@@ -27,17 +28,46 @@ import {
 } from "@paperclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
+import type { CompanySecret, EnvBinding } from "@paperclipai/shared";
 
 const SUPPORTED_ADVANCED_ADAPTER_TYPES = new Set<CreateConfigValues["adapterType"]>([
   "claude_local",
   "codex_local",
   "gemini_local",
+  "process",
   "hermes_local",
   "opencode_local",
   "pi_local",
   "cursor",
   "openclaw_gateway",
 ]);
+
+const HERMES_WORKER_SCRIPT = "/Users/adampeterson/GitHub/paperclip/scripts/hermes_paperclip_worker.py";
+const HERMES_PRESET_PROMPT_TEMPLATE =
+  "You are agent {{ agent.name }}. Your role is {{ agent.role }}.\n\nFollow the current task instructions. Keep outputs concise, concrete, and blocker-oriented.";
+const HERMES_PRESET_SECRET_BINDINGS: Record<string, string> = {
+  ZAI_API_KEY: "zai_api_key",
+  APPLEID_PASSWORD: "appleid-password",
+  APPLEID_USERNAME: "appleid-username",
+  OPENROUTER_API_KEY: "openrouter_api_key",
+  SITEGROUND_PASSWORD: "siteground-password",
+  SITEGROUND_USERNAME: "siteground-username",
+  SPOTIFY_RSS_FEED_URL: "spotify-rss-feed-url",
+};
+
+function buildHermesPresetEnvBindings(secrets: CompanySecret[]): Record<string, EnvBinding> {
+  const env: Record<string, EnvBinding> = {
+    HERMES_MODEL: { type: "plain", value: "glm-4.7" },
+    HERMES_PROVIDER: { type: "plain", value: "zai" },
+  };
+  const secretByName = new Map(secrets.map((secret) => [secret.name.toLowerCase(), secret]));
+  for (const [envKey, secretName] of Object.entries(HERMES_PRESET_SECRET_BINDINGS)) {
+    const secret = secretByName.get(secretName.toLowerCase());
+    if (!secret) continue;
+    env[envKey] = { type: "secret_ref", secretId: secret.id, version: "latest" };
+  }
+  return env;
+}
 
 function createValuesForAdapterType(
   adapterType: CreateConfigValues["adapterType"],
@@ -54,6 +84,9 @@ function createValuesForAdapterType(
     nextValues.model = DEFAULT_CURSOR_LOCAL_MODEL;
   } else if (adapterType === "hermes_local") {
     nextValues.model = "anthropic/claude-sonnet-4";
+    nextValues.command = "hermes";
+    nextValues.heartbeatEnabled = true;
+    nextValues.intervalSec = 300;
   } else if (adapterType === "opencode_local") {
     nextValues.model = "";
   }
@@ -67,9 +100,11 @@ export function NewAgent() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const presetAdapterType = searchParams.get("adapterType");
+  const presetTemplate = searchParams.get("preset");
 
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
+  const [capabilities, setCapabilities] = useState("");
   const [role, setRole] = useState("general");
   const [reportsTo, setReportsTo] = useState("");
   const [configValues, setConfigValues] = useState<CreateConfigValues>(defaultCreateValues);
@@ -77,11 +112,21 @@ export function NewAgent() {
   const [roleOpen, setRoleOpen] = useState(false);
   const [reportsToOpen, setReportsToOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const hermesPresetAppliedRef = useRef(false);
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
     queryFn: () => agentsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
+  });
+
+  const {
+    data: companySecrets,
+    isLoading: companySecretsLoading,
+  } = useQuery({
+    queryKey: queryKeys.secrets.list(selectedCompanyId ?? ""),
+    queryFn: () => secretsApi.list(selectedCompanyId!),
+    enabled: Boolean(selectedCompanyId),
   });
 
   const {
@@ -114,11 +159,46 @@ export function NewAgent() {
   }, [setBreadcrumbs]);
 
   useEffect(() => {
-    if (isFirstAgent) {
+    if (isFirstAgent && !presetTemplate) {
       if (!name) setName("CEO");
       if (!title) setTitle("CEO");
     }
-  }, [isFirstAgent]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isFirstAgent, presetTemplate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    hermesPresetAppliedRef.current = false;
+  }, [presetAdapterType, presetTemplate, selectedCompanyId]);
+
+  useEffect(() => {
+    const isHermesPreset =
+      presetAdapterType === "process" &&
+      (presetTemplate === "hermes_agent" || presetTemplate === "technical_vp");
+    if (!isHermesPreset || companySecretsLoading || hermesPresetAppliedRef.current) return;
+    hermesPresetAppliedRef.current = true;
+
+    setConfigValues({
+      ...createValuesForAdapterType("process"),
+      cwd: "",
+      command: "python3",
+      args: HERMES_WORKER_SCRIPT,
+      browserAutomationProvider: "",
+      browserAutomationCommand: "",
+      browserSessionProfile: "",
+      browserHeadless: false,
+      promptTemplate: HERMES_PRESET_PROMPT_TEMPLATE,
+      model: "",
+      thinkingEffort: "",
+      extraArgs: "",
+      envBindings: buildHermesPresetEnvBindings(companySecrets ?? []),
+      heartbeatEnabled: true,
+      intervalSec: 300,
+    });
+  }, [
+    companySecrets,
+    companySecretsLoading,
+    presetAdapterType,
+    presetTemplate,
+  ]);
 
   useEffect(() => {
     const requested = presetAdapterType;
@@ -185,6 +265,7 @@ export function NewAgent() {
       name: name.trim(),
       role: effectiveRole,
       ...(title.trim() ? { title: title.trim() } : {}),
+      ...(capabilities.trim() ? { capabilities: capabilities.trim() } : {}),
       ...(reportsTo ? { reportsTo } : {}),
       ...(selectedSkillKeys.length > 0 ? { desiredSkills: selectedSkillKeys } : {}),
       adapterType: configValues.adapterType,
@@ -242,6 +323,16 @@ export function NewAgent() {
             placeholder="Title (e.g. VP of Engineering)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+
+        {/* Capabilities */}
+        <div className="px-4 pb-2">
+          <textarea
+            className="min-h-20 w-full resize-y rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/40"
+            placeholder="Capabilities"
+            value={capabilities}
+            onChange={(e) => setCapabilities(e.target.value)}
           />
         </div>
 

@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import {
+  ISSUE_CHECKOUT_EXPECTED_STATUSES,
   addIssueCommentSchema,
   checkoutIssueSchema,
   createIssueSchema,
@@ -246,7 +247,7 @@ export function registerIssueCommands(program: Command): void {
       .option(
         "--expected-statuses <csv>",
         "Expected current statuses",
-        "todo,backlog,blocked",
+        ISSUE_CHECKOUT_EXPECTED_STATUSES.join(","),
       )
       .action(async (issueId: string, opts: IssueCheckoutOptions) => {
         try {

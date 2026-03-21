@@ -1,6 +1,7 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MailchimpMarketingOverview } from "@paperclipai/shared";
+import { useNavigate } from "@/lib/router";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToast } from "../context/ToastContext";
@@ -10,7 +11,7 @@ import { assetsApi } from "../api/assets";
 import { mailchimpApi } from "../api/mailchimp";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { Settings, Check, Download, Upload } from "lucide-react";
+import { Settings, Check, Download, Upload, Bot, ArrowRight } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
 import {
   Field,
@@ -34,6 +35,7 @@ export function CompanySettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   // General settings local state
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
@@ -685,28 +687,58 @@ export function CompanySettings() {
         </div>
       </div>
 
-      {/* Invites */}
+      {/* Agent onboarding */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Invites
+          Agent onboarding
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground">
-              Generate an OpenClaw agent invite snippet.
+              OpenClaw uses an invite prompt. Hermes is configured locally from the agent editor.
             </span>
-            <HintIcon text="Creates a short-lived OpenClaw agent invite and renders a copy-ready prompt." />
+            <HintIcon text="OpenClaw gets a copy-ready onboarding prompt. Hermes opens the local agent setup flow." />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => inviteMutation.mutate()}
-              disabled={inviteMutation.isPending}
-            >
-              {inviteMutation.isPending
-                ? "Generating..."
-                : "Generate OpenClaw Invite Prompt"}
-            </Button>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Settings className="h-4 w-4 text-muted-foreground" />
+                OpenClaw Gateway
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Generate a copy-ready invite prompt for a remote OpenClaw agent.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => inviteMutation.mutate()}
+                  disabled={inviteMutation.isPending}
+                >
+                  {inviteMutation.isPending
+                    ? "Generating..."
+                    : "Generate Invite Prompt"}
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Bot className="h-4 w-4 text-muted-foreground" />
+                Hermes Agent
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Open the local Hermes setup flow with adapter defaults prefilled.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate("/agents/new?adapterType=process&preset=hermes_agent")}
+                >
+                  Create Hermes Agent
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
           </div>
           {inviteError && (
             <p className="text-sm text-destructive">{inviteError}</p>

@@ -10,6 +10,7 @@ import type {
   IssueWorkProduct,
   UpsertIssueDocument,
 } from "@paperclipai/shared";
+import { ISSUE_CHECKOUT_EXPECTED_STATUSES } from "@paperclipai/shared";
 import { api } from "./client";
 
 export const issuesApi = {
@@ -57,7 +58,7 @@ export const issuesApi = {
   checkout: (id: string, agentId: string) =>
     api.post<Issue>(`/issues/${id}/checkout`, {
       agentId,
-      expectedStatuses: ["todo", "backlog", "blocked"],
+      expectedStatuses: [...ISSUE_CHECKOUT_EXPECTED_STATUSES],
     }),
   release: (id: string) => api.post<Issue>(`/issues/${id}/release`, {}),
   listComments: (id: string) => api.get<IssueComment[]>(`/issues/${id}/comments`),
