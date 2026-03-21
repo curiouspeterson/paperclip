@@ -26,6 +26,15 @@ export function CodexLocalConfigFields({
 }: AdapterConfigFieldsProps) {
   const bypassEnabled =
     config.dangerouslyBypassApprovalsAndSandbox === true || config.dangerouslyBypassSandbox === true;
+  const externalSkillDirsValue = isCreate
+    ? values!.externalSkillDirs ?? ""
+    : (() => {
+        const value = eff("adapterConfig", "externalSkillDirs", config.externalSkillDirs);
+        if (Array.isArray(value)) {
+          return value.filter((item): item is string => typeof item === "string").join("\n");
+        }
+        return typeof value === "string" ? value : "";
+      })();
 
   return (
     <>
@@ -52,6 +61,52 @@ export function CodexLocalConfigFields({
           />
           <ChoosePathButton />
         </div>
+      </Field>
+      <Field
+        label="External skill directories"
+        hint="Optional newline-separated directories containing extra skills, such as a checked-out Superpowers pack. Each directory can be a single skill or a folder of skill subdirectories."
+      >
+        <textarea
+          className={`${inputClass} min-h-24`}
+          value={externalSkillDirsValue}
+          onChange={(e) =>
+            isCreate
+              ? set!({ externalSkillDirs: e.target.value })
+              : mark(
+                  "adapterConfig",
+                  "externalSkillDirs",
+                  e.target.value
+                    .split(/\r?\n/)
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                )
+          }
+          placeholder={"/absolute/path/to/superpowers/skills\n/absolute/path/to/another-pack"}
+        />
+      </Field>
+      <Field
+        label="Context prep command"
+        hint="Optional shell command run in the agent workspace before each run. Its stdout is appended to the prompt, which makes it a good fit for context-hub style repo summaries."
+      >
+        <DraftInput
+          value={
+            isCreate
+              ? values!.contextPrepCommand ?? ""
+              : eff(
+                  "adapterConfig",
+                  "contextPrepCommand",
+                  String(config.contextPrepCommand ?? ""),
+                )
+          }
+          onCommit={(v) =>
+            isCreate
+              ? set!({ contextPrepCommand: v })
+              : mark("adapterConfig", "contextPrepCommand", v || undefined)
+          }
+          immediate
+          className={inputClass}
+          placeholder="context-hub build --stdout"
+        />
       </Field>
       <ToggleField
         label="Bypass sandbox"

@@ -3,6 +3,7 @@ import multer from "multer";
 import type { Db } from "@paperclipai/db";
 import {
   addIssueCommentSchema,
+  type AddIssueCommentResult,
   createIssueAttachmentMetadataSchema,
   createIssueWorkProductSchema,
   createIssueLabelSchema,
@@ -34,8 +35,20 @@ import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import { isAllowedContentType, MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
+import { detectInlineSecretFields, redactSecretSnippet } from "../redaction.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
+
+function buildIssueCommentWarnings(body: string): AddIssueCommentResult["warnings"] {
+  const fields = detectInlineSecretFields(body);
+  if (fields.length === 0) return [];
+  return [{
+    code: "inline_secret_detected",
+    fields,
+    message:
+      "This comment looks like it contains inline credentials. Issue comments do not become agent runtime environment variables. Store the value in Company Settings -> Secrets, then bind it into the agent adapter environment.",
+  }];
+}
 
 export function issueRoutes(db: Db, storage: StorageService) {
   const router = Router();
@@ -895,6 +908,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
         userId: actor.actorType === "user" ? actor.actorId : undefined,
       });
 
+      const commentWarnings = buildIssueCommentWarnings(commentBody);
+
       await logActivity(db, {
         companyId: issue.companyId,
         actorType: actor.actorType,
@@ -906,9 +921,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
         entityId: issue.id,
         details: {
           commentId: comment.id,
-          bodySnippet: comment.body.slice(0, 120),
+          bodySnippet: redactSecretSnippet(comment.body),
           identifier: issue.identifier,
           issueTitle: issue.title,
+          ...(commentWarnings.length > 0 ? { warnings: commentWarnings.map((warning) => warning.code) } : {}),
           ...(hasFieldChanges ? { updated: true } : {}),
         },
       });
@@ -1282,6 +1298,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       agentId: actor.agentId ?? undefined,
       userId: actor.actorType === "user" ? actor.actorId : undefined,
     });
+    const warnings = buildIssueCommentWarnings(req.body.body);
 
     if (actor.runId) {
       await heartbeat.reportRunActivity(actor.runId).catch((err) =>
@@ -1299,9 +1316,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
       entityId: currentIssue.id,
       details: {
         commentId: comment.id,
-        bodySnippet: comment.body.slice(0, 120),
+        bodySnippet: redactSecretSnippet(comment.body),
         identifier: currentIssue.identifier,
         issueTitle: currentIssue.title,
+        ...(warnings.length > 0 ? { warnings: warnings.map((warning) => warning.code) } : {}),
         ...(reopened ? { reopened: true, reopenedFrom: reopenFromStatus, source: "comment" } : {}),
         ...(interruptedRunId ? { interruptedRunId } : {}),
       },
@@ -1399,7 +1417,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
     })();
 
-    res.status(201).json(comment);
+    const response: AddIssueCommentResult = { comment, warnings };
+    res.status(201).json(response);
   });
 
   router.get("/issues/:id/attachments", async (req, res) => {

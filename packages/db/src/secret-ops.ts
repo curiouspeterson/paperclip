@@ -72,7 +72,7 @@ export interface SecretOps {
 // local_encrypted provider (self-contained, no server imports)
 // ---------------------------------------------------------------------------
 
-interface LocalEncryptedMaterial {
+interface LocalEncryptedMaterial extends Record<string, unknown> {
   scheme: "local_encrypted_v1";
   iv: string;
   tag: string;

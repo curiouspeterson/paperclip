@@ -91,6 +91,21 @@ export function secretService(db: Db) {
     });
   }
 
+  async function resolveSecretValueByName(
+    companyId: string,
+    name: string,
+    version: number | "latest" = "latest",
+  ): Promise<{ secretId: string; secretName: string; value: string } | null> {
+    const secret = await getByName(companyId, name);
+    if (!secret) return null;
+    const value = await resolveSecretValue(companyId, secret.id, version);
+    return {
+      secretId: secret.id,
+      secretName: secret.name,
+      value,
+    };
+  }
+
   async function normalizeEnvConfig(
     companyId: string,
     envValue: unknown,
@@ -159,6 +174,7 @@ export function secretService(db: Db) {
 
     getById,
     getByName,
+    resolveSecretValueByName,
 
     create: async (
       companyId: string,

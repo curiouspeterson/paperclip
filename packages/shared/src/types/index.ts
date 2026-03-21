@@ -1,4 +1,12 @@
 export type { Company } from "./company.js";
+export type {
+  MailchimpAudienceSummary,
+  MailchimpCampaignSummary,
+  MailchimpMarketingOverview,
+  MailchimpMarketingValidationResult,
+  CreateMailchimpCampaignResult,
+  SendMailchimpCampaignResult,
+} from "./integration.js";
 export type { InstanceExperimentalSettings, InstanceSettings } from "./instance.js";
 export type {
   Agent,
@@ -17,6 +25,12 @@ export type {
 } from "./adapter-environment.js";
 export type { AssetImage } from "./asset.js";
 export type { Project, ProjectCodebase, ProjectCodebaseOrigin, ProjectGoalRef, ProjectWorkspace } from "./project.js";
+export type {
+  PodcastWorkflow,
+  PodcastWorkflowManifest,
+  PodcastWorkflowScriptRefs,
+  PodcastWorkflowStageState,
+} from "./podcast-workflow.js";
 export type {
   ExecutionWorkspace,
   WorkspaceRuntimeService,
@@ -44,7 +58,11 @@ export type {
 export type {
   Issue,
   IssueAssigneeAdapterOverrides,
+  IssueBlockerDetails,
+  IssueBlockerType,
   IssueComment,
+  IssueCommentWarning,
+  AddIssueCommentResult,
   IssueDocument,
   IssueDocumentSummary,
   DocumentRevision,
@@ -57,7 +75,12 @@ export type {
   IssueLabel,
 } from "./issue.js";
 export type { Goal } from "./goal.js";
-export type { Approval, ApprovalComment } from "./approval.js";
+export type {
+  Approval,
+  ApprovalComment,
+  BrowserSessionHandoffApprovalPayload,
+  SecretProvisioningRequiredApprovalPayload,
+} from "./approval.js";
 export type {
   BudgetPolicy,
   BudgetPolicySummary,

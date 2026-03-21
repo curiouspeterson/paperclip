@@ -1671,13 +1671,15 @@ export function heartbeatService(db: Db) {
       }
 
       const shouldRetry = tracksLocalChild && !!run.processPid && (run.processLossRetryCount ?? 0) < 1;
+      const restartDetected = !run.processPid;
+      const errorCode = restartDetected ? "server_restarted" : "process_lost";
       const baseMessage = run.processPid
         ? `Process lost -- child pid ${run.processPid} is no longer running`
-        : "Process lost -- server may have restarted";
+        : "Server restarted during run; resume is available from the original task context";
 
       let finalizedRun = await setRunStatus(run.id, "failed", {
         error: shouldRetry ? `${baseMessage}; retrying once` : baseMessage,
-        errorCode: "process_lost",
+        errorCode,
         finishedAt: now,
       });
       await setWakeupStatus(run.wakeupRequestId, "failed", {

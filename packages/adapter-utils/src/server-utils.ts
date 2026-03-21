@@ -44,6 +44,15 @@ export interface PaperclipSkillEntry {
   source: string;
 }
 
+async function hasSkillManifest(candidate: string): Promise<boolean> {
+  try {
+    const stats = await fs.stat(path.join(candidate, "SKILL.md"));
+    return stats.isFile();
+  } catch {
+    return false;
+  }
+}
+
 function normalizePathSlashes(value: string): string {
   return value.replaceAll("\\", "/");
 }
@@ -314,6 +323,41 @@ export async function listPaperclipSkillEntries(
   }
 }
 
+export async function listSkillEntriesFromDirectories(
+  dirs: string[],
+): Promise<PaperclipSkillEntry[]> {
+  const entries: PaperclipSkillEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const rawDir of dirs) {
+    const candidate = rawDir.trim();
+    if (!candidate) continue;
+
+    if (await hasSkillManifest(candidate)) {
+      const name = path.basename(candidate);
+      const key = `${name}:${candidate}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        entries.push({ name, source: candidate });
+      }
+      continue;
+    }
+
+    const childEntries = await fs.readdir(candidate, { withFileTypes: true }).catch(() => []);
+    for (const child of childEntries) {
+      if (!child.isDirectory()) continue;
+      const source = path.join(candidate, child.name);
+      if (!(await hasSkillManifest(source))) continue;
+      const key = `${child.name}:${source}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({ name: child.name, source });
+    }
+  }
+
+  return entries;
+}
+
 export async function readPaperclipSkillMarkdown(
   moduleDir: string,
   skillName: string,
@@ -402,6 +446,46 @@ export async function removeMaintainerOnlySkillSymlinks(
   } catch {
     return [];
   }
+}
+
+export async function runContextPrepCommand(input: {
+  runId: string;
+  commandLine: string;
+  cwd: string;
+  env: Record<string, string>;
+  onLog: (stream: "stdout" | "stderr", chunk: string) => Promise<void>;
+  timeoutSec?: number;
+}): Promise<string> {
+  const commandLine = input.commandLine.trim();
+  if (!commandLine) return "";
+
+  const shell = process.env.SHELL?.trim() || "/bin/sh";
+  await input.onLog("stdout", `[paperclip] Running context prep command: ${commandLine}\n`);
+
+  const proc = await runChildProcess(`${input.runId}:context-prep`, shell, ["-lc", commandLine], {
+    cwd: input.cwd,
+    env: input.env,
+    timeoutSec: input.timeoutSec ?? 60,
+    graceSec: 5,
+    onLog: (stream, chunk) => input.onLog(stream, `[paperclip][context-prep] ${chunk}`),
+  });
+
+  if (proc.timedOut) {
+    await input.onLog(
+      "stderr",
+      "[paperclip] Context prep command timed out; continuing without injected context.\n",
+    );
+    return "";
+  }
+  if ((proc.exitCode ?? 0) !== 0) {
+    await input.onLog(
+      "stderr",
+      `[paperclip] Context prep command exited with code ${proc.exitCode ?? "unknown"}; continuing without injected context.\n`,
+    );
+    return "";
+  }
+
+  return proc.stdout.trim();
 }
 
 export async function ensureCommandResolvable(command: string, cwd: string, env: NodeJS.ProcessEnv) {

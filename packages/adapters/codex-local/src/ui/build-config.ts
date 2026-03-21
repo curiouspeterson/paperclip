@@ -11,6 +11,13 @@ function parseCommaArgs(value: string): string[] {
     .filter(Boolean);
 }
 
+function parseLineArgs(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function parseEnvVars(text: string): Record<string, string> {
   const env: Record<string, string> = {};
   for (const line of text.split(/\r?\n/)) {
@@ -70,6 +77,8 @@ export function buildCodexLocalConfig(v: CreateConfigValues): Record<string, unk
   const ac: Record<string, unknown> = {};
   if (v.cwd) ac.cwd = v.cwd;
   if (v.instructionsFilePath) ac.instructionsFilePath = v.instructionsFilePath;
+  if (v.externalSkillDirs) ac.externalSkillDirs = parseLineArgs(v.externalSkillDirs);
+  if (v.contextPrepCommand) ac.contextPrepCommand = v.contextPrepCommand;
   if (v.promptTemplate) ac.promptTemplate = v.promptTemplate;
   if (v.bootstrapPrompt) ac.bootstrapPromptTemplate = v.bootstrapPrompt;
   ac.model = v.model || DEFAULT_CODEX_LOCAL_MODEL;

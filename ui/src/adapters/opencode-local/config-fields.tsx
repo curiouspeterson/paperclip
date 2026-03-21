@@ -18,30 +18,88 @@ export function OpenCodeLocalConfigFields({
   eff,
   mark,
 }: AdapterConfigFieldsProps) {
+  const externalSkillDirsValue = isCreate
+    ? values!.externalSkillDirs ?? ""
+    : (() => {
+        const value = eff("adapterConfig", "externalSkillDirs", config.externalSkillDirs);
+        if (Array.isArray(value)) {
+          return value.filter((item): item is string => typeof item === "string").join("\n");
+        }
+        return typeof value === "string" ? value : "";
+      })();
+
   return (
-    <Field label="Agent instructions file" hint={instructionsFileHint}>
-      <div className="flex items-center gap-2">
+    <>
+      <Field label="Agent instructions file" hint={instructionsFileHint}>
+        <div className="flex items-center gap-2">
+          <DraftInput
+            value={
+              isCreate
+                ? values!.instructionsFilePath ?? ""
+                : eff(
+                    "adapterConfig",
+                    "instructionsFilePath",
+                    String(config.instructionsFilePath ?? ""),
+                  )
+            }
+            onCommit={(v) =>
+              isCreate
+                ? set!({ instructionsFilePath: v })
+                : mark("adapterConfig", "instructionsFilePath", v || undefined)
+            }
+            immediate
+            className={inputClass}
+            placeholder="/absolute/path/to/AGENTS.md"
+          />
+          <ChoosePathButton />
+        </div>
+      </Field>
+      <Field
+        label="External skill directories"
+        hint="Optional newline-separated directories containing extra skill packs. This is the seam for Superpowers-style local skills."
+      >
+        <textarea
+          className={`${inputClass} min-h-24`}
+          value={externalSkillDirsValue}
+          onChange={(e) =>
+            isCreate
+              ? set!({ externalSkillDirs: e.target.value })
+              : mark(
+                  "adapterConfig",
+                  "externalSkillDirs",
+                  e.target.value
+                    .split(/\r?\n/)
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                )
+          }
+          placeholder={"/absolute/path/to/superpowers/skills\n/absolute/path/to/another-pack"}
+        />
+      </Field>
+      <Field
+        label="Context prep command"
+        hint="Optional shell command run before each OpenCode run. Its stdout is appended to the prompt for context-hub style repo summaries."
+      >
         <DraftInput
           value={
             isCreate
-              ? values!.instructionsFilePath ?? ""
+              ? values!.contextPrepCommand ?? ""
               : eff(
                   "adapterConfig",
-                  "instructionsFilePath",
-                  String(config.instructionsFilePath ?? ""),
+                  "contextPrepCommand",
+                  String(config.contextPrepCommand ?? ""),
                 )
           }
           onCommit={(v) =>
             isCreate
-              ? set!({ instructionsFilePath: v })
-              : mark("adapterConfig", "instructionsFilePath", v || undefined)
+              ? set!({ contextPrepCommand: v })
+              : mark("adapterConfig", "contextPrepCommand", v || undefined)
           }
           immediate
           className={inputClass}
-          placeholder="/absolute/path/to/AGENTS.md"
+          placeholder="context-hub build --stdout"
         />
-        <ChoosePathButton />
-      </div>
-    </Field>
+      </Field>
+    </>
   );
 }

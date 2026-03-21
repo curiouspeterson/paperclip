@@ -94,6 +94,29 @@ export interface LegacyPlanDocument {
   source: "issue_description";
 }
 
+export type IssueBlockerType =
+  | "missing_secret"
+  | "browser_login_required"
+  | "external_access"
+  | "operator_action"
+  | "unsupported_automation"
+  | "unknown";
+
+export interface IssueBlockerDetails {
+  blockerType: IssueBlockerType;
+  summary: string;
+  detail?: string | null;
+  requiredAction?: string | null;
+  secretNames?: string[] | null;
+  service?: string | null;
+  loginUrl?: string | null;
+  browserProfileName?: string | null;
+  browserProfilePath?: string | null;
+  approvalType?: "browser_session_handoff" | "secret_provisioning_required" | null;
+  detectedFromRunId?: string | null;
+  resolvedAt?: Date | null;
+}
+
 export interface Issue {
   id: string;
   companyId: string;
@@ -122,6 +145,7 @@ export interface Issue {
   executionWorkspaceId: string | null;
   executionWorkspacePreference: string | null;
   executionWorkspaceSettings: IssueExecutionWorkspaceSettings | null;
+  blockerDetails?: IssueBlockerDetails | null;
   startedAt: Date | null;
   completedAt: Date | null;
   cancelledAt: Date | null;
@@ -152,6 +176,19 @@ export interface IssueComment {
   body: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface IssueCommentInlineSecretWarning {
+  code: "inline_secret_detected";
+  fields: string[];
+  message: string;
+}
+
+export type IssueCommentWarning = IssueCommentInlineSecretWarning;
+
+export interface AddIssueCommentResult {
+  comment: IssueComment;
+  warnings: IssueCommentWarning[];
 }
 
 export interface IssueAttachment {

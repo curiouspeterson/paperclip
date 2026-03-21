@@ -59,6 +59,32 @@ For local adapters, set:
 - `timeoutSec` (max runtime per heartbeat)
 - `graceSec` (time before force-kill after timeout/cancel)
 - optional env vars and extra CLI args
+- optional `externalSkillDirs` for additional local skill packs
+- optional `contextPrepCommand` to build repo/task context before the run and append stdout to the prompt
+- for `process`, optional browser automation settings:
+  - `browserAutomationProvider`
+  - `browserAutomationCommand`
+  - `browserSessionProfile`
+  - `browserHeadless`
+
+`externalSkillDirs` is the intended seam for third-party local skill packs such as Superpowers.
+
+`contextPrepCommand` is the intended seam for repo summarizers such as context-hub. It runs in the configured working directory before the adapter starts, and its stdout is appended to the prompt as prepared context.
+
+For `process` workers, browser automation selection is passed through a stable env contract:
+
+- `PAPERCLIP_BROWSER_AUTOMATION_PROVIDER`
+- `PAPERCLIP_BROWSER_AUTOMATION_COMMAND`
+- `PAPERCLIP_BROWSER_SESSION_PROFILE`
+- `PAPERCLIP_BROWSER_HEADLESS`
+
+Current provider identifiers are:
+
+- `playwright`
+- `page_agent`
+- `lightpanda`
+
+Paperclip does not implement those runtimes itself in the process adapter. The worker command remains responsible for consuming these env vars and invoking the selected browser layer.
 
 ## 3.4 Prompt templates
 
@@ -129,6 +155,61 @@ If the connection drops, the UI reconnects automatically.
 2. Conservative prompt
 3. Monitor errors + cancel quickly when needed
 4. Reset sessions when drift appears
+
+## 7.4 Manual Browser Session Handoff
+
+Use a `browser_session_handoff` approval when an agent needs a human to complete an interactive login in a real browser profile.
+
+Contract:
+
+- The agent creates an approval with:
+  - `type: "browser_session_handoff"`
+  - payload:
+    - `service: string`
+    - `loginUrl: string`
+    - `browserProfileName?: string | null`
+    - `browserProfilePath?: string | null`
+    - `completionNote?: string | null`
+    - `agentInstruction?: string | null`
+- The approval should be linked to the current issue when the handoff is task-specific.
+- Board approval means the operator has completed the login in the named local browser/profile and the agent may resume using that already-authenticated local session.
+- After approval, Paperclip wakes the requesting agent with `approval_approved`; the agent must fetch the approval payload and continue from the local browser state rather than retrying credential-based web login.
+
+This flow is the supported fallback for sites that reject automated sign-in, including consumer Google login flows.
+
+## 7.5 Secret Provisioning Handoff
+
+Use a `secret_provisioning_required` approval when an agent is blocked on missing company secrets or missing adapter env bindings.
+
+Contract:
+
+- The agent creates an approval with:
+  - `type: "secret_provisioning_required"`
+  - payload:
+    - `service?: string | null`
+    - `secretNames: string[]`
+    - `completionNote?: string | null`
+    - `agentInstruction?: string | null`
+- The approval should be linked to the current issue when the missing secret blocks a specific task.
+- Board approval means the operator has created the named company secret(s) and bound them into the relevant agent adapter environment.
+- After approval, Paperclip wakes the requesting agent with `approval_approved`; the agent must reload its runtime configuration and continue without asking for the same secret again.
+
+Issue comments are not a secret transport. Inline `KEY=value` comments must not be treated as runtime env.
+
+## 7.6 Blocked Issue Contract
+
+Blocked issues should carry structured `blockerDetails`, not just `status: "blocked"`.
+
+Recommended fields:
+
+- `blockerType`
+- `summary`
+- `detail`
+- `requiredAction`
+- `approvalType` when Paperclip can unblock through an approval
+- integration-specific hints such as `service`, `secretNames`, `loginUrl`, or browser profile fields
+
+This lets the UI surface the correct unblock action instead of leaving operators to infer the next step from logs alone.
 
 ## 8. Troubleshooting
 

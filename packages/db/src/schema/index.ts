@@ -22,6 +22,7 @@ export { workspaceOperations } from "./workspace_operations.js";
 export { workspaceRuntimeServices } from "./workspace_runtime_services.js";
 export { projectGoals } from "./project_goals.js";
 export { goals } from "./goals.js";
+export { podcastWorkflows } from "./podcast_workflows.js";
 export { issues } from "./issues.js";
 export { issueWorkProducts } from "./issue_work_products.js";
 export { labels } from "./labels.js";

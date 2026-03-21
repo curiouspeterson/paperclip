@@ -2,6 +2,7 @@
 // This file is kept as a convenience shim so existing in-tree
 // imports (process/, http/, heartbeat.ts) don't need rewriting.
 import { logger } from "../middleware/logger.js";
+export { buildBrowserAutomationEnv } from "@paperclipai/adapter-utils";
 export {
   type RunProcessResult,
   runningProcesses,

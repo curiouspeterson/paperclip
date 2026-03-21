@@ -137,6 +137,22 @@ export const PROJECT_STATUSES = [
 ] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
+export const PODCAST_WORKFLOW_TYPES = [
+  "recording_session",
+  "episode",
+  "guest_booking",
+] as const;
+export type PodcastWorkflowType = (typeof PODCAST_WORKFLOW_TYPES)[number];
+
+export const PODCAST_WORKFLOW_STATUSES = [
+  "planned",
+  "active",
+  "blocked",
+  "done",
+  "cancelled",
+] as const;
+export type PodcastWorkflowStatus = (typeof PODCAST_WORKFLOW_STATUSES)[number];
+
 export const PAUSE_REASONS = ["manual", "budget", "system"] as const;
 export type PauseReason = (typeof PAUSE_REASONS)[number];
 
@@ -153,7 +169,13 @@ export const PROJECT_COLORS = [
   "#3b82f6", // blue
 ] as const;
 
-export const APPROVAL_TYPES = ["hire_agent", "approve_ceo_strategy", "budget_override_required"] as const;
+export const APPROVAL_TYPES = [
+  "hire_agent",
+  "approve_ceo_strategy",
+  "budget_override_required",
+  "browser_session_handoff",
+  "secret_provisioning_required",
+] as const;
 export type ApprovalType = (typeof APPROVAL_TYPES)[number];
 
 export const APPROVAL_STATUSES = [

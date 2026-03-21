@@ -14,5 +14,15 @@ export function buildProcessConfig(v: CreateConfigValues): Record<string, unknow
   ac.graceSec = 15;
   if (v.command) ac.command = v.command;
   if (v.args) ac.args = parseCommaArgs(v.args);
+  if (v.browserAutomationProvider) {
+    ac.browserAutomationProvider = v.browserAutomationProvider;
+  }
+  if (v.browserAutomationCommand) {
+    ac.browserAutomationCommand = v.browserAutomationCommand;
+  }
+  if (v.browserSessionProfile) {
+    ac.browserSessionProfile = v.browserSessionProfile;
+  }
+  if (v.browserHeadless) ac.browserHeadless = true;
   return ac;
 }

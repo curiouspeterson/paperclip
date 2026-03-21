@@ -1,6 +1,8 @@
 const SECRET_PAYLOAD_KEY_RE =
   /(api[-_]?key|access[-_]?token|auth(?:_?token)?|authorization|bearer|secret|passwd|password|credential|jwt|private[-_]?key|cookie|connectionstring)/i;
 const JWT_VALUE_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/;
+const INLINE_SECRET_ASSIGNMENT_RE =
+  /(?:^|\s|\|)([A-Z][A-Z0-9_]{2,})\s*[:=]\s*("[^"\n]+"|'[^'\n]+'|[^\s|`]+)/g;
 export const REDACTED_EVENT_VALUE = "***REDACTED***";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -56,4 +58,21 @@ export function redactEventPayload(payload: Record<string, unknown> | null): Rec
   if (!payload) return null;
   if (!isPlainObject(payload)) return payload;
   return sanitizeRecord(payload);
+}
+
+export function detectInlineSecretFields(text: string): string[] {
+  const fields = new Set<string>();
+  for (const match of text.matchAll(INLINE_SECRET_ASSIGNMENT_RE)) {
+    const field = match[1]?.trim();
+    if (field && SECRET_PAYLOAD_KEY_RE.test(field)) {
+      fields.add(field);
+    }
+  }
+  return [...fields].sort((left, right) => left.localeCompare(right));
+}
+
+export function redactSecretSnippet(text: string, maxLength = 120): string {
+  const fields = detectInlineSecretFields(text);
+  if (fields.length === 0) return text.slice(0, maxLength);
+  return `${REDACTED_EVENT_VALUE} inline secret field${fields.length === 1 ? "" : "s"}: ${fields.join(", ")}`;
 }

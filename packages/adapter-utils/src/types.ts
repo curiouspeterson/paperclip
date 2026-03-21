@@ -322,6 +322,18 @@ export interface CLIAdapterModule {
   formatStdoutEvent: (line: string, debug: boolean) => void;
 }
 
+export type BrowserAutomationProvider =
+  | "playwright"
+  | "page_agent"
+  | "lightpanda";
+
+export interface BrowserAutomationConfig {
+  provider?: BrowserAutomationProvider;
+  command?: string;
+  sessionProfile?: string;
+  headless?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // UI config form values (moved from ui/src/components/AgentConfigForm.tsx)
 // ---------------------------------------------------------------------------
@@ -330,6 +342,12 @@ export interface CreateConfigValues {
   adapterType: string;
   cwd: string;
   instructionsFilePath?: string;
+  externalSkillDirs?: string;
+  contextPrepCommand?: string;
+  browserAutomationProvider?: BrowserAutomationProvider | "";
+  browserAutomationCommand?: string;
+  browserSessionProfile?: string;
+  browserHeadless?: boolean;
   promptTemplate: string;
   model: string;
   thinkingEffort: string;

@@ -1,5 +1,21 @@
 import type { ApprovalStatus, ApprovalType } from "../constants.js";
 
+export interface BrowserSessionHandoffApprovalPayload {
+  service: string;
+  loginUrl: string;
+  browserProfileName?: string | null;
+  browserProfilePath?: string | null;
+  completionNote?: string | null;
+  agentInstruction?: string | null;
+}
+
+export interface SecretProvisioningRequiredApprovalPayload {
+  service?: string | null;
+  secretNames: string[];
+  completionNote?: string | null;
+  agentInstruction?: string | null;
+}
+
 export interface Approval {
   id: string;
   companyId: string;

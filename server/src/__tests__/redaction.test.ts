@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { REDACTED_EVENT_VALUE, redactEventPayload, sanitizeRecord } from "../redaction.js";
+import {
+  REDACTED_EVENT_VALUE,
+  detectInlineSecretFields,
+  redactEventPayload,
+  redactSecretSnippet,
+  sanitizeRecord,
+} from "../redaction.js";
 
 describe("redaction", () => {
   it("redacts sensitive keys and nested secret values", () => {
@@ -62,5 +68,20 @@ describe("redaction", () => {
       password: REDACTED_EVENT_VALUE,
       safe: "value",
     });
+  });
+
+  it("detects secret-like env assignments in freeform text", () => {
+    const result = detectInlineSecretFields(`
+MAILCHIMP_API_KEY=mc-123
+PAPERCLIP_API_URL=http://localhost:3100
+password = hunter2
+`);
+
+    expect(result).toEqual(["MAILCHIMP_API_KEY"]);
+  });
+
+  it("redacts logged comment snippets when inline secrets are present", () => {
+    expect(redactSecretSnippet("MAILCHIMP_API_KEY=mc-123")).toContain(REDACTED_EVENT_VALUE);
+    expect(redactSecretSnippet("MAILCHIMP_API_KEY=mc-123")).toContain("MAILCHIMP_API_KEY");
   });
 });

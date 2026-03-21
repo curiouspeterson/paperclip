@@ -5,6 +5,7 @@ import {
   asStringArray,
   parseObject,
   buildPaperclipEnv,
+  buildBrowserAutomationEnv,
   redactEnvForLogs,
   runChildProcess,
 } from "../utils.js";
@@ -92,6 +93,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
+  Object.assign(env, buildBrowserAutomationEnv(parseObject(config)));
 
   const timeoutSec = asNumber(config.timeoutSec, 0);
   const graceSec = asNumber(config.graceSec, 15);

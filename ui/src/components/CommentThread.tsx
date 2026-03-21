@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import type { IssueComment, Agent } from "@paperclipai/shared";
+import type { IssueComment, Agent, IssueCommentWarning } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
 import { Check, Copy, Paperclip } from "lucide-react";
 import { Identity } from "./Identity";
@@ -50,10 +50,15 @@ interface CommentThreadProps {
   suggestedAssigneeValue?: string;
   mentions?: MentionOption[];
   liveAgentIds?: Set<string>;
+  submissionWarnings?: IssueCommentWarning[];
 }
 
 const CLOSED_STATUSES = new Set(["done", "cancelled"]);
 const DRAFT_DEBOUNCE_MS = 800;
+const INLINE_SECRET_ASSIGNMENT_RE =
+  /(?:^|\s|\|)([A-Z][A-Z0-9_]{2,})\s*[:=]\s*("[^"\n]+"|'[^'\n]+'|[^\s|`]+)/g;
+const SECRET_FIELD_RE =
+  /(api[-_]?key|access[-_]?token|auth(?:_?token)?|authorization|bearer|secret|passwd|password|credential|jwt|private[-_]?key|cookie|connectionstring)/i;
 
 function loadDraft(draftKey: string): string {
   try {
@@ -96,6 +101,17 @@ function parseReassignment(target: string): CommentReassignment | null {
     return assigneeUserId ? { assigneeAgentId: null, assigneeUserId } : null;
   }
   return null;
+}
+
+function detectInlineSecretFields(text: string): string[] {
+  const fields = new Set<string>();
+  for (const match of text.matchAll(INLINE_SECRET_ASSIGNMENT_RE)) {
+    const field = match[1]?.trim();
+    if (field && SECRET_FIELD_RE.test(field)) {
+      fields.add(field);
+    }
+  }
+  return [...fields].sort((left, right) => left.localeCompare(right));
 }
 
 function CopyMarkdownButton({ text }: { text: string }) {
@@ -289,6 +305,7 @@ export function CommentThread({
   suggestedAssigneeValue,
   mentions: providedMentions,
   liveAgentIds,
+  submissionWarnings = [],
 }: CommentThreadProps) {
   const [body, setBody] = useState("");
   const [reopen, setReopen] = useState(true);
@@ -409,6 +426,12 @@ export function CommentThread({
   }
 
   const canSubmit = !submitting && !!body.trim();
+  const draftSecretFields = useMemo(() => detectInlineSecretFields(body), [body]);
+  const warningMessage =
+    submissionWarnings[0]?.message ??
+    (draftSecretFields.length > 0
+      ? "This comment looks like it contains inline credentials. Issue comments do not become agent runtime environment variables. Store the value in Company Settings -> Secrets, then bind it into the agent adapter environment."
+      : null);
 
   return (
     <div className="space-y-4">
@@ -426,6 +449,11 @@ export function CommentThread({
       {liveRunSlot}
 
       <div className="space-y-2">
+        {warningMessage ? (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+            {warningMessage}
+          </div>
+        ) : null}
         <MarkdownEditor
           ref={editorRef}
           value={body}

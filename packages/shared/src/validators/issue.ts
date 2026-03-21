@@ -27,6 +27,30 @@ export const issueAssigneeAdapterOverridesSchema = z
   })
   .strict();
 
+export const issueBlockerDetailsSchema = z
+  .object({
+    blockerType: z.enum([
+      "missing_secret",
+      "browser_login_required",
+      "external_access",
+      "operator_action",
+      "unsupported_automation",
+      "unknown",
+    ]),
+    summary: z.string().trim().min(1).max(500),
+    detail: z.string().trim().max(5000).optional().nullable(),
+    requiredAction: z.string().trim().max(1000).optional().nullable(),
+    secretNames: z.array(z.string().trim().min(1).max(200)).optional().nullable(),
+    service: z.string().trim().max(200).optional().nullable(),
+    loginUrl: z.string().trim().url().max(2000).optional().nullable(),
+    browserProfileName: z.string().trim().max(200).optional().nullable(),
+    browserProfilePath: z.string().trim().max(1000).optional().nullable(),
+    approvalType: z.enum(["browser_session_handoff", "secret_provisioning_required"]).optional().nullable(),
+    detectedFromRunId: z.string().uuid().optional().nullable(),
+    resolvedAt: z.string().datetime().optional().nullable(),
+  })
+  .strict();
+
 export const createIssueSchema = z.object({
   projectId: z.string().uuid().optional().nullable(),
   projectWorkspaceId: z.string().uuid().optional().nullable(),
@@ -51,6 +75,7 @@ export const createIssueSchema = z.object({
     "agent_default",
   ]).optional().nullable(),
   executionWorkspaceSettings: issueExecutionWorkspaceSettingsSchema.optional().nullable(),
+  blockerDetails: issueBlockerDetailsSchema.optional().nullable(),
   labelIds: z.array(z.string().uuid()).optional(),
 });
 

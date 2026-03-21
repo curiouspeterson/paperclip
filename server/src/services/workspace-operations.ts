@@ -223,6 +223,17 @@ export function workspaceOperationService(db: Db) {
       return rows.map(toWorkspaceOperation);
     },
 
+    listForWorkflow: async (companyId: string, workflowId: string) => {
+      const rows = await db
+        .select()
+        .from(workspaceOperations)
+        .where(eq(workspaceOperations.companyId, companyId))
+        .orderBy(desc(workspaceOperations.startedAt), desc(workspaceOperations.createdAt));
+      return rows
+        .map(toWorkspaceOperation)
+        .filter((row) => row.metadata?.workflowId === workflowId);
+    },
+
     readLog: async (operationId: string, opts?: { offset?: number; limitBytes?: number }) => {
       const operation = await getById(operationId);
       if (!operation) throw notFound("Workspace operation not found");

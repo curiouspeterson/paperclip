@@ -7,6 +7,7 @@ import { heartbeatsApi } from "../api/heartbeats";
 import { agentsApi } from "../api/agents";
 import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
+import { approvalsApi } from "../api/approvals";
 import { useCompany } from "../context/CompanyContext";
 import { usePanel } from "../context/PanelContext";
 import { useToast } from "../context/ToastContext";
@@ -33,9 +34,19 @@ import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Activity as ActivityIcon,
   Check,
@@ -44,14 +55,21 @@ import {
   Copy,
   EyeOff,
   Hexagon,
+  KeyRound,
   ListTree,
   MessageSquare,
+  MonitorSmartphone,
   MoreHorizontal,
   Paperclip,
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import type { ActivityEvent } from "@paperclipai/shared";
+import type {
+  ActivityEvent,
+  AddIssueCommentResult,
+  IssueBlockerDetails,
+  IssueCommentWarning,
+} from "@paperclipai/shared";
 import type { Agent, IssueAttachment } from "@paperclipai/shared";
 
 type CommentReassignment = {
@@ -205,6 +223,27 @@ export function IssueDetail() {
   const [copied, setCopied] = useState(false);
   const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
   const [detailTab, setDetailTab] = useState("comments");
+  const [commentWarnings, setCommentWarnings] = useState<IssueCommentWarning[]>([]);
+  const [browserHandoffOpen, setBrowserHandoffOpen] = useState(false);
+  const [browserHandoffService, setBrowserHandoffService] = useState("Gmail");
+  const [browserHandoffUrl, setBrowserHandoffUrl] = useState("https://accounts.google.com/");
+  const [browserHandoffProfileName, setBrowserHandoffProfileName] = useState("Default");
+  const [browserHandoffProfilePath, setBrowserHandoffProfilePath] = useState("");
+  const [browserHandoffCompletionNote, setBrowserHandoffCompletionNote] = useState(
+    "Log in in the real browser profile, leave the session open, then approve this handoff so the agent can resume.",
+  );
+  const [browserHandoffAgentInstruction, setBrowserHandoffAgentInstruction] = useState(
+    "Reuse the existing local browser session after approval. Do not retry credential-based web login.",
+  );
+  const [secretProvisionOpen, setSecretProvisionOpen] = useState(false);
+  const [secretProvisionService, setSecretProvisionService] = useState("");
+  const [secretProvisionNames, setSecretProvisionNames] = useState("");
+  const [secretProvisionCompletionNote, setSecretProvisionCompletionNote] = useState(
+    "Create the missing company secret(s), bind them into the assigned agent adapter environment, then approve this request.",
+  );
+  const [secretProvisionAgentInstruction, setSecretProvisionAgentInstruction] = useState(
+    "After approval, reload agent configuration and continue with the provisioned secret bindings.",
+  );
   const [secondaryOpen, setSecondaryOpen] = useState({
     approvals: false,
   });
@@ -499,7 +538,20 @@ export function IssueDetail() {
   const addComment = useMutation({
     mutationFn: ({ body, reopen }: { body: string; reopen?: boolean }) =>
       issuesApi.addComment(issueId!, body, reopen),
-    onSuccess: () => {
+    onSuccess: (result: AddIssueCommentResult) => {
+      setCommentWarnings(result.warnings ?? []);
+      if ((result.warnings?.length ?? 0) > 0) {
+        pushToast({
+          tone: "warn",
+          title: "Inline credential detected in comment",
+          body: result.warnings[0]?.message,
+          dedupeKey: `issue-comment-warning:${issueId}:${result.warnings.map((warning) => warning.code).join(",")}`,
+          action: {
+            label: "Open settings",
+            href: "/company/settings",
+          },
+        });
+      }
       invalidateIssue();
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId!) });
     },
@@ -524,6 +576,85 @@ export function IssueDetail() {
     onSuccess: () => {
       invalidateIssue();
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(issueId!) });
+    },
+  });
+
+  const createBrowserHandoffApproval = useMutation({
+    mutationFn: async () => {
+      const companyId = issue?.companyId ?? selectedCompanyId;
+      if (!companyId || !issueId) throw new Error("Missing company or issue context");
+      return approvalsApi.create(companyId, {
+        type: "browser_session_handoff",
+        issueIds: [issueId],
+        payload: {
+          service: browserHandoffService.trim(),
+          loginUrl: browserHandoffUrl.trim(),
+          browserProfileName: browserHandoffProfileName.trim() || null,
+          browserProfilePath: browserHandoffProfilePath.trim() || null,
+          completionNote: browserHandoffCompletionNote.trim() || null,
+          agentInstruction: browserHandoffAgentInstruction.trim() || null,
+        },
+      });
+    },
+    onSuccess: () => {
+      setBrowserHandoffOpen(false);
+      invalidateIssue();
+      if (issue?.companyId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.approvals.list(issue.companyId) });
+      }
+      pushToast({
+        tone: "success",
+        title: "Browser handoff requested",
+        body: "Approval created and linked to this issue.",
+      });
+    },
+    onError: (err) => {
+      pushToast({
+        tone: "error",
+        title: "Failed to create browser handoff",
+        body: err instanceof Error ? err.message : "Approval creation failed",
+      });
+    },
+  });
+
+  const createSecretProvisionApproval = useMutation({
+    mutationFn: async () => {
+      const companyId = issue?.companyId ?? selectedCompanyId;
+      if (!companyId || !issueId) throw new Error("Missing company or issue context");
+      const secretNames = secretProvisionNames
+        .split(/[,\n]/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (secretNames.length === 0) throw new Error("At least one secret name is required");
+      return approvalsApi.create(companyId, {
+        type: "secret_provisioning_required",
+        issueIds: [issueId],
+        payload: {
+          service: secretProvisionService.trim() || null,
+          secretNames,
+          completionNote: secretProvisionCompletionNote.trim() || null,
+          agentInstruction: secretProvisionAgentInstruction.trim() || null,
+        },
+      });
+    },
+    onSuccess: () => {
+      setSecretProvisionOpen(false);
+      invalidateIssue();
+      if (issue?.companyId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.approvals.list(issue.companyId) });
+      }
+      pushToast({
+        tone: "success",
+        title: "Secret provisioning requested",
+        body: "Approval created and linked to this issue.",
+      });
+    },
+    onError: (err) => {
+      pushToast({
+        tone: "error",
+        title: "Failed to create secret request",
+        body: err instanceof Error ? err.message : "Approval creation failed",
+      });
     },
   });
 
@@ -689,6 +820,25 @@ export function IssueDetail() {
     </>
   );
 
+  const blockerDetails = (issue.blockerDetails ?? null) as IssueBlockerDetails | null;
+  const blockerSecretNames = blockerDetails?.secretNames ?? [];
+
+  const openBrowserHandoffForBlocker = () => {
+    if (blockerDetails?.service) setBrowserHandoffService(blockerDetails.service);
+    if (blockerDetails?.loginUrl) setBrowserHandoffUrl(blockerDetails.loginUrl);
+    if (blockerDetails?.browserProfileName) setBrowserHandoffProfileName(blockerDetails.browserProfileName);
+    if (blockerDetails?.browserProfilePath) setBrowserHandoffProfilePath(blockerDetails.browserProfilePath);
+    if (blockerDetails?.requiredAction) setBrowserHandoffCompletionNote(blockerDetails.requiredAction);
+    setBrowserHandoffOpen(true);
+  };
+
+  const openSecretProvisionForBlocker = () => {
+    if (blockerDetails?.service) setSecretProvisionService(blockerDetails.service);
+    if (blockerSecretNames.length > 0) setSecretProvisionNames(blockerSecretNames.join(", "));
+    if (blockerDetails?.requiredAction) setSecretProvisionCompletionNote(blockerDetails.requiredAction);
+    setSecretProvisionOpen(true);
+  };
+
   return (
     <div className="max-w-2xl space-y-6">
       {/* Parent chain breadcrumb */}
@@ -716,6 +866,60 @@ export function IssueDetail() {
         <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           <EyeOff className="h-4 w-4 shrink-0" />
           This issue is hidden
+        </div>
+      )}
+
+      {issue.status === "blocked" && blockerDetails && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+                Blocked: {blockerDetails.summary}
+              </div>
+              {blockerDetails.detail ? (
+                <div className="text-sm text-amber-900/90 dark:text-amber-100/90 whitespace-pre-wrap">
+                  {blockerDetails.detail}
+                </div>
+              ) : null}
+            </div>
+            <StatusBadge status="blocked" />
+          </div>
+          {blockerDetails.requiredAction ? (
+            <div className="text-xs text-amber-900/80 dark:text-amber-100/80">
+              Next action: {blockerDetails.requiredAction}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {(blockerDetails.approvalType === "browser_session_handoff" || blockerDetails.blockerType === "browser_login_required") && (
+              <Button size="sm" variant="outline" onClick={openBrowserHandoffForBlocker}>
+                <MonitorSmartphone className="h-4 w-4" />
+                Request Browser Handoff
+              </Button>
+            )}
+            {(blockerDetails.approvalType === "secret_provisioning_required" || blockerDetails.blockerType === "missing_secret") && (
+              <>
+                <Button size="sm" variant="outline" onClick={openSecretProvisionForBlocker}>
+                  <KeyRound className="h-4 w-4" />
+                  Request Secret Provisioning
+                </Button>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link to="/company/settings">Open Company Settings</Link>
+                </Button>
+              </>
+            )}
+          </div>
+          {blockerSecretNames.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {blockerSecretNames.map((secretName) => (
+                <span
+                  key={secretName}
+                  className="rounded-md border border-amber-500/30 bg-background/70 px-2 py-0.5 text-[11px] font-mono text-amber-950 dark:text-amber-100"
+                >
+                  {secretName}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -1024,11 +1228,14 @@ export function IssueDetail() {
             currentAssigneeValue={actualAssigneeValue}
             suggestedAssigneeValue={suggestedAssigneeValue}
             mentions={mentionOptions}
+            submissionWarnings={commentWarnings}
             onAdd={async (body, reopen, reassignment) => {
               if (reassignment) {
+                setCommentWarnings([]);
                 await addCommentAndReassign.mutateAsync({ body, reopen, reassignment });
                 return;
               }
+              setCommentWarnings([]);
               await addComment.mutateAsync({ body, reopen });
             }}
             imageUploadHandler={async (file) => {
@@ -1131,42 +1338,178 @@ export function IssueDetail() {
         )}
       </Tabs>
 
-      {linkedApprovals && linkedApprovals.length > 0 && (
-        <Collapsible
-          open={secondaryOpen.approvals}
-          onOpenChange={(open) => setSecondaryOpen((prev) => ({ ...prev, approvals: open }))}
-          className="rounded-lg border border-border"
-        >
-          <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2 text-left">
-            <span className="text-sm font-medium text-muted-foreground">
-              Linked Approvals ({linkedApprovals.length})
-            </span>
-            <ChevronDown
-              className={cn("h-4 w-4 text-muted-foreground transition-transform", secondaryOpen.approvals && "rotate-180")}
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="border-t border-border divide-y divide-border">
-              {linkedApprovals.map((approval) => (
-                <Link
-                  key={approval.id}
-                  to={`/approvals/${approval.id}`}
-                  className="flex items-center justify-between px-3 py-2 text-xs hover:bg-accent/20 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={approval.status} />
-                    <span className="font-medium">
-                      {approval.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                    </span>
-                    <span className="font-mono text-muted-foreground">{approval.id.slice(0, 8)}</span>
-                  </div>
-                  <span className="text-muted-foreground">{relativeTime(approval.createdAt)}</span>
-                </Link>
-              ))}
+      <Collapsible
+        open={secondaryOpen.approvals}
+        onOpenChange={(open) => setSecondaryOpen((prev) => ({ ...prev, approvals: open }))}
+        className="rounded-lg border border-border"
+      >
+        <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2 text-left">
+          <span className="text-sm font-medium text-muted-foreground">
+            Linked Approvals ({linkedApprovals?.length ?? 0})
+          </span>
+          <ChevronDown
+            className={cn("h-4 w-4 text-muted-foreground transition-transform", secondaryOpen.approvals && "rotate-180")}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t border-border">
+            <div className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="text-xs text-muted-foreground">
+                Use browser handoff when an agent needs a human to log in in a real browser profile and then resume.
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="shrink-0" onClick={() => setSecretProvisionOpen(true)}>
+                  <KeyRound className="h-4 w-4" />
+                  Request Secret Provisioning
+                </Button>
+                <Button size="sm" variant="outline" className="shrink-0" onClick={() => setBrowserHandoffOpen(true)}>
+                  <MonitorSmartphone className="h-4 w-4" />
+                  Request Browser Handoff
+                </Button>
+              </div>
             </div>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+            {linkedApprovals && linkedApprovals.length > 0 ? (
+              <div className="divide-y divide-border">
+                {linkedApprovals.map((approval) => (
+                  <Link
+                    key={approval.id}
+                    to={`/approvals/${approval.id}`}
+                    className="flex items-center justify-between px-3 py-2 text-xs hover:bg-accent/20 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={approval.status} />
+                      <span className="font-medium">
+                        {approval.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </span>
+                      <span className="font-mono text-muted-foreground">{approval.id.slice(0, 8)}</span>
+                    </div>
+                    <span className="text-muted-foreground">{relativeTime(approval.createdAt)}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="px-3 py-3 text-xs text-muted-foreground">No linked approvals yet.</div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      <Dialog open={browserHandoffOpen} onOpenChange={setBrowserHandoffOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Browser Handoff</DialogTitle>
+            <DialogDescription>
+              Create an approval that asks a human to complete login in a real browser profile, then wakes the agent to continue.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Service</label>
+              <Input value={browserHandoffService} onChange={(e) => setBrowserHandoffService(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Login URL</label>
+              <Input value={browserHandoffUrl} onChange={(e) => setBrowserHandoffUrl(e.target.value)} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Browser Profile Name</label>
+                <Input
+                  value={browserHandoffProfileName}
+                  onChange={(e) => setBrowserHandoffProfileName(e.target.value)}
+                  placeholder="Default"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Profile Path</label>
+                <Input
+                  value={browserHandoffProfilePath}
+                  onChange={(e) => setBrowserHandoffProfilePath(e.target.value)}
+                  placeholder="Optional local path"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Operator Completion Note</label>
+              <Textarea
+                rows={3}
+                value={browserHandoffCompletionNote}
+                onChange={(e) => setBrowserHandoffCompletionNote(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Agent Instruction After Approval</label>
+              <Textarea
+                rows={3}
+                value={browserHandoffAgentInstruction}
+                onChange={(e) => setBrowserHandoffAgentInstruction(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter showCloseButton>
+            <Button
+              onClick={() => createBrowserHandoffApproval.mutate()}
+              disabled={
+                createBrowserHandoffApproval.isPending ||
+                !browserHandoffService.trim() ||
+                !browserHandoffUrl.trim()
+              }
+            >
+              {createBrowserHandoffApproval.isPending ? "Creating..." : "Create Handoff Approval"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={secretProvisionOpen} onOpenChange={setSecretProvisionOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Secret Provisioning</DialogTitle>
+            <DialogDescription>
+              Create an approval that asks an operator to provision missing company secrets and bind them into the assigned agent environment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Service</label>
+              <Input value={secretProvisionService} onChange={(e) => setSecretProvisionService(e.target.value)} placeholder="Mailchimp" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Secret Names</label>
+              <Textarea
+                rows={3}
+                value={secretProvisionNames}
+                onChange={(e) => setSecretProvisionNames(e.target.value)}
+                placeholder="MAILCHIMP_API_KEY"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Operator Completion Note</label>
+              <Textarea
+                rows={3}
+                value={secretProvisionCompletionNote}
+                onChange={(e) => setSecretProvisionCompletionNote(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Agent Instruction After Approval</label>
+              <Textarea
+                rows={3}
+                value={secretProvisionAgentInstruction}
+                onChange={(e) => setSecretProvisionAgentInstruction(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter showCloseButton>
+            <Button
+              onClick={() => createSecretProvisionApproval.mutate()}
+              disabled={createSecretProvisionApproval.isPending || !secretProvisionNames.trim()}
+            >
+              {createSecretProvisionApproval.isPending ? "Creating..." : "Create Secret Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
 
       {/* Mobile properties drawer */}

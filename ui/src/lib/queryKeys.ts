@@ -49,6 +49,11 @@ export const queryKeys = {
     list: (companyId: string) => ["goals", companyId] as const,
     detail: (id: string) => ["goals", "detail", id] as const,
   },
+  podcastWorkflows: {
+    list: (companyId: string) => ["podcast-workflows", companyId] as const,
+    detail: (id: string) => ["podcast-workflows", "detail", id] as const,
+    operations: (id: string) => ["podcast-workflows", "operations", id] as const,
+  },
   budgets: {
     overview: (companyId: string) => ["budgets", "overview", companyId] as const,
   },
@@ -75,6 +80,9 @@ export const queryKeys = {
   secrets: {
     list: (companyId: string) => ["secrets", companyId] as const,
     providers: (companyId: string) => ["secret-providers", companyId] as const,
+  },
+  mailchimp: {
+    overview: (companyId: string) => ["mailchimp", companyId, "overview"] as const,
   },
   dashboard: (companyId: string) => ["dashboard", companyId] as const,
   sidebarBadges: (companyId: string) => ["sidebar-badges", companyId] as const,

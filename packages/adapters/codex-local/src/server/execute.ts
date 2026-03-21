@@ -14,10 +14,12 @@ import {
   ensureCommandResolvable,
   ensurePaperclipSkillSymlink,
   ensurePathInEnv,
+  listSkillEntriesFromDirectories,
   listPaperclipSkillEntries,
   removeMaintainerOnlySkillSymlinks,
   renderTemplate,
   joinPromptSections,
+  runContextPrepCommand,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
@@ -98,6 +100,7 @@ async function isLikelyPaperclipRuntimeSkillSource(candidate: string, skillName:
 type EnsureCodexSkillsInjectedOptions = {
   skillsHome?: string;
   skillsEntries?: Awaited<ReturnType<typeof listPaperclipSkillEntries>>;
+  additionalSkillDirs?: string[];
   linkSkill?: (source: string, target: string) => Promise<void>;
 };
 
@@ -105,7 +108,17 @@ export async function ensureCodexSkillsInjected(
   onLog: AdapterExecutionContext["onLog"],
   options: EnsureCodexSkillsInjectedOptions = {},
 ) {
-  const skillsEntries = options.skillsEntries ?? await listPaperclipSkillEntries(__moduleDir);
+  const baseEntries = options.skillsEntries ?? await listPaperclipSkillEntries(__moduleDir);
+  const extraEntries = options.additionalSkillDirs?.length
+    ? await listSkillEntriesFromDirectories(options.additionalSkillDirs)
+    : [];
+  const skillsEntries = [...baseEntries];
+  const seen = new Set(skillsEntries.map((entry) => entry.name));
+  for (const entry of extraEntries) {
+    if (seen.has(entry.name)) continue;
+    seen.add(entry.name);
+    skillsEntries.push(entry);
+  }
   if (skillsEntries.length === 0) return;
 
   const skillsHome = options.skillsHome ?? path.join(resolveCodexHomeDir(process.env), "skills");
@@ -220,13 +233,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     typeof envConfig.CODEX_HOME === "string" && envConfig.CODEX_HOME.trim().length > 0
       ? path.resolve(envConfig.CODEX_HOME.trim())
       : null;
+  const externalSkillDirs = asStringArray(config.externalSkillDirs).map((entry) => path.resolve(cwd, entry));
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
   const preparedWorktreeCodexHome =
     configuredCodexHome ? null : await prepareWorktreeCodexHome(process.env, onLog);
   const effectiveCodexHome = configuredCodexHome ?? preparedWorktreeCodexHome;
   await ensureCodexSkillsInjected(
     onLog,
-    effectiveCodexHome ? { skillsHome: path.join(effectiveCodexHome, "skills") } : {},
+    effectiveCodexHome
+      ? { skillsHome: path.join(effectiveCodexHome, "skills"), additionalSkillDirs: externalSkillDirs }
+      : { additionalSkillDirs: externalSkillDirs },
   );
   const hasExplicitApiKey =
     typeof envConfig.PAPERCLIP_API_KEY === "string" && envConfig.PAPERCLIP_API_KEY.trim().length > 0;
@@ -327,7 +343,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     ),
   );
   const billingType = resolveCodexBillingType(effectiveEnv);
-  const runtimeEnv = ensurePathInEnv(effectiveEnv);
+  const runtimeEnv = Object.fromEntries(
+    Object.entries(ensurePathInEnv(effectiveEnv)).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
   await ensureCommandResolvable(command, cwd, runtimeEnv);
 
   const timeoutSec = asNumber(config.timeoutSec, 0);
@@ -388,6 +408,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     ];
   })();
   const bootstrapPromptTemplate = asString(config.bootstrapPromptTemplate, "");
+  const contextPrepCommand = asString(config.contextPrepCommand, "").trim();
   const templateData = {
     agentId: agent.id,
     companyId: agent.companyId,
@@ -402,10 +423,23 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     !sessionId && bootstrapPromptTemplate.trim().length > 0
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
+  const renderedPreparedContext =
+    contextPrepCommand.length > 0
+      ? await runContextPrepCommand({
+          runId,
+          commandLine: contextPrepCommand,
+          cwd,
+          env: runtimeEnv,
+          onLog,
+        })
+      : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,
+    renderedPreparedContext
+      ? `Prepared repository context:\n${renderedPreparedContext}`
+      : "",
     sessionHandoffNote,
     renderedPrompt,
   ]);
@@ -413,6 +447,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     promptChars: prompt.length,
     instructionsChars,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
+    preparedContextChars: renderedPreparedContext.length,
     sessionHandoffChars: sessionHandoffNote.length,
     heartbeatPromptChars: renderedPrompt.length,
   };

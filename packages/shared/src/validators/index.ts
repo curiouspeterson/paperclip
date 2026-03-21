@@ -20,6 +20,15 @@ export {
   type UpdateCompany,
   type UpdateCompanyBranding,
 } from "./company.js";
+
+export {
+  validateMailchimpMarketingApiSchema,
+  createMailchimpCampaignSchema,
+  sendMailchimpCampaignSchema,
+  type ValidateMailchimpMarketingApi,
+  type CreateMailchimpCampaign,
+  type SendMailchimpCampaign,
+} from "./integration.js";
 export {
   portabilityIncludeSchema,
   portabilitySecretRequirementSchema,
@@ -74,9 +83,23 @@ export {
 } from "./project.js";
 
 export {
+  podcastWorkflowStageStateSchema,
+  podcastWorkflowManifestSchema,
+  podcastWorkflowScriptRefsSchema,
+  createPodcastWorkflowSchema,
+  updatePodcastWorkflowSchema,
+  podcastWorkflowRunActionSchema,
+  runPodcastWorkflowSchema,
+  type CreatePodcastWorkflow,
+  type UpdatePodcastWorkflow,
+  type RunPodcastWorkflow,
+} from "./podcast-workflow.js";
+
+export {
   createIssueSchema,
   createIssueLabelSchema,
   updateIssueSchema,
+  issueBlockerDetailsSchema,
   issueExecutionWorkspaceSettingsSchema,
   checkoutIssueSchema,
   addIssueCommentSchema,

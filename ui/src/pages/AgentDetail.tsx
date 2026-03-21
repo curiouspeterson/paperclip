@@ -1717,7 +1717,11 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
       queryClient.invalidateQueries({ queryKey: queryKeys.heartbeats(run.companyId, run.agentId) });
     },
   });
-  const canResumeLostRun = run.errorCode === "process_lost" && run.status === "failed";
+  const canResumeLostRun =
+    (run.errorCode === "process_lost" || run.errorCode === "server_restarted") &&
+    run.status === "failed";
+  const resumeButtonLabel =
+    run.errorCode === "server_restarted" ? "Resume after restart" : "Resume";
   const resumePayload = useMemo(() => {
     const payload: Record<string, unknown> = {
       resumeFromRunId: run.id,
@@ -1739,7 +1743,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
       const result = await agentsApi.wakeup(run.agentId, {
         source: "on_demand",
         triggerDetail: "manual",
-        reason: "resume_process_lost_run",
+        reason: "resume_recovery_run",
         payload: resumePayload,
       }, run.companyId);
       if (!("id" in result)) {
@@ -1911,7 +1915,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
                   disabled={resumeRun.isPending}
                 >
                   <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                  {resumeRun.isPending ? "Resuming…" : "Resume"}
+                  {resumeRun.isPending ? "Resuming…" : resumeButtonLabel}
                 </Button>
               )}
               {canRetryRun && !canResumeLostRun && (

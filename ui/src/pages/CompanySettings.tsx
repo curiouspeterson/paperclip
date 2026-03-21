@@ -1,10 +1,12 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { MailchimpMarketingOverview } from "@paperclipai/shared";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
+import { mailchimpApi } from "../api/mailchimp";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Settings, Check } from "lucide-react";
@@ -51,6 +53,14 @@ export function CompanySettings() {
   const [inviteSnippet, setInviteSnippet] = useState<string | null>(null);
   const [snippetCopied, setSnippetCopied] = useState(false);
   const [snippetCopyDelightId, setSnippetCopyDelightId] = useState(0);
+  const [mailchimpListId, setMailchimpListId] = useState("");
+  const [mailchimpTitle, setMailchimpTitle] = useState("");
+  const [mailchimpSubjectLine, setMailchimpSubjectLine] = useState("");
+  const [mailchimpPreviewText, setMailchimpPreviewText] = useState("");
+  const [mailchimpFromName, setMailchimpFromName] = useState("");
+  const [mailchimpReplyTo, setMailchimpReplyTo] = useState("");
+  const [mailchimpHtml, setMailchimpHtml] = useState("");
+  const [mailchimpPlainText, setMailchimpPlainText] = useState("");
 
   const generalDirty =
     !!selectedCompany &&
@@ -174,6 +184,70 @@ export function CompanySettings() {
     setSnippetCopied(false);
     setSnippetCopyDelightId(0);
   }, [selectedCompanyId]);
+
+  const mailchimpOverviewQuery = useQuery({
+    queryKey: selectedCompanyId ? queryKeys.mailchimp.overview(selectedCompanyId) : ["mailchimp", "disabled"],
+    queryFn: () => mailchimpApi.overview(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  useEffect(() => {
+    const overview = mailchimpOverviewQuery.data;
+    if (!overview) return;
+    primeMailchimpForm(overview, {
+      mailchimpListId,
+      setMailchimpListId,
+      mailchimpFromName,
+      setMailchimpFromName,
+      mailchimpReplyTo,
+      setMailchimpReplyTo,
+    });
+  }, [
+    mailchimpOverviewQuery.data,
+    mailchimpListId,
+    mailchimpFromName,
+    mailchimpReplyTo,
+  ]);
+
+  useEffect(() => {
+    setMailchimpListId("");
+    setMailchimpTitle("");
+    setMailchimpSubjectLine("");
+    setMailchimpPreviewText("");
+    setMailchimpFromName("");
+    setMailchimpReplyTo("");
+    setMailchimpHtml("");
+    setMailchimpPlainText("");
+  }, [selectedCompanyId]);
+
+  const createMailchimpCampaignMutation = useMutation({
+    mutationFn: () =>
+      mailchimpApi.createCampaign(selectedCompanyId!, {
+        listId: mailchimpListId,
+        title: mailchimpTitle.trim(),
+        subjectLine: mailchimpSubjectLine.trim(),
+        previewText: mailchimpPreviewText.trim() || null,
+        fromName: mailchimpFromName.trim(),
+        replyTo: mailchimpReplyTo.trim(),
+        html: mailchimpHtml,
+        plainText: mailchimpPlainText.trim() || null,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.mailchimp.overview(selectedCompanyId!),
+      });
+    },
+  });
+
+  const sendMailchimpCampaignMutation = useMutation({
+    mutationFn: (campaignId: string) => mailchimpApi.sendCampaign(selectedCompanyId!, campaignId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.mailchimp.overview(selectedCompanyId!),
+      });
+    },
+  });
+
   const archiveMutation = useMutation({
     mutationFn: ({
       companyId,
@@ -389,6 +463,228 @@ export function CompanySettings() {
         </div>
       </div>
 
+      {/* Mailchimp */}
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Mailchimp
+        </div>
+        <div className="space-y-4 rounded-md border border-border px-4 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Marketing API</div>
+              <p className="text-xs text-muted-foreground">
+                Verify the account, inspect audiences and campaigns, create draft newsletters, and send them without browser automation.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => mailchimpOverviewQuery.refetch()}
+              disabled={mailchimpOverviewQuery.isFetching}
+            >
+              {mailchimpOverviewQuery.isFetching ? "Refreshing..." : "Refresh"}
+            </Button>
+          </div>
+
+          {mailchimpOverviewQuery.isLoading && (
+            <p className="text-sm text-muted-foreground">Loading Mailchimp account...</p>
+          )}
+
+          {mailchimpOverviewQuery.isError && (
+            <p className="text-sm text-destructive">
+              {mailchimpOverviewQuery.error instanceof Error
+                ? mailchimpOverviewQuery.error.message
+                : "Failed to load Mailchimp account"}
+            </p>
+          )}
+
+          {mailchimpOverviewQuery.data && (
+            <>
+              <div className="grid gap-3 md:grid-cols-3">
+                <MailchimpStat
+                  label="Connection"
+                  value={mailchimpOverviewQuery.data.healthStatus ?? "Unknown"}
+                  hint={`${mailchimpOverviewQuery.data.source === "company_secret" ? "Company secret" : "Server env"} • ${mailchimpOverviewQuery.data.datacenter}`}
+                />
+                <MailchimpStat
+                  label="Audiences"
+                  value={String(mailchimpOverviewQuery.data.totalAudiences)}
+                  hint={mailchimpOverviewQuery.data.accountName ?? "Mailchimp"}
+                />
+                <MailchimpStat
+                  label="Campaigns"
+                  value={String(mailchimpOverviewQuery.data.totalCampaigns)}
+                  hint={mailchimpOverviewQuery.data.pricingPlanType ?? "plan unknown"}
+                />
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Audiences</div>
+                  <div className="mt-2 space-y-2">
+                    {mailchimpOverviewQuery.data.audiences.map((audience) => (
+                      <div key={audience.id} className="rounded-md border border-border/60 bg-background px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-medium">{audience.name}</div>
+                          <div className="text-xs text-muted-foreground">{audience.memberCount} members</div>
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {audience.fromName ?? "Unknown sender"} • {audience.fromEmail ?? "No sender email"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Existing campaigns</div>
+                  <div className="mt-2 space-y-2">
+                    {mailchimpOverviewQuery.data.campaigns.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No campaigns found.</p>
+                    )}
+                    {mailchimpOverviewQuery.data.campaigns.map((campaign) => (
+                      <div key={campaign.id} className="rounded-md border border-border/60 bg-background px-3 py-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium">{campaign.title || "(untitled campaign)"}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {campaign.subjectLine ?? "No subject"} • {campaign.status}
+                            </div>
+                          </div>
+                          {campaign.status === "save" && (
+                            <Button
+                              size="sm"
+                              onClick={() => sendMailchimpCampaignMutation.mutate(campaign.id)}
+                              disabled={sendMailchimpCampaignMutation.isPending}
+                            >
+                              {sendMailchimpCampaignMutation.isPending &&
+                              sendMailchimpCampaignMutation.variables === campaign.id
+                                ? "Sending..."
+                                : "Send"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {sendMailchimpCampaignMutation.isError && (
+                      <p className="text-xs text-destructive">
+                        {sendMailchimpCampaignMutation.error instanceof Error
+                          ? sendMailchimpCampaignMutation.error.message
+                          : "Failed to send campaign"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-md border border-border bg-background px-3 py-3">
+                <div>
+                  <div className="text-sm font-medium">Create newsletter draft</div>
+                  <p className="text-xs text-muted-foreground">
+                    This creates a regular Mailchimp campaign draft and uploads the message content through the Marketing API.
+                  </p>
+                </div>
+                <Field label="Audience" hint="The Mailchimp audience that should receive this newsletter.">
+                  <select
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                    value={mailchimpListId}
+                    onChange={(e) => setMailchimpListId(e.target.value)}
+                  >
+                    <option value="">Select an audience</option>
+                    {mailchimpOverviewQuery.data.audiences.map((audience) => (
+                      <option key={audience.id} value={audience.id}>
+                        {audience.name} ({audience.memberCount})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Campaign title" hint="Internal Mailchimp title for this newsletter draft.">
+                  <input
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                    value={mailchimpTitle}
+                    onChange={(e) => setMailchimpTitle(e.target.value)}
+                  />
+                </Field>
+                <Field label="Subject line" hint="What subscribers see in their inbox.">
+                  <input
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                    value={mailchimpSubjectLine}
+                    onChange={(e) => setMailchimpSubjectLine(e.target.value)}
+                  />
+                </Field>
+                <Field label="Preview text" hint="Optional preview snippet shown next to the subject.">
+                  <input
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                    value={mailchimpPreviewText}
+                    onChange={(e) => setMailchimpPreviewText(e.target.value)}
+                  />
+                </Field>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="From name" hint="Displayed sender name.">
+                    <input
+                      className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                      value={mailchimpFromName}
+                      onChange={(e) => setMailchimpFromName(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Reply-to email" hint="Replies from the newsletter will go here.">
+                    <input
+                      className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                      type="email"
+                      value={mailchimpReplyTo}
+                      onChange={(e) => setMailchimpReplyTo(e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <Field label="HTML body" hint="Paste the newsletter HTML that Mailchimp should send.">
+                  <textarea
+                    className="min-h-56 w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none"
+                    value={mailchimpHtml}
+                    onChange={(e) => setMailchimpHtml(e.target.value)}
+                  />
+                </Field>
+                <Field label="Plain text body" hint="Optional plain text fallback for clients that prefer text-only mail.">
+                  <textarea
+                    className="min-h-28 w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none"
+                    value={mailchimpPlainText}
+                    onChange={(e) => setMailchimpPlainText(e.target.value)}
+                  />
+                </Field>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => createMailchimpCampaignMutation.mutate()}
+                    disabled={
+                      createMailchimpCampaignMutation.isPending ||
+                      !mailchimpListId ||
+                      !mailchimpTitle.trim() ||
+                      !mailchimpSubjectLine.trim() ||
+                      !mailchimpFromName.trim() ||
+                      !mailchimpReplyTo.trim() ||
+                      !mailchimpHtml.trim()
+                    }
+                  >
+                    {createMailchimpCampaignMutation.isPending ? "Creating..." : "Create draft"}
+                  </Button>
+                  {createMailchimpCampaignMutation.isSuccess && (
+                    <span className="text-xs text-muted-foreground">
+                      Draft created: {createMailchimpCampaignMutation.data.campaign.title || createMailchimpCampaignMutation.data.campaign.id}
+                    </span>
+                  )}
+                  {createMailchimpCampaignMutation.isError && (
+                    <span className="text-xs text-destructive">
+                      {createMailchimpCampaignMutation.error instanceof Error
+                        ? createMailchimpCampaignMutation.error.message
+                        : "Failed to create Mailchimp draft"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Invites */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -515,6 +811,47 @@ export function CompanySettings() {
       </div>
     </div>
   );
+}
+
+function MailchimpStat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+    </div>
+  );
+}
+
+function primeMailchimpForm(
+  overview: MailchimpMarketingOverview,
+  state: {
+    mailchimpListId: string;
+    setMailchimpListId: (value: string) => void;
+    mailchimpFromName: string;
+    setMailchimpFromName: (value: string) => void;
+    mailchimpReplyTo: string;
+    setMailchimpReplyTo: (value: string) => void;
+  },
+) {
+  const firstAudience = overview.audiences[0] ?? null;
+  if (!state.mailchimpListId && firstAudience?.id) {
+    state.setMailchimpListId(firstAudience.id);
+  }
+  if (!state.mailchimpFromName && firstAudience?.fromName) {
+    state.setMailchimpFromName(firstAudience.fromName);
+  }
+  if (!state.mailchimpReplyTo && firstAudience?.fromEmail) {
+    state.setMailchimpReplyTo(firstAudience.fromEmail);
+  }
 }
 
 function buildAgentSnippet(input: AgentSnippetInput) {

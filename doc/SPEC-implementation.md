@@ -68,6 +68,7 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 - Cost event ingestion and rollups (agent/task/project/company)
 - Budget settings and hard-stop enforcement
 - Board web UI for dashboard, org chart, tasks, agents, approvals, costs
+- Board-managed external integration actions for newsletter operations via API-backed Mailchimp Marketing access
 - Agent-facing API contract (task read/write, heartbeat report, cost report)
 - Auditable activity log for all mutating actions
 
@@ -357,6 +358,24 @@ Operational policy:
   - `issue_id` uuid fk not null
   - `document_id` uuid fk not null
   - `key` text not null (`plan`, `design`, `notes`, etc.)
+
+## 7.16 `podcast_workflows`
+
+- `podcast_workflows` stores company-scoped operational workflows derived from an external media pipeline contract:
+  - `id` uuid pk
+  - `company_id` uuid fk not null
+  - `project_id` uuid fk null
+  - `issue_id` uuid fk null
+  - `owner_agent_id` uuid fk null
+  - `type` text not null (`recording_session`, `episode`, `guest_booking`)
+  - `status` text not null (`planned`, `active`, `blocked`, `done`, `cancelled`)
+  - `title` text not null
+  - `description` text null
+  - `manifest` jsonb not null
+  - `stage_status` jsonb not null
+  - `script_refs` jsonb not null
+  - `metadata` jsonb not null
+  - `last_synced_at` timestamptz null
 
 ## 8. State Machines
 

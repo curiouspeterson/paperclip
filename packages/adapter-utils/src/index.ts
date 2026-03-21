@@ -27,6 +27,8 @@ export type {
   TranscriptEntry,
   StdoutLineParser,
   CLIAdapterModule,
+  BrowserAutomationProvider,
+  BrowserAutomationConfig,
   CreateConfigValues,
 } from "./types.js";
 export type {
@@ -50,3 +52,7 @@ export {
   redactTranscriptEntryPaths,
 } from "./log-redaction.js";
 export { inferOpenAiCompatibleBiller } from "./billing.js";
+export {
+  buildBrowserAutomationEnv,
+  parseBrowserAutomationConfig,
+} from "./browser-automation.js";

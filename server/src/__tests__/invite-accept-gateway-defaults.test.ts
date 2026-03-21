@@ -74,8 +74,8 @@ describe("buildJoinDefaultsPayloadForAccept (openclaw_gateway)", () => {
 });
 
 describe("normalizeAgentDefaultsForJoin (openclaw_gateway)", () => {
-  it("generates persistent device key when device auth is enabled", () => {
-    const normalized = normalizeAgentDefaultsForJoin({
+  it("generates persistent device key when device auth is enabled", async () => {
+    const normalized = await normalizeAgentDefaultsForJoin({
       adapterType: "openclaw_gateway",
       defaultsPayload: {
         url: "ws://127.0.0.1:18789",
@@ -96,8 +96,8 @@ describe("normalizeAgentDefaultsForJoin (openclaw_gateway)", () => {
     expect((normalized.normalized?.devicePrivateKeyPem as string).length).toBeGreaterThan(64);
   });
 
-  it("does not generate device key when disableDeviceAuth=true", () => {
-    const normalized = normalizeAgentDefaultsForJoin({
+  it("does not generate device key when disableDeviceAuth=true", async () => {
+    const normalized = await normalizeAgentDefaultsForJoin({
       adapterType: "openclaw_gateway",
       defaultsPayload: {
         url: "ws://127.0.0.1:18789",

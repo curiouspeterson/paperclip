@@ -275,6 +275,29 @@ describe("heartbeat orphaned process recovery", () => {
     expect(issue?.checkoutRunId).toBe(runId);
   });
 
+  it("marks a missing pid as a server-restarted recovery failure", async () => {
+    const { agentId, runId } = await seedRunFixture({
+      processPid: null,
+      includeIssue: false,
+    });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reapOrphanedRuns();
+    expect(result.reaped).toBe(1);
+    expect(result.runIds).toEqual([runId]);
+
+    const runs = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.agentId, agentId));
+    expect(runs).toHaveLength(1);
+
+    const failedRun = runs[0];
+    expect(failedRun?.status).toBe("failed");
+    expect(failedRun?.errorCode).toBe("server_restarted");
+    expect(failedRun?.error).toContain("Server restarted during run");
+  });
+
   it("does not queue a second retry after the first process-loss retry was already used", async () => {
     const { agentId, runId, issueId } = await seedRunFixture({
       processPid: 999_999_999,

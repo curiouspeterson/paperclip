@@ -14,7 +14,9 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePathInEnv,
+  listSkillEntriesFromDirectories,
   renderTemplate,
+  runContextPrepCommand,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { isOpenCodeUnknownSessionError, parseOpenCodeJsonl } from "./parse.js";
@@ -87,6 +89,32 @@ async function ensureOpenCodeSkillsInjected(onLog: AdapterExecutionContext["onLo
   }
 }
 
+async function ensureOpenCodeSkillsInjectedFromDirectories(
+  onLog: AdapterExecutionContext["onLog"],
+  dirs: string[],
+) {
+  const skillsHome = claudeSkillsHome();
+  await fs.mkdir(skillsHome, { recursive: true });
+  const entries = await listSkillEntriesFromDirectories(dirs);
+  for (const entry of entries) {
+    const target = path.join(skillsHome, entry.name);
+    const existing = await fs.lstat(target).catch(() => null);
+    if (existing) continue;
+    try {
+      await fs.symlink(entry.source, target);
+      await onLog(
+        "stderr",
+        `[paperclip] Injected OpenCode external skill "${entry.name}" into ${skillsHome}\n`,
+      );
+    } catch (err) {
+      await onLog(
+        "stderr",
+        `[paperclip] Failed to inject OpenCode external skill "${entry.name}" into ${skillsHome}: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+  }
+}
+
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
   const { runId, agent, runtime, config, context, onLog, onMeta, onSpawn, authToken } = ctx;
 
@@ -116,6 +144,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const cwd = effectiveWorkspaceCwd || configuredCwd || process.cwd();
   await ensureAbsoluteDirectory(cwd, { createIfMissing: true });
   await ensureOpenCodeSkillsInjected(onLog);
+  const externalSkillDirs = asStringArray(config.externalSkillDirs).map((entry) => path.resolve(cwd, entry));
+  if (externalSkillDirs.length > 0) {
+    await ensureOpenCodeSkillsInjectedFromDirectories(onLog, externalSkillDirs);
+  }
 
   const envConfig = parseObject(config.env);
   const hasExplicitApiKey =
@@ -241,6 +273,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   })();
 
   const bootstrapPromptTemplate = asString(config.bootstrapPromptTemplate, "");
+  const contextPrepCommand = asString(config.contextPrepCommand, "").trim();
   const templateData = {
     agentId: agent.id,
     companyId: agent.companyId,
@@ -255,10 +288,23 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     !sessionId && bootstrapPromptTemplate.trim().length > 0
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
+  const renderedPreparedContext =
+    contextPrepCommand.length > 0
+      ? await runContextPrepCommand({
+          runId,
+          commandLine: contextPrepCommand,
+          cwd,
+          env: runtimeEnv,
+          onLog,
+        })
+      : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,
+    renderedPreparedContext
+      ? `Prepared repository context:\n${renderedPreparedContext}`
+      : "",
     sessionHandoffNote,
     renderedPrompt,
   ]);
@@ -266,6 +312,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     promptChars: prompt.length,
     instructionsChars: instructionsPrefix.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
+    preparedContextChars: renderedPreparedContext.length,
     sessionHandoffChars: sessionHandoffNote.length,
     heartbeatPromptChars: renderedPrompt.length,
   };
