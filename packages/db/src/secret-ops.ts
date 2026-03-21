@@ -16,6 +16,7 @@ import path from "node:path";
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "./client.js";
 import { companySecrets, companySecretVersions } from "./schema/index.js";
+import type { LocalEncryptedSecretVersionMaterial } from "@paperclipai/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,13 +72,6 @@ export interface SecretOps {
 // ---------------------------------------------------------------------------
 // local_encrypted provider (self-contained, no server imports)
 // ---------------------------------------------------------------------------
-
-interface LocalEncryptedMaterial extends Record<string, unknown> {
-  scheme: "local_encrypted_v1";
-  iv: string;
-  tag: string;
-  ciphertext: string;
-}
 
 function resolveMasterKeyFilePath(): string {
   const fromEnv = process.env.PAPERCLIP_SECRETS_MASTER_KEY_FILE;
@@ -135,7 +129,7 @@ function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function encryptValue(masterKey: Buffer, value: string): LocalEncryptedMaterial {
+function encryptValue(masterKey: Buffer, value: string): LocalEncryptedSecretVersionMaterial {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", masterKey, iv);
   const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);

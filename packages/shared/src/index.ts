@@ -243,6 +243,8 @@ export type {
   AgentEnvConfig,
   CompanySecret,
   SecretProviderDescriptor,
+  StoredSecretVersionMaterial,
+  LocalEncryptedSecretVersionMaterial,
   JsonSchema,
   PluginJobDeclaration,
   PluginWebhookDeclaration,

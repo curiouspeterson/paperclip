@@ -9,7 +9,6 @@ import type {
   PodcastWorkflowType,
 } from "@paperclipai/shared";
 import { podcastWorkflowsApi } from "../api/podcast-workflows";
-import { ApiError } from "../api/client";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -203,67 +202,6 @@ export function PodcastWorkflows() {
     },
   });
 
-  const runWorkflow = useMutation({
-    mutationFn: async ({
-      workflow,
-      action,
-    }: {
-      workflow: PodcastWorkflow;
-      action:
-        | "initialize_manifest"
-        | "run_latest_youtube_pipeline"
-        | "generate_approval_packet"
-        | "generate_social_drafts"
-        | "generate_board_review"
-        | "generate_connector_runbooks"
-        | "sync_to_paperclip"
-        | "update_static_homepage"
-        | "publish_episode_to_homepage";
-    }) => {
-      const body: Record<string, unknown> = { action };
-      if (action === "initialize_manifest") {
-        const sourceMediaPath = window.prompt(
-          "Source media path",
-          workflow.manifest.sourceMediaPath ?? "",
-        );
-        if (!sourceMediaPath) throw new Error("Source media path is required");
-        body.sourceMediaPath = sourceMediaPath;
-      }
-      if (action !== "initialize_manifest" && action !== "run_latest_youtube_pipeline") {
-        const manifestPath = window.prompt(
-          "Manifest path",
-          workflow.manifest.manifestPath ?? "",
-        );
-        if (!manifestPath) throw new Error("Manifest path is required");
-        body.manifestPath = manifestPath;
-      }
-      if (action === "sync_to_paperclip") {
-        const issueId = window.prompt(
-          "Existing review issue id (leave blank to auto-create)",
-          workflow.issueId ?? "",
-        );
-        if (issueId && issueId.trim()) body.issueId = issueId.trim();
-      }
-      if (action === "publish_episode_to_homepage") {
-        const confirmed = window.confirm(
-          "This will run the publish script. Proceed only if board approval is already satisfied.",
-        );
-        if (!confirmed) throw new Error("Publish cancelled");
-        body.confirmDangerousAction = true;
-      }
-      return podcastWorkflowsApi.run(workflow.id, body);
-    },
-    onSuccess: async (_, variables) => {
-      if (!selectedCompanyId) return;
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.podcastWorkflows.list(selectedCompanyId),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.podcastWorkflows.detail(variables.workflow.id),
-      });
-    },
-  });
-
   const grouped = useMemo(() => {
     const workflows = data ?? [];
     return {
@@ -349,16 +287,10 @@ export function PodcastWorkflows() {
                     <WorkflowCard workflow={workflow} />
                     <div className="flex flex-wrap gap-2">
                       {actionsForWorkflow(workflow).map((action) => (
-                        <Button
-                          key={action.action}
-                          size="sm"
-                          variant="outline"
-                          disabled={runWorkflow.isPending}
-                          onClick={() => {
-                            runWorkflow.mutate({ workflow, action: action.action });
-                          }}
-                        >
-                          {action.label}
+                        <Button key={action.action} size="sm" variant="outline" asChild>
+                          <Link to={`/podcast-ops/${workflow.id}?action=${action.action}`}>
+                            {action.label}
+                          </Link>
                         </Button>
                       ))}
                     </div>
@@ -395,15 +327,6 @@ export function PodcastWorkflows() {
         </div>
       )}
 
-      {runWorkflow.error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {runWorkflow.error instanceof ApiError
-            ? runWorkflow.error.message
-            : runWorkflow.error instanceof Error
-              ? runWorkflow.error.message
-              : "Failed to run podcast workflow action."}
-        </div>
-      )}
     </div>
   );
 }

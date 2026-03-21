@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { Link, useParams } from "@/lib/router";
+import { Link, useParams, useSearchParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -514,6 +514,7 @@ function ActionForm({
 
 export function PodcastWorkflowDetail() {
   const { workflowId } = useParams<{ workflowId: string }>();
+  const [searchParams] = useSearchParams();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const [selectedAction, setSelectedAction] = useState<WorkflowAction | null>(null);
@@ -546,12 +547,20 @@ export function PodcastWorkflowDetail() {
   useEffect(() => {
     if (!workflow) return;
     const availableActions = actionsForWorkflow(workflow);
-    const nextAction = availableActions[0]?.action ?? null;
+    const requestedAction = searchParams.get("action") as WorkflowAction | null;
+    const nextAction =
+      requestedAction && availableActions.some((entry) => entry.action === requestedAction)
+        ? requestedAction
+        : availableActions[0]?.action ?? null;
     setSelectedAction((current) =>
-      current && availableActions.some((entry) => entry.action === current) ? current : nextAction,
+      requestedAction && availableActions.some((entry) => entry.action === requestedAction)
+        ? requestedAction
+        : current && availableActions.some((entry) => entry.action === current)
+          ? current
+          : nextAction,
     );
     setForm(createActionFormState(workflow));
-  }, [workflow]);
+  }, [searchParams, workflow]);
 
   const runWorkflow = useMutation({
     mutationFn: async () => {

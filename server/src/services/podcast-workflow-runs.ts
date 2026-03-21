@@ -268,6 +268,9 @@ function patchWorkflowAfterRun(
       stageStatus.intake = "ready";
       status = "active";
     }
+    if (status !== "done") {
+      status = "active";
+    }
   } else {
     stageStatus[input.action] = "blocked";
     status = "blocked";

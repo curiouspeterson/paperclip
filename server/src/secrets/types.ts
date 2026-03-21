@@ -1,8 +1,12 @@
-import type { SecretProvider, SecretProviderDescriptor } from "@paperclipai/shared";
+import type {
+  LocalEncryptedSecretVersionMaterial,
+  SecretProvider,
+  SecretProviderDescriptor,
+  StoredSecretVersionMaterial,
+} from "@paperclipai/shared";
 
-export interface StoredSecretVersionMaterial {
-  [key: string]: unknown;
-}
+export type { StoredSecretVersionMaterial };
+export type { LocalEncryptedSecretVersionMaterial };
 
 export interface SecretProviderModule {
   id: SecretProvider;
