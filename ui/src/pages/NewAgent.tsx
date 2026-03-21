@@ -50,6 +50,8 @@ function createValuesForAdapterType(
     nextValues.model = DEFAULT_GEMINI_LOCAL_MODEL;
   } else if (adapterType === "cursor") {
     nextValues.model = DEFAULT_CURSOR_LOCAL_MODEL;
+  } else if (adapterType === "hermes_local") {
+    nextValues.model = "anthropic/claude-sonnet-4";
   } else if (adapterType === "opencode_local") {
     nextValues.model = "";
   }

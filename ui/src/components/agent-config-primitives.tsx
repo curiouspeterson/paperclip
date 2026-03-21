@@ -61,9 +61,11 @@ export const adapterLabels: Record<string, string> = {
   claude_local: "Claude (local)",
   codex_local: "Codex (local)",
   gemini_local: "Gemini CLI (local)",
+  hermes_local: "Hermes Agent (local)",
   opencode_local: "OpenCode (local)",
   openclaw_gateway: "OpenClaw Gateway",
   cursor: "Cursor (local)",
+  pi_local: "Pi (local)",
   process: "Process",
   http: "HTTP",
 };
