@@ -48,6 +48,11 @@ const mockExecutionWorkspaceService = vi.hoisted(() => ({
 
 const mockLogActivity = vi.hoisted(() => vi.fn(async () => undefined));
 
+const COMPANY_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const AGENT_ONE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const AGENT_TWO_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const RUN_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
 vi.mock("../services/index.js", () => ({
   accessService: () => mockAccessService,
   agentService: () => mockAgentService,
@@ -78,9 +83,9 @@ function createApp(actor: Record<string, unknown>) {
 function makeIssue(overrides?: Partial<Record<string, unknown>>) {
   return {
     id: "11111111-1111-4111-8111-111111111111",
-    companyId: "company-1",
+    companyId: COMPANY_ID,
     status: "todo",
-    assigneeAgentId: "agent-1",
+    assigneeAgentId: AGENT_ONE_ID,
     assigneeUserId: null,
     createdByUserId: "user-1",
     identifier: "PAP-580",
@@ -112,7 +117,7 @@ describe("issue contract routes", () => {
       createApp({
         type: "board",
         userId: "board-user",
-        companyIds: ["company-1"],
+        companyIds: [COMPANY_ID],
         source: "local_implicit",
         isInstanceAdmin: false,
       }),
@@ -120,22 +125,22 @@ describe("issue contract routes", () => {
       .patch("/api/issues/11111111-1111-4111-8111-111111111111")
       .send({ status: "in_progress" });
 
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     expect(mockIssueService.update).not.toHaveBeenCalled();
   });
 
   it("requires agent ownership for non-checkout issue patches", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       status: "todo",
-      assigneeAgentId: "agent-2",
+      assigneeAgentId: AGENT_TWO_ID,
     }));
 
     const res = await request(
       createApp({
         type: "agent",
-        agentId: "agent-1",
-        companyId: "company-1",
-        runId: "run-1",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
       }),
     )
       .patch("/api/issues/11111111-1111-4111-8111-111111111111")
@@ -148,30 +153,27 @@ describe("issue contract routes", () => {
   it("allows an agent to patch their own assigned issue", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       status: "todo",
-      assigneeAgentId: "agent-1",
+      assigneeAgentId: AGENT_ONE_ID,
     }));
     mockIssueService.update.mockResolvedValue(makeIssue({
       title: "Updated title",
       status: "todo",
-      assigneeAgentId: "agent-1",
+      assigneeAgentId: AGENT_ONE_ID,
     }));
 
     const res = await request(
       createApp({
         type: "agent",
-        agentId: "agent-1",
-        companyId: "company-1",
-        runId: "run-1",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
       }),
     )
       .patch("/api/issues/11111111-1111-4111-8111-111111111111")
       .send({ title: "Updated title" });
 
     expect(res.status).toBe(200);
-    expect(mockIssueService.update).toHaveBeenCalledWith(
-      "11111111-1111-4111-8111-111111111111",
-      { title: "Updated title" },
-    );
+    expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", { title: "Updated title" });
   });
 
   it("scopes issue detail hydration to the issue company", async () => {
@@ -183,14 +185,14 @@ describe("issue contract routes", () => {
     mockIssueService.getAncestors.mockResolvedValue([]);
     mockProjectService.getByIdForCompany.mockResolvedValue({
       id: "project-foreign",
-      companyId: "company-1",
+      companyId: COMPANY_ID,
       name: "Scoped project",
       status: "backlog",
       targetDate: null,
     });
     mockGoalService.getByIdForCompany.mockResolvedValue({
       id: "goal-foreign",
-      companyId: "company-1",
+      companyId: COMPANY_ID,
       title: "Scoped goal",
       status: "planned",
       level: "task",
@@ -198,7 +200,7 @@ describe("issue contract routes", () => {
     });
     mockExecutionWorkspaceService.getByIdForCompany.mockResolvedValue({
       id: "workspace-foreign",
-      companyId: "company-1",
+      companyId: COMPANY_ID,
       status: "active",
     });
 
@@ -206,50 +208,50 @@ describe("issue contract routes", () => {
       createApp({
         type: "board",
         userId: "board-user",
-        companyIds: ["company-1"],
+        companyIds: [COMPANY_ID],
         source: "local_implicit",
         isInstanceAdmin: false,
       }),
     ).get("/api/issues/11111111-1111-4111-8111-111111111111");
 
     expect(res.status).toBe(200);
-    expect(mockIssueService.getAncestors).toHaveBeenCalledWith("company-1", "11111111-1111-4111-8111-111111111111");
-    expect(mockProjectService.getByIdForCompany).toHaveBeenCalledWith("company-1", "project-foreign");
-    expect(mockGoalService.getByIdForCompany).toHaveBeenCalledWith("company-1", "goal-foreign");
-    expect(mockExecutionWorkspaceService.getByIdForCompany).toHaveBeenCalledWith("company-1", "workspace-foreign");
-    expect(res.body.project?.companyId).toBe("company-1");
-    expect(res.body.goal?.companyId).toBe("company-1");
+    expect(mockIssueService.getAncestors).toHaveBeenCalledWith(COMPANY_ID, "11111111-1111-4111-8111-111111111111");
+    expect(mockProjectService.getByIdForCompany).toHaveBeenCalledWith(COMPANY_ID, "project-foreign");
+    expect(mockGoalService.getByIdForCompany).toHaveBeenCalledWith(COMPANY_ID, "goal-foreign");
+    expect(mockExecutionWorkspaceService.getByIdForCompany).toHaveBeenCalledWith(COMPANY_ID, "workspace-foreign");
+    expect(res.body.project?.companyId).toBe(COMPANY_ID);
+    expect(res.body.goal?.companyId).toBe(COMPANY_ID);
   });
 
   it("still supports the dedicated checkout path", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       status: "todo",
-      assigneeAgentId: "agent-1",
+      assigneeAgentId: AGENT_ONE_ID,
     }));
     mockIssueService.checkout.mockResolvedValue(makeIssue({
       status: "in_progress",
-      assigneeAgentId: "agent-1",
-      checkoutRunId: "run-1",
-      executionRunId: "run-1",
+      assigneeAgentId: AGENT_ONE_ID,
+      checkoutRunId: RUN_ID,
+      executionRunId: RUN_ID,
     }));
 
     const res = await request(
       createApp({
         type: "agent",
-        agentId: "agent-1",
-        companyId: "company-1",
-        runId: "run-1",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
       }),
     )
       .post("/api/issues/11111111-1111-4111-8111-111111111111/checkout")
-      .send({ agentId: "agent-1", expectedStatuses: ["todo", "backlog", "blocked"] });
+      .send({ agentId: AGENT_ONE_ID, expectedStatuses: ["todo", "backlog", "blocked"] });
 
     expect(res.status).toBe(200);
     expect(mockIssueService.checkout).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
-      "agent-1",
+      AGENT_ONE_ID,
       ["todo", "backlog", "blocked"],
-      "run-1",
+      RUN_ID,
     );
   });
 });

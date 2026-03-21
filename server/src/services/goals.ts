@@ -53,6 +53,13 @@ export function goalService(db: Db) {
         .where(eq(goals.id, id))
         .then((rows) => rows[0] ?? null),
 
+    getByIdForCompany: (companyId: string, id: string) =>
+      db
+        .select()
+        .from(goals)
+        .where(and(eq(goals.id, id), eq(goals.companyId, companyId)))
+        .then((rows) => rows[0] ?? null),
+
     getDefaultCompanyGoal: (companyId: string) => getDefaultCompanyGoal(db, companyId),
 
     create: (companyId: string, data: Omit<typeof goals.$inferInsert, "companyId">) =>

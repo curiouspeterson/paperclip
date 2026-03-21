@@ -424,6 +424,19 @@ export function projectService(db: Db) {
       return enriched ?? null;
     },
 
+    getByIdForCompany: async (companyId: string, id: string): Promise<ProjectWithGoals | null> => {
+      const row = await db
+        .select()
+        .from(projects)
+        .where(and(eq(projects.id, id), eq(projects.companyId, companyId)))
+        .then((rows) => rows[0] ?? null);
+      if (!row) return null;
+      const [withGoals] = await attachGoals(db, [row]);
+      if (!withGoals) return null;
+      const [enriched] = await attachWorkspaces(db, [withGoals]);
+      return enriched ?? null;
+    },
+
     create: async (
       companyId: string,
       data: Omit<typeof projects.$inferInsert, "companyId"> & { goalIds?: string[] },

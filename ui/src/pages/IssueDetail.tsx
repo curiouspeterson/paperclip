@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent 
 import { Link, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { issuesApi } from "../api/issues";
+import { saveIssuePatchWithCheckout } from "../lib/issue-mutations";
 import { activityApi } from "../api/activity";
 import { heartbeatsApi } from "../api/heartbeats";
 import { agentsApi } from "../api/agents";
@@ -530,7 +531,7 @@ export function IssueDetail() {
   });
 
   const updateIssue = useMutation({
-    mutationFn: (data: Record<string, unknown>) => issuesApi.update(issueId!, data),
+    mutationFn: (data: Record<string, unknown>) => saveIssuePatchWithCheckout(issueId!, issue, data),
     onSuccess: () => {
       invalidateIssue();
     },

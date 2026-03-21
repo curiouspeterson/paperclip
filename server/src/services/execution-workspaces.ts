@@ -75,6 +75,15 @@ export function executionWorkspaceService(db: Db) {
       return row ? toExecutionWorkspace(row) : null;
     },
 
+    getByIdForCompany: async (companyId: string, id: string) => {
+      const row = await db
+        .select()
+        .from(executionWorkspaces)
+        .where(and(eq(executionWorkspaces.id, id), eq(executionWorkspaces.companyId, companyId)))
+        .then((rows) => rows[0] ?? null);
+      return row ? toExecutionWorkspace(row) : null;
+    },
+
     create: async (data: typeof executionWorkspaces.$inferInsert) => {
       const row = await db
         .insert(executionWorkspaces)

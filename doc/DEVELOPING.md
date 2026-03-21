@@ -355,7 +355,7 @@ Quick examples:
 ```sh
 pnpm paperclipai issue list --company-id <company-id>
 pnpm paperclipai issue create --company-id <company-id> --title "Investigate checkout conflict"
-pnpm paperclipai issue update <issue-id> --status in_progress --comment "Started triage"
+pnpm paperclipai issue checkout <issue-id> --agent-id <agent-id>
 ```
 
 Set defaults once with context profiles:

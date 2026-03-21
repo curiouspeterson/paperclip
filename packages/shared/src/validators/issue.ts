@@ -1,6 +1,15 @@
 import { z } from "zod";
 import { ISSUE_PRIORITIES, ISSUE_STATUSES } from "../constants.js";
 
+const ISSUE_MUTABLE_STATUSES = [
+  "backlog",
+  "todo",
+  "in_review",
+  "blocked",
+  "done",
+  "cancelled",
+] as const;
+
 const executionWorkspaceStrategySchema = z
   .object({
     type: z.enum(["project_primary", "git_worktree", "adapter_managed", "cloud_sandbox"]).optional(),
@@ -58,7 +67,7 @@ export const createIssueSchema = z.object({
   parentId: z.string().uuid().optional().nullable(),
   title: z.string().min(1),
   description: z.string().optional().nullable(),
-  status: z.enum(ISSUE_STATUSES).optional().default("backlog"),
+  status: z.enum(ISSUE_MUTABLE_STATUSES).optional().default("backlog"),
   priority: z.enum(ISSUE_PRIORITIES).optional().default("medium"),
   assigneeAgentId: z.string().uuid().optional().nullable(),
   assigneeUserId: z.string().optional().nullable(),

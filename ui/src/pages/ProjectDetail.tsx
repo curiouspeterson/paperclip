@@ -21,6 +21,7 @@ import { IssuesList } from "../components/IssuesList";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { PageTabBar } from "../components/PageTabBar";
 import { projectRouteRef, cn } from "../lib/utils";
+import { saveIssuePatchWithCheckout } from "../lib/issue-mutations";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
@@ -187,7 +188,7 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
 
   const updateIssue = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      issuesApi.update(id, data),
+      saveIssuePatchWithCheckout(id, issues?.find((issue) => issue.id === id), data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.listByProject(companyId, projectId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(companyId) });
