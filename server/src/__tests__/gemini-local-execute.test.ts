@@ -116,6 +116,8 @@ describe("gemini execute", () => {
       expect(invocationPrompt).toContain("PAPERCLIP_API_URL");
       expect(invocationPrompt).toContain("Paperclip API access note:");
       expect(invocationPrompt).toContain("run_shell_command");
+      expect(invocationPrompt).toContain("PATCH /api/issues/{issueId}");
+      expect(invocationPrompt).toContain('"status":"done"');
       expect(result.question).toBeNull();
     } finally {
       if (previousHome === undefined) {

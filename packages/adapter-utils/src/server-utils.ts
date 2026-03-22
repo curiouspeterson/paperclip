@@ -230,6 +230,30 @@ export function buildPaperclipEnv(agent: { id: string; companyId: string }): Rec
   return vars;
 }
 
+export function renderPaperclipIssueWorkflowNote(env: Record<string, string>): string {
+  if (
+    !Object.prototype.hasOwnProperty.call(env, "PAPERCLIP_API_URL") ||
+    !Object.prototype.hasOwnProperty.call(env, "PAPERCLIP_API_KEY")
+  ) {
+    return "";
+  }
+
+  const apiUrl = typeof env.PAPERCLIP_API_URL === "string" ? env.PAPERCLIP_API_URL.trim() : "";
+  const apiKey = typeof env.PAPERCLIP_API_KEY === "string" ? env.PAPERCLIP_API_KEY.trim() : "";
+  if (!apiUrl || !apiKey) return "";
+
+  return [
+    "Paperclip issue workflow note:",
+    "Use the Paperclip API to finish issue work before you exit.",
+    "Send mutating requests with Authorization: Bearer $PAPERCLIP_API_KEY and X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID.",
+    'When work is complete, PATCH /api/issues/{issueId} with {"status":"done","comment":"what changed and why"}.',
+    'If blocked, PATCH /api/issues/{issueId} with {"status":"blocked","comment":"why blocked and what is needed"}.',
+    "Do not leave an issue without a final status update and comment.",
+    "",
+    "",
+  ].join("\n");
+}
+
 export function defaultPathForPlatform() {
   if (process.platform === "win32") {
     return "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem";

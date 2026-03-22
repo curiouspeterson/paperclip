@@ -21,6 +21,7 @@ import {
   resolvePaperclipDesiredSkillNames,
   renderTemplate,
   joinPromptSections,
+  renderPaperclipIssueWorkflowNote,
   runContextPrepCommand,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -500,6 +501,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? `Prepared repository context:\n${renderedPreparedContext}`
       : "",
     sessionHandoffNote,
+    renderPaperclipIssueWorkflowNote(env),
     renderedPrompt,
   ]);
   const promptMetrics = {

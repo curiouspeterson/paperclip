@@ -19,6 +19,7 @@ import {
   resolvePaperclipDesiredSkillNames,
   removeMaintainerOnlySkillSymlinks,
   renderTemplate,
+  renderPaperclipIssueWorkflowNote,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { isPiUnknownSessionError, parsePiJsonl } from "./parse.js";
@@ -304,6 +305,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const userPrompt = joinPromptSections([
     renderedBootstrapPrompt,
     sessionHandoffNote,
+    renderPaperclipIssueWorkflowNote(env),
     renderedHeartbeatPrompt,
   ]);
   const promptMetrics = {

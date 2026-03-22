@@ -21,6 +21,7 @@ import {
   runChildProcess,
   readPaperclipRuntimeSkillEntries,
   resolvePaperclipDesiredSkillNames,
+  renderPaperclipIssueWorkflowNote,
 } from "@paperclipai/adapter-utils/server-utils";
 import { isOpenCodeUnknownSessionError, parseOpenCodeJsonl } from "./parse.js";
 import { ensureOpenCodeModelConfiguredAndAvailable } from "./models.js";
@@ -313,6 +314,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? `Prepared repository context:\n${renderedPreparedContext}`
       : "",
     sessionHandoffNote,
+    renderPaperclipIssueWorkflowNote(env),
     renderedPrompt,
   ]);
   const promptMetrics = {

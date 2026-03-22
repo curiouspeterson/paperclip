@@ -19,6 +19,7 @@ import {
   removeMaintainerOnlySkillSymlinks,
   renderTemplate,
   joinPromptSections,
+  renderPaperclipIssueWorkflowNote,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "../index.js";
@@ -361,6 +362,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     renderedBootstrapPrompt,
     sessionHandoffNote,
     paperclipEnvNote,
+    renderPaperclipIssueWorkflowNote(env),
     renderedPrompt,
   ]);
   const promptMetrics = {
