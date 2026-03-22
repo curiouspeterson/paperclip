@@ -1,4 +1,16 @@
-const BASE = "/api";
+export function normalizeApiBase(rawBase: string | undefined): string {
+  const trimmed = rawBase?.trim();
+  if (!trimmed) return "/api";
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, "");
+  return withoutTrailingSlash.endsWith("/api") ? withoutTrailingSlash : `${withoutTrailingSlash}/api`;
+}
+
+export const API_BASE = normalizeApiBase(import.meta.env.VITE_PAPERCLIP_API_URL);
+
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -19,7 +31,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     headers,
     credentials: "include",
     ...init,

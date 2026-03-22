@@ -1,3 +1,5 @@
+import { apiUrl } from "./client";
+
 export type DevServerHealthStatus = {
   enabled: true;
   restartRequired: boolean;
@@ -28,7 +30,7 @@ export type HealthStatus = {
 
 export const healthApi = {
   get: async (): Promise<HealthStatus> => {
-    const res = await fetch("/api/health", {
+    const res = await fetch(apiUrl("/health"), {
       credentials: "include",
       headers: { Accept: "application/json" },
     });

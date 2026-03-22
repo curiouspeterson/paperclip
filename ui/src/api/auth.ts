@@ -1,3 +1,5 @@
+import { apiUrl } from "./client";
+
 export type AuthSession = {
   session: { id: string; userId: string };
   user: { id: string; email: string | null; name: string | null };
@@ -25,7 +27,7 @@ function toSession(value: unknown): AuthSession | null {
 }
 
 async function authPost(path: string, body: Record<string, unknown>) {
-  const res = await fetch(`/api/auth${path}`, {
+  const res = await fetch(apiUrl(`/auth${path}`), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -50,7 +52,7 @@ type OAuthRedirectResponse = {
 
 export const authApi = {
   getSession: async (): Promise<AuthSession | null> => {
-    const res = await fetch("/api/auth/get-session", {
+    const res = await fetch(apiUrl("/auth/get-session"), {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
