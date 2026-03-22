@@ -12,6 +12,11 @@ import { api } from "./client";
 
 export type CompanyStats = Record<string, { agentCount: number; issueCount: number }>;
 
+export interface CompanyBulkActionResult {
+  company: Company;
+  affectedAgentCount: number;
+}
+
 export const companiesApi = {
   list: () => api.get<Company[]>("/companies"),
   get: (companyId: string) => api.get<Company>(`/companies/${companyId}`),
@@ -33,6 +38,8 @@ export const companiesApi = {
   ) => api.patch<Company>(`/companies/${companyId}`, data),
   updateBranding: (companyId: string, data: UpdateCompanyBranding) =>
     api.patch<Company>(`/companies/${companyId}/branding`, data),
+  pause: (companyId: string) => api.post<CompanyBulkActionResult>(`/companies/${companyId}/pause`, {}),
+  resume: (companyId: string) => api.post<CompanyBulkActionResult>(`/companies/${companyId}/resume`, {}),
   archive: (companyId: string) => api.post<Company>(`/companies/${companyId}/archive`, {}),
   remove: (companyId: string) => api.delete<{ ok: true }>(`/companies/${companyId}`),
   exportBundle: (

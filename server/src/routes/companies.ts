@@ -16,6 +16,7 @@ import {
   budgetService,
   companyPortabilityService,
   companyService,
+  heartbeatService,
   logActivity,
 } from "../services/index.js";
 import type { StorageService } from "../storage/types.js";
@@ -25,6 +26,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
   const router = Router();
   const svc = companyService(db);
   const agents = agentService(db);
+  const heartbeat = heartbeatService(db);
   const portability = companyPortabilityService(db, storage);
   const access = accessService(db);
   const budgets = budgetService(db);
@@ -324,6 +326,99 @@ export function companyRoutes(db: Db, storage?: StorageService) {
       entityId: companyId,
     });
     res.json(company);
+  });
+
+  router.post("/:companyId/pause", async (req, res) => {
+    assertBoard(req);
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const result = await svc.pauseAll(companyId);
+    if (!result) {
+      res.status(404).json({ error: "Company not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    for (const agentId of result.affectedAgentIds) {
+      await heartbeat.cancelActiveForAgent(agentId);
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "agent.paused",
+        entityType: "agent",
+        entityId: agentId,
+        details: { source: "company.pause_all" },
+      });
+    }
+
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "company.paused",
+      entityType: "company",
+      entityId: result.company.id,
+      details: {
+        affectedAgentCount: result.affectedAgentIds.length,
+      },
+    });
+
+    res.json({
+      company: result.company,
+      affectedAgentCount: result.affectedAgentIds.length,
+    });
+  });
+
+  router.post("/:companyId/resume", async (req, res) => {
+    assertBoard(req);
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const result = await svc.resumeAll(companyId);
+    if (!result) {
+      res.status(404).json({ error: "Company not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    for (const agentId of result.affectedAgentIds) {
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "agent.resumed",
+        entityType: "agent",
+        entityId: agentId,
+        details: { source: "company.resume_all" },
+      });
+    }
+
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "company.resumed",
+      entityType: "company",
+      entityId: result.company.id,
+      details: {
+        affectedAgentCount: result.affectedAgentIds.length,
+      },
+    });
+
+    res.json({
+      company: result.company,
+      affectedAgentCount: result.affectedAgentIds.length,
+    });
   });
 
   router.delete("/:companyId", async (req, res) => {

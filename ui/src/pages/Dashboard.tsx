@@ -146,11 +146,12 @@ export function Dashboard() {
 
   const entityNameMap = useMemo(() => {
     const map = new Map<string, string>();
+    for (const company of companies) map.set(`company:${company.id}`, company.name);
     for (const i of issues ?? []) map.set(`issue:${i.id}`, i.identifier ?? i.id.slice(0, 8));
     for (const a of agents ?? []) map.set(`agent:${a.id}`, a.name);
     for (const p of projects ?? []) map.set(`project:${p.id}`, p.name);
     return map;
-  }, [issues, agents, projects]);
+  }, [companies, issues, agents, projects]);
 
   const entityTitleMap = useMemo(() => {
     const map = new Map<string, string>();

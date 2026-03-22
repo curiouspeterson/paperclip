@@ -50,6 +50,7 @@ For internet-facing deployment.
 - **Authentication**: login required
 - **URL**: explicit public URL required
 - **Security**: stricter deployment checks in doctor
+- **UI hosting**: if the frontend is deployed separately, set `VITE_PAPERCLIP_API_URL` to the API origin at build time so `/api/*` requests do not resolve against the static host.
 
 ```sh
 pnpm paperclipai onboard

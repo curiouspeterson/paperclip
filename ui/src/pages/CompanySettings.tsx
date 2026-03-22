@@ -6,13 +6,15 @@ import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToast } from "../context/ToastContext";
 import { companiesApi } from "../api/companies";
+import { agentsApi } from "../api/agents";
 import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
 import { mailchimpApi } from "../api/mailchimp";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { Settings, Check, Download, Upload, Bot, ArrowRight } from "lucide-react";
+import { Settings, Check, Download, Upload, Bot, ArrowRight, Pause, Play } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
+import { StatusBadge } from "../components/StatusBadge";
 import {
   Field,
   ToggleField,
@@ -194,6 +196,12 @@ export function CompanySettings() {
     enabled: !!selectedCompanyId,
   });
 
+  const agentsQuery = useQuery({
+    queryKey: selectedCompanyId ? queryKeys.agents.list(selectedCompanyId) : ["agents", "disabled"],
+    queryFn: () => agentsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
   useEffect(() => {
     const overview = mailchimpOverviewQuery.data;
     if (!overview) return;
@@ -250,6 +258,42 @@ export function CompanySettings() {
       });
     },
   });
+
+  const pauseAllMutation = useMutation({
+    mutationFn: () => companiesApi.pause(selectedCompanyId!),
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companies.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.org(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.activity(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId!) }),
+      ]);
+      pushToast({
+        title: "Company paused",
+        body: `Paused ${result.affectedAgentCount} agent${result.affectedAgentCount === 1 ? "" : "s"} and blocked new work.`,
+      });
+    },
+  });
+
+  const resumeAllMutation = useMutation({
+    mutationFn: () => companiesApi.resume(selectedCompanyId!),
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companies.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.org(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.activity(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId!) }),
+      ]);
+      pushToast({
+        title: "Company resumed",
+        body: `Resumed ${result.affectedAgentCount} paused agent${result.affectedAgentCount === 1 ? "" : "s"}.`,
+      });
+    },
+  });
   const archiveMutation = useMutation({
     mutationFn: ({
       companyId,
@@ -293,6 +337,14 @@ export function CompanySettings() {
       brandColor: brandColor || null
     });
   }
+
+  const pausedAgentCount = agentsQuery.data?.filter((agent) => agent.status === "paused").length ?? 0;
+  const companyPaused = selectedCompany.status === "paused";
+  const canPauseAll = !companyPaused && !pauseAllMutation.isPending && selectedCompany.status !== "archived";
+  const canResumeAll =
+    !resumeAllMutation.isPending &&
+    selectedCompany.status !== "archived" &&
+    (companyPaused || pausedAgentCount > 0);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -462,6 +514,67 @@ export function CompanySettings() {
             checked={!!selectedCompany.requireBoardApprovalForNewAgents}
             onChange={(v) => settingsMutation.mutate(v)}
           />
+        </div>
+      </div>
+
+      {/* Company control */}
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Company control
+        </div>
+        <div className="space-y-3 rounded-md border border-border px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Pause or resume the company</div>
+              <p className="text-xs text-muted-foreground">
+                Pause stops the company and pauses all runnable agents. Resume clears the company pause and unpauses any paused agents.
+              </p>
+            </div>
+            <StatusBadge status={selectedCompany.status} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                if (!selectedCompanyId) return;
+                const confirmed = window.confirm(
+                  `Pause company "${selectedCompany.name}" and all runnable agents?`,
+                );
+                if (!confirmed) return;
+                pauseAllMutation.mutate();
+              }}
+              disabled={!canPauseAll}
+            >
+              <Pause className="mr-1.5 h-3.5 w-3.5" />
+              {pauseAllMutation.isPending ? "Pausing..." : "Pause All"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (!selectedCompanyId) return;
+                resumeAllMutation.mutate();
+              }}
+              disabled={!canResumeAll}
+            >
+              <Play className="mr-1.5 h-3.5 w-3.5" />
+              {resumeAllMutation.isPending ? "Resuming..." : "Resume All"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {pausedAgentCount} paused agent{pausedAgentCount === 1 ? "" : "s"}
+            </span>
+          </div>
+          {pauseAllMutation.isError && (
+            <p className="text-xs text-destructive">
+              {pauseAllMutation.error instanceof Error ? pauseAllMutation.error.message : "Failed to pause the company"}
+            </p>
+          )}
+          {resumeAllMutation.isError && (
+            <p className="text-xs text-destructive">
+              {resumeAllMutation.error instanceof Error ? resumeAllMutation.error.message : "Failed to resume the company"}
+            </p>
+          )}
         </div>
       </div>
 

@@ -26,10 +26,11 @@ import {
   principalPermissionGrants,
   companyMemberships,
 } from "@paperclipai/db";
-import { notFound, unprocessable } from "../errors.js";
+import { conflict, notFound, unprocessable } from "../errors.js";
 
 export function companyService(db: Db) {
   const ISSUE_PREFIX_FALLBACK = "CMP";
+  const MANUAL_PAUSABLE_AGENT_STATUSES = ["active", "idle", "running", "error"] as const;
 
   const companySelection = {
     id: companies.id,
@@ -232,6 +233,114 @@ export function companyService(db: Db) {
         }], tx);
 
         return enrichCompany(hydrated);
+      }),
+
+    pauseAll: (companyId: string) =>
+      db.transaction(async (tx) => {
+        const existing = await getCompanyQuery(tx)
+          .where(eq(companies.id, companyId))
+          .then((rows) => rows[0] ?? null);
+        if (!existing) return null;
+        if (existing.status === "archived") {
+          throw conflict("Archived companies cannot be paused");
+        }
+
+        const now = new Date();
+        const affectedAgents = await tx
+          .select({ id: agents.id })
+          .from(agents)
+          .where(
+            and(
+              eq(agents.companyId, companyId),
+              inArray(agents.status, [...MANUAL_PAUSABLE_AGENT_STATUSES]),
+            ),
+          );
+
+        await tx
+          .update(companies)
+          .set({
+            status: "paused",
+            pauseReason: "manual",
+            pausedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(companies.id, companyId));
+
+        if (affectedAgents.length > 0) {
+          await tx
+            .update(agents)
+            .set({
+              status: "paused",
+              pauseReason: "manual",
+              pausedAt: now,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(agents.companyId, companyId),
+                inArray(agents.status, [...MANUAL_PAUSABLE_AGENT_STATUSES]),
+              ),
+            );
+        }
+
+        const row = await getCompanyQuery(tx)
+          .where(eq(companies.id, companyId))
+          .then((rows) => rows[0] ?? null);
+        if (!row) return null;
+        const [hydrated] = await hydrateCompanySpend([row], tx);
+        return {
+          company: enrichCompany(hydrated),
+          affectedAgentIds: affectedAgents.map((agent) => agent.id),
+        };
+      }),
+
+    resumeAll: (companyId: string) =>
+      db.transaction(async (tx) => {
+        const existing = await getCompanyQuery(tx)
+          .where(eq(companies.id, companyId))
+          .then((rows) => rows[0] ?? null);
+        if (!existing) return null;
+        if (existing.status === "archived") {
+          throw conflict("Archived companies cannot be resumed");
+        }
+
+        const now = new Date();
+        const affectedAgents = await tx
+          .select({ id: agents.id })
+          .from(agents)
+          .where(and(eq(agents.companyId, companyId), eq(agents.status, "paused")));
+
+        await tx
+          .update(companies)
+          .set({
+            status: "active",
+            pauseReason: null,
+            pausedAt: null,
+            updatedAt: now,
+          })
+          .where(eq(companies.id, companyId));
+
+        if (affectedAgents.length > 0) {
+          await tx
+            .update(agents)
+            .set({
+              status: "idle",
+              pauseReason: null,
+              pausedAt: null,
+              updatedAt: now,
+            })
+            .where(and(eq(agents.companyId, companyId), eq(agents.status, "paused")));
+        }
+
+        const row = await getCompanyQuery(tx)
+          .where(eq(companies.id, companyId))
+          .then((rows) => rows[0] ?? null);
+        if (!row) return null;
+        const [hydrated] = await hydrateCompanySpend([row], tx);
+        return {
+          company: enrichCompany(hydrated),
+          affectedAgentIds: affectedAgents.map((agent) => agent.id),
+        };
       }),
 
     archive: (id: string) =>

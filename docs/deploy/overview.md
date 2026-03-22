@@ -35,6 +35,7 @@ Paperclip supports three deployment configurations, from zero-friction local to 
 - Explicit public URL required
 - Stricter security checks
 - Best for: cloud hosting, internet-facing deployment
+- If the UI is hosted separately from the API, build it with `VITE_PAPERCLIP_API_URL=<public-api-origin>` so browser requests target the real backend instead of the static UI origin.
 
 ## Choosing a Mode
 

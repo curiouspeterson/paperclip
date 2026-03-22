@@ -22,7 +22,7 @@ import { History } from "lucide-react";
 import type { Agent } from "@paperclipai/shared";
 
 export function Activity() {
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompanyId, selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [filter, setFilter] = useState("all");
 
@@ -68,12 +68,13 @@ export function Activity() {
 
   const entityNameMap = useMemo(() => {
     const map = new Map<string, string>();
+    if (selectedCompany) map.set(`company:${selectedCompany.id}`, selectedCompany.name);
     for (const i of issues ?? []) map.set(`issue:${i.id}`, i.identifier ?? i.id.slice(0, 8));
     for (const a of agents ?? []) map.set(`agent:${a.id}`, a.name);
     for (const p of projects ?? []) map.set(`project:${p.id}`, p.name);
     for (const g of goals ?? []) map.set(`goal:${g.id}`, g.title);
     return map;
-  }, [issues, agents, projects, goals]);
+  }, [issues, agents, projects, goals, selectedCompany]);
 
   const entityTitleMap = useMemo(() => {
     const map = new Map<string, string>();

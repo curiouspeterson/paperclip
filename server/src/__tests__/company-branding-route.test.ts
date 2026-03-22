@@ -10,6 +10,8 @@ const mockCompanyService = vi.hoisted(() => ({
   getById: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  pauseAll: vi.fn(),
+  resumeAll: vi.fn(),
   archive: vi.fn(),
   remove: vi.fn(),
 }));
@@ -24,6 +26,10 @@ const mockAccessService = vi.hoisted(() => ({
 
 const mockBudgetService = vi.hoisted(() => ({
   upsertPolicy: vi.fn(),
+}));
+
+const mockHeartbeatService = vi.hoisted(() => ({
+  cancelActiveForAgent: vi.fn(),
 }));
 
 const mockCompanyPortabilityService = vi.hoisted(() => ({
@@ -41,6 +47,7 @@ vi.mock("../services/index.js", () => ({
   budgetService: () => mockBudgetService,
   companyPortabilityService: () => mockCompanyPortabilityService,
   companyService: () => mockCompanyService,
+  heartbeatService: () => mockHeartbeatService,
   logActivity: mockLogActivity,
 }));
 
@@ -79,7 +86,10 @@ function createApp(actor: Record<string, unknown>) {
 describe("PATCH /api/companies/:companyId/branding", () => {
   beforeEach(() => {
     mockCompanyService.update.mockReset();
+    mockCompanyService.pauseAll.mockReset();
+    mockCompanyService.resumeAll.mockReset();
     mockAgentService.getById.mockReset();
+    mockHeartbeatService.cancelActiveForAgent.mockReset();
     mockLogActivity.mockReset();
   });
 
@@ -192,5 +202,77 @@ describe("PATCH /api/companies/:companyId/branding", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("Validation error");
     expect(mockCompanyService.update).not.toHaveBeenCalled();
+  });
+
+  it("pauses the company and all resumable agents", async () => {
+    const company = {
+      ...createCompany(),
+      status: "paused",
+      pauseReason: "manual",
+      pausedAt: new Date("2026-03-22T16:00:00.000Z"),
+    };
+    mockCompanyService.pauseAll.mockResolvedValue({
+      company,
+      affectedAgentIds: ["agent-1", "agent-2"],
+    });
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "local_implicit",
+    });
+
+    const res = await request(app).post("/api/companies/company-1/pause").send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.company.status).toBe("paused");
+    expect(res.body.affectedAgentCount).toBe(2);
+    expect(mockHeartbeatService.cancelActiveForAgent).toHaveBeenCalledTimes(2);
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        companyId: "company-1",
+        actorType: "user",
+        actorId: "user-1",
+        action: "company.paused",
+        entityType: "company",
+        entityId: "company-1",
+      }),
+    );
+  });
+
+  it("resumes the company and all paused agents", async () => {
+    const company = {
+      ...createCompany(),
+      status: "active",
+      pauseReason: null,
+      pausedAt: null,
+    };
+    mockCompanyService.resumeAll.mockResolvedValue({
+      company,
+      affectedAgentIds: ["agent-1"],
+    });
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "local_implicit",
+    });
+
+    const res = await request(app).post("/api/companies/company-1/resume").send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.company.status).toBe("active");
+    expect(res.body.affectedAgentCount).toBe(1);
+    expect(mockHeartbeatService.cancelActiveForAgent).not.toHaveBeenCalled();
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        companyId: "company-1",
+        actorType: "user",
+        actorId: "user-1",
+        action: "company.resumed",
+        entityType: "company",
+        entityId: "company-1",
+      }),
+    );
   });
 });

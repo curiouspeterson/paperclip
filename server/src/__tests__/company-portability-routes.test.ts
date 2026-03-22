@@ -24,6 +24,10 @@ const mockBudgetService = vi.hoisted(() => ({
   upsertPolicy: vi.fn(),
 }));
 
+const mockHeartbeatService = vi.hoisted(() => ({
+  cancelActiveForAgent: vi.fn(),
+}));
+
 const mockCompanyPortabilityService = vi.hoisted(() => ({
   exportBundle: vi.fn(),
   previewExport: vi.fn(),
@@ -39,6 +43,7 @@ vi.mock("../services/index.js", () => ({
   budgetService: () => mockBudgetService,
   companyPortabilityService: () => mockCompanyPortabilityService,
   companyService: () => mockCompanyService,
+  heartbeatService: () => mockHeartbeatService,
   logActivity: mockLogActivity,
 }));
 

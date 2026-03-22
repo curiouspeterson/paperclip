@@ -29,6 +29,9 @@ vi.mock("../services/index.js", () => ({
   agentService: () => ({
     getById: vi.fn(),
   }),
+  heartbeatService: () => ({
+    cancelActiveForAgent: vi.fn(),
+  }),
   logActivity: vi.fn(),
 }));
 
