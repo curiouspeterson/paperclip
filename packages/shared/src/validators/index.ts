@@ -66,6 +66,38 @@ export {
   type AgentSkillSync,
 } from "./adapter-skills.js";
 export {
+  companySkillSourceTypeSchema,
+  companySkillTrustLevelSchema,
+  companySkillCompatibilitySchema,
+  companySkillSourceBadgeSchema,
+  companySkillFileInventoryEntrySchema,
+  companySkillSchema,
+  companySkillListItemSchema,
+  companySkillUsageAgentSchema,
+  companySkillDetailSchema,
+  companySkillUpdateStatusSchema,
+  companySkillImportSchema,
+  companySkillProjectScanRequestSchema,
+  companySkillProjectScanSkippedSchema,
+  companySkillProjectScanConflictSchema,
+  companySkillProjectScanResultSchema,
+  companySkillCreateSchema,
+  companySkillFileDetailSchema,
+  companySkillFileUpdateSchema,
+  type CompanySkillImport,
+  type CompanySkillProjectScan,
+  type CompanySkillCreate,
+  type CompanySkillFileUpdate,
+} from "./company-skill.js";
+export {
+  agentSkillStateSchema,
+  agentSkillSyncModeSchema,
+  agentSkillEntrySchema,
+  agentSkillSnapshotSchema,
+  agentSkillSyncSchema,
+  type AgentSkillSync,
+} from "./adapter-skills.js";
+export {
   portabilityIncludeSchema,
   portabilityEnvInputSchema,
   portabilityCompanyManifestEntrySchema,
