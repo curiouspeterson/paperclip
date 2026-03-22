@@ -384,6 +384,31 @@ def build_runtime_preflight(agent: dict[str, Any], issue: dict[str, Any]) -> str
         checks.append(f"MAILCHIMP_API_KEY={env_presence('MAILCHIMP_API_KEY')}")
         checks.append("MAILCHIMP_WEBHOOK_SECRET=not_required_by_current_integration")
 
+    if any(token in title for token in ("instagram", "tiktok", "social poster", "social", "x.com", "twitter", "x ")):
+        checks.append(f"INSTAGRAM_USERNAME={env_presence('INSTAGRAM_USERNAME')}")
+        checks.append(f"INSTAGRAM_PASSWORD={env_presence('INSTAGRAM_PASSWORD')}")
+        checks.append(f"TIKTOK_USERNAME={env_presence('TIKTOK_USERNAME')}")
+        checks.append(f"TIKTOK_PASSWORD={env_presence('TIKTOK_PASSWORD')}")
+        checks.append(f"X_CONSUMER_KEY={env_presence('X_CONSUMER_KEY')}")
+        checks.append(f"X_CONSUMER_SECRET={env_presence('X_CONSUMER_SECRET')}")
+        checks.append(f"X_BEARER_TOKEN={env_presence('X_BEARER_TOKEN')}")
+        checks.append("SOCIAL_ACCESS_PATH=credential_login_preferred")
+
+    if any(token in title for token in ("riverside", "youtube", "clip extractor", "clip", "short-form")):
+        checks.append(f"RIVERSIDE_FM_USERNAME={env_presence('RIVERSIDE_FM_USERNAME')}")
+        checks.append(f"RIVERSIDE_FM_PASSWORD={env_presence('RIVERSIDE_FM_PASSWORD')}")
+        checks.append(f"YOUTUBE_CREATOR_USERNAME={env_presence('YOUTUBE_CREATOR_USERNAME')}")
+        checks.append(f"YOUTUBE_CREATOR_PASSWORD={env_presence('YOUTUBE_CREATOR_PASSWORD')}")
+        checks.append(f"ADOBE_USERNAME={env_presence('ADOBE_USERNAME')}")
+        checks.append(f"ADOBE_PASSWORD={env_presence('ADOBE_PASSWORD')}")
+        checks.append("YOUTUBE_API_KEY=not_required_when_browser_session_is_used")
+        checks.append("CLIP_ACCESS_PATH=credential_login_preferred")
+
+    if "fable" in title:
+        iphone_mirroring_present = os.path.exists("/System/Applications/iPhone Mirroring.app")
+        checks.append("FABLE_API=not_available_use_iphone_mirroring")
+        checks.append(f"IPHONE_MIRRORING_APP={'present' if iphone_mirroring_present else 'missing'}")
+
     if any(token in title for token in ("spotify", "rss", "apple", "podcast", "feed")):
         checks.append(f"APPLEID_USERNAME={env_presence('APPLEID_USERNAME')}")
         checks.append(f"APPLEID_PASSWORD={env_presence('APPLEID_PASSWORD')}")
@@ -521,6 +546,29 @@ def build_prompt(
     runtime_preflight = build_runtime_preflight(agent, issue)
     browser_automation = resolve_browser_automation()
     browser_summary = browser_automation_summary(browser_automation)
+    issue_title_lower = str(issue.get("title") or "").lower()
+    fable_guidance = ""
+    if "fable" in issue_title_lower:
+        fable_guidance = (
+            "Fable has no API integration in this environment. "
+            "Do not create API-secret or API-client tasks for Fable. "
+            "Prefer Hermes iPhone Mirroring tools for Fable interaction when available. "
+            "If iPhone Mirroring is unavailable, fall back to standard browser automation only."
+        )
+    social_guidance = ""
+    if any(token in issue_title_lower for token in ("instagram", "tiktok", "social", "x.com", "twitter")):
+        social_guidance = (
+            "Social channel credentials may already be bound in the runtime preflight above. "
+            "If Instagram, TikTok, or X credentials are present, do not create secret-provisioning tasks for them. "
+            "Focus on workflow setup, content templates, validation, and login/session verification."
+        )
+    clip_guidance = ""
+    if any(token in issue_title_lower for token in ("riverside", "youtube", "clip", "short-form")):
+        clip_guidance = (
+            "Riverside, YouTube creator, and Adobe credentials may already be bound in the runtime preflight above. "
+            "If those credentials are present, do not create provisioning tasks for them. "
+            "Prefer browser/session-based workflows over inventing a YouTube API-key requirement unless a concrete implementation step proves one is needed."
+        )
 
     # Pre-fetch company context so the LLM has real data without needing API access
     company_context = build_company_context(agent)
@@ -546,6 +594,13 @@ def build_prompt(
 
         Browser automation:
         {browser_summary}
+
+        Fable guidance:
+        {fable_guidance or "No special platform guidance."}
+
+        Additional guidance:
+        {social_guidance or "No special social guidance."}
+        {clip_guidance or "No special clip guidance."}
 
         Company context:
         {company_context}
@@ -597,14 +652,17 @@ def build_prompt(
     Task:
     {issue_summary(issue)}
 
-    Runtime preflight:
-    {runtime_preflight}
+        Runtime preflight:
+        {runtime_preflight}
 
-    Browser automation:
-    {browser_summary}
+        Browser automation:
+        {browser_summary}
 
-    Company context:
-    {company_context}
+        Fable guidance:
+        {fable_guidance or "No special platform guidance."}
+
+        Company context:
+        {company_context}
 
     Recent comments:
     {comments_summary(comments)}
@@ -623,6 +681,9 @@ def build_prompt(
 
     Keep it brief. If unsure, keep status as "in_progress".
     If browser automation is configured, prefer the named provider/command and reuse the named session profile instead of inventing a different browser path.
+    If Fable is involved, do not propose API-integration or API-secret tasks; use iPhone Mirroring when possible.
+    {social_guidance}
+    {clip_guidance}
     {delegation_guidance}
     {"Do not write a plan for this run. Set plan_markdown and change_summary to empty strings. Just post a concise status update or blocker." if status_only_mode else ""}
     {"Focus on creating a concise implementation plan for this run. Include a 3-5 bullet plan and a short status update." if plan_mode else ""}
@@ -961,6 +1022,15 @@ def normalize_subtask_payload(
     return payload
 
 
+def can_delegate_subtask_assignments(agent: dict[str, Any], issue: dict[str, Any]) -> bool:
+    if isinstance(agent.get("access"), dict) and agent["access"].get("canAssignTasks"):
+        return True
+    agent_id = str(agent.get("id") or "").strip()
+    if not agent_id:
+        return False
+    return str(issue.get("assigneeAgentId") or "").strip() == agent_id
+
+
 def create_subtasks(
     parent_issue: dict[str, Any],
     raw_subtasks: Any,
@@ -1123,9 +1193,6 @@ def main() -> int:
         raise WorkerError("Unable to resolve current Paperclip agent")
 
     debug(f"Resolved agent {agent.get('name') or agent['id']}")
-    can_assign_tasks = bool(
-        isinstance(agent.get("access"), dict) and agent["access"].get("canAssignTasks")
-    )
     issue = fetch_active_issue(agent)
     if issue is None:
         debug("No assigned issue found")
@@ -1142,6 +1209,11 @@ def main() -> int:
     if not isinstance(comments, list):
         comments = []
 
+    can_assign_tasks = bool(
+        isinstance(agent.get("access"), dict) and agent["access"].get("canAssignTasks")
+    )
+    allow_subtask_assignments = can_delegate_subtask_assignments(agent, issue)
+
     prompt = build_prompt(agent, issue, comments, can_assign_tasks=can_assign_tasks)
     debug(f"Built prompt ({len(prompt)} chars)")
     hermes_output = run_hermes_with_retry(agent, issue, prompt, skills_dir=skills_dir)
@@ -1153,7 +1225,7 @@ def main() -> int:
     created_subtasks = create_subtasks(
         issue,
         hermes_output.get("subtasks"),
-        allow_assignments=can_assign_tasks,
+        allow_assignments=allow_subtask_assignments,
     )
     if created_subtasks:
         comment_markdown = append_subtask_summary(comment_markdown, created_subtasks)
