@@ -38,12 +38,16 @@ This keeps one authenticated auth stack while still separating low-friction priv
 - login required
 - low-friction URL handling (`auto` base URL mode)
 - private-host trust policy required
+- Google OAuth, when enabled, should register the redirect URI `<base-url>/api/auth/oauth2/callback/google`
+- runtime env vars: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
 
 ## `authenticated + public`
 
 - login required
 - explicit public URL required
 - stricter deployment checks and failures in doctor
+- Google OAuth, when enabled, should register the redirect URI `<public-base-url>/api/auth/oauth2/callback/google`
+- runtime env vars: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
 
 ## 4. Onboarding UX Contract
 

@@ -2,6 +2,7 @@ import type { Request, RequestHandler } from "express";
 import type { IncomingHttpHeaders } from "node:http";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { genericOAuth, type GenericOAuthConfig } from "better-auth/plugins/generic-oauth";
 import { toNodeHandler } from "better-auth/node";
 import type { Db } from "@paperclipai/db";
 import {
@@ -24,6 +25,23 @@ export type BetterAuthSessionResult = {
 };
 
 type BetterAuthInstance = ReturnType<typeof betterAuth>;
+
+export function buildGoogleOAuthConfig(): GenericOAuthConfig | null {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+
+  if (!clientId) return null;
+
+  const config: GenericOAuthConfig = {
+    providerId: "google",
+    discoveryUrl: "https://accounts.google.com/.well-known/openid-configuration",
+    clientId,
+    scopes: ["openid", "email", "profile"],
+    pkce: true,
+  };
+  if (clientSecret) config.clientSecret = clientSecret;
+  return config;
+}
 
 function headersFromNodeHeaders(rawHeaders: IncomingHttpHeaders): Headers {
   const headers = new Headers();
@@ -69,14 +87,17 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins?
   const baseUrl = config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined;
   const secret = process.env.BETTER_AUTH_SECRET ?? process.env.PAPERCLIP_AGENT_JWT_SECRET ?? "paperclip-dev-secret";
   const effectiveTrustedOrigins = trustedOrigins ?? deriveAuthTrustedOrigins(config);
+  const googleOAuthConfig = buildGoogleOAuthConfig();
 
   const publicUrl = process.env.PAPERCLIP_PUBLIC_URL ?? baseUrl;
   const isHttpOnly = publicUrl ? publicUrl.startsWith("http://") : false;
+  const plugins = googleOAuthConfig ? [genericOAuth({ config: [googleOAuthConfig] })] : [];
 
   const authConfig = {
     baseURL: baseUrl,
     secret,
     trustedOrigins: effectiveTrustedOrigins,
+    plugins,
     database: drizzleAdapter(db, {
       provider: "pg",
       schema: {

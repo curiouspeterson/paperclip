@@ -43,6 +43,11 @@ async function authPost(path: string, body: Record<string, unknown>) {
   return payload;
 }
 
+type OAuthRedirectResponse = {
+  url?: string;
+  redirect?: boolean;
+};
+
 export const authApi = {
   getSession: async (): Promise<AuthSession | null> => {
     const res = await fetch("/api/auth/get-session", {
@@ -66,6 +71,18 @@ export const authApi = {
 
   signUpEmail: async (input: { name: string; email: string; password: string }) => {
     await authPost("/sign-up/email", input);
+  },
+
+  signInGoogle: async (input: { callbackURL: string }) => {
+    const payload = await authPost("/sign-in/oauth2", {
+      providerId: "google",
+      callbackURL: input.callbackURL,
+    });
+    const data = payload as OAuthRedirectResponse | null;
+    if (!data?.url) {
+      throw new Error("Google sign-in did not return a redirect URL");
+    }
+    return data;
   },
 
   signOut: async () => {

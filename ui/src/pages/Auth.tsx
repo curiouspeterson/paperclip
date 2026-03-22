@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "@/lib/router";
 import { authApi } from "../api/auth";
+import { healthApi } from "../api/health";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { AsciiArtAnimation } from "@/components/AsciiArtAnimation";
@@ -20,6 +21,11 @@ export function AuthPage() {
   const [error, setError] = useState<string | null>(null);
 
   const nextPath = useMemo(() => searchParams.get("next") || "/", [searchParams]);
+  const { data: health } = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => healthApi.get(),
+    retry: false,
+  });
   const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
@@ -55,10 +61,21 @@ export function AuthPage() {
     },
   });
 
+  const googleMutation = useMutation({
+    mutationFn: async () => {
+      const { url } = await authApi.signInGoogle({ callbackURL: nextPath });
+      window.location.assign(url ?? nextPath);
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+    },
+  });
+
   const canSubmit =
     email.trim().length > 0 &&
     password.trim().length > 0 &&
     (mode === "sign_in" || (name.trim().length > 0 && password.trim().length >= 8));
+  const canUseGoogleAuth = health?.deploymentMode === "authenticated" && health.authReady !== false;
 
   if (isSessionLoading) {
     return (
@@ -87,8 +104,36 @@ export function AuthPage() {
               : "Create an account for this instance. Email confirmation is not required in v1."}
           </p>
 
+          {canUseGoogleAuth && (
+            <>
+              <div className="mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={googleMutation.isPending}
+                  onClick={() => {
+                    if (googleMutation.isPending) return;
+                    setError(null);
+                    googleMutation.mutate();
+                  }}
+                >
+                  {googleMutation.isPending ? "Connecting…" : "Continue with Google"}
+                </Button>
+              </div>
+
+              <div className="my-6 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+                  or use email
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            </>
+          )}
+
           <form
-            className="mt-6 space-y-4"
+            className="space-y-4"
             onSubmit={(event) => {
               event.preventDefault();
               if (mutation.isPending) return;
