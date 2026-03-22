@@ -6,9 +6,11 @@ import { issueRoutes } from "../routes/issues.js";
 
 const mockIssueService = vi.hoisted(() => ({
   getById: vi.fn(),
+  create: vi.fn(),
   update: vi.fn(),
   checkout: vi.fn(),
   release: vi.fn(),
+  assertCheckoutOwner: vi.fn(),
   getAncestors: vi.fn(),
   findMentionedProjectIds: vi.fn(),
   getCommentCursor: vi.fn(),
@@ -113,6 +115,14 @@ function makeIssue(overrides?: Partial<Record<string, unknown>>) {
 describe("issue contract routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIssueService.create.mockResolvedValue(makeIssue());
+    mockIssueService.assertCheckoutOwner.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+      checkoutRunId: RUN_ID,
+      adoptedFromRunId: null,
+    });
     mockIssueService.findMentionedProjectIds.mockResolvedValue([]);
     mockIssueService.getCommentCursor.mockResolvedValue(null);
     mockIssueService.getAncestors.mockResolvedValue([]);
@@ -225,6 +235,100 @@ describe("issue contract routes", () => {
 
     expect(res.status).toBe(200);
     expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", { title: "Updated title" });
+  });
+
+  it("allows an agent to create an assigned child issue under their own parent issue", async () => {
+    mockIssueService.getById.mockResolvedValueOnce(makeIssue({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "todo",
+      assigneeAgentId: AGENT_ONE_ID,
+    }));
+    mockIssueService.create.mockResolvedValue(makeIssue({
+      id: "33333333-3333-4333-8333-333333333333",
+      title: "Delegated child issue",
+      parentId: "22222222-2222-4222-8222-222222222222",
+      assigneeAgentId: AGENT_TWO_ID,
+    }));
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post(`/api/companies/${COMPANY_ID}/issues`)
+      .send({
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockIssueService.create).toHaveBeenCalledWith(
+      COMPANY_ID,
+      expect.objectContaining({
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      }),
+    );
+  });
+
+  it("rejects agent-created assigned child issues when the parent issue is not owned by the actor", async () => {
+    mockIssueService.getById.mockResolvedValueOnce(makeIssue({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "todo",
+      assigneeAgentId: AGENT_TWO_ID,
+    }));
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post(`/api/companies/${COMPANY_ID}/issues`)
+      .send({
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      });
+
+    expect(res.status).toBe(403);
+    expect(mockIssueService.create).not.toHaveBeenCalled();
+  });
+
+  it("requires checkout-run ownership when an agent delegates from an in_progress parent issue", async () => {
+    mockIssueService.getById.mockResolvedValueOnce(makeIssue({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+    }));
+    mockIssueService.assertCheckoutOwner.mockRejectedValueOnce(
+      Object.assign(new Error("Issue run ownership conflict"), { status: 409, expose: true }),
+    );
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post(`/api/companies/${COMPANY_ID}/issues`)
+      .send({
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      });
+
+    expect(res.status).toBe(409);
+    expect(mockIssueService.create).not.toHaveBeenCalled();
   });
 
   it("requires agent ownership for issue document updates", async () => {

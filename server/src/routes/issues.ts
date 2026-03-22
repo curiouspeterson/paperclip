@@ -128,6 +128,61 @@ export function issueRoutes(db: Db, storage: StorageService) {
     throw unauthorized();
   }
 
+  async function assertCanCreateDelegatedChildIssue(
+    req: Request,
+    res: Response,
+    companyId: string,
+    parentId: string,
+  ) {
+    assertCompanyAccess(req, companyId);
+    if (req.actor.type !== "agent" || !req.actor.agentId) {
+      await assertCanAssignTasks(req, companyId);
+      return true;
+    }
+
+    const parentIssue = await svc.getById(parentId);
+    if (!parentIssue || parentIssue.companyId !== companyId) {
+      res.status(404).json({ error: "Parent issue not found" });
+      return false;
+    }
+    if (parentIssue.assigneeAgentId !== req.actor.agentId) {
+      res.status(403).json({ error: "Agent can only delegate from their assigned issue" });
+      return false;
+    }
+    if (parentIssue.status !== "in_progress") {
+      return true;
+    }
+
+    const runId = requireAgentRunId(req, res);
+    if (!runId) return false;
+    try {
+      await svc.assertCheckoutOwner(parentIssue.id, req.actor.agentId, runId);
+      return true;
+    } catch (err) {
+      if (err instanceof HttpError) {
+        res.status(err.status).json({ error: err.message });
+        return false;
+      }
+      if (typeof err === "object" && err !== null) {
+        const statusCode =
+          typeof (err as { statusCode?: unknown }).statusCode === "number"
+            ? (err as { statusCode: number }).statusCode
+            : typeof (err as { status?: unknown }).status === "number"
+              ? (err as { status: number }).status
+              : null;
+        const message =
+          typeof (err as { message?: unknown }).message === "string"
+            ? (err as { message: string }).message
+            : "Issue run ownership conflict";
+        if (statusCode) {
+          res.status(statusCode).json({ error: message });
+          return false;
+        }
+      }
+      throw err;
+    }
+  }
+
   function requireAgentRunId(req: Request, res: Response) {
     if (req.actor.type !== "agent") return null;
     const runId = req.actor.runId?.trim();
@@ -801,7 +856,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
-      await assertCanAssignTasks(req, companyId);
+      const delegatedCreate =
+        req.actor.type === "agent" &&
+        typeof req.body.parentId === "string" &&
+        req.body.parentId.trim().length > 0;
+      if (delegatedCreate) {
+        if (!(await assertCanCreateDelegatedChildIssue(req, res, companyId, req.body.parentId))) return;
+      } else {
+        await assertCanAssignTasks(req, companyId);
+      }
     }
 
     const actor = getActorInfo(req);

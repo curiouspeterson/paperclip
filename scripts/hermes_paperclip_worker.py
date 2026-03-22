@@ -29,9 +29,10 @@ MAX_SUBTASKS = 10
 
 REQUIRED_RESPONSE_KEYS = {"status", "comment_markdown", "plan_markdown", "change_summary"}
 BROWSER_AUTOMATION_PROVIDERS = {"playwright", "page_agent", "lightpanda"}
-SUBTASK_ALLOWED_STATUSES = {"backlog", "todo", "in_progress", "blocked"}
+SUBTASK_ALLOWED_STATUSES = {"backlog", "todo", "in_progress", "in_review", "blocked"}
 CHECKOUT_EXPECTED_STATUSES = ["todo", "backlog", "blocked", "in_review"]
 SUBTASK_ALLOWED_PRIORITIES = {"critical", "high", "medium", "low"}
+OPEN_SUBTASK_DEDUPE_STATUSES = {"backlog", "todo", "in_progress", "in_review", "blocked"}
 
 
 class WorkerError(RuntimeError):
@@ -379,6 +380,10 @@ def build_runtime_preflight(agent: dict[str, Any], issue: dict[str, Any]) -> str
         checks.append(f"SITEGROUND_USERNAME={env_presence('SITEGROUND_USERNAME')}")
         checks.append(f"SITEGROUND_PASSWORD={env_presence('SITEGROUND_PASSWORD')}")
 
+    if any(token in title for token in ("mailchimp", "newsletter", "campaign")):
+        checks.append(f"MAILCHIMP_API_KEY={env_presence('MAILCHIMP_API_KEY')}")
+        checks.append("MAILCHIMP_WEBHOOK_SECRET=not_required_by_current_integration")
+
     if any(token in title for token in ("spotify", "rss", "apple", "podcast", "feed")):
         checks.append(f"APPLEID_USERNAME={env_presence('APPLEID_USERNAME')}")
         checks.append(f"APPLEID_PASSWORD={env_presence('APPLEID_PASSWORD')}")
@@ -487,7 +492,13 @@ def build_company_context(agent: dict[str, Any]) -> str:
     return "\n\n".join(sections) if sections else "No company context available."
 
 
-def build_prompt(agent: dict[str, Any], issue: dict[str, Any], comments: list[dict[str, Any]]) -> str:
+def build_prompt(
+    agent: dict[str, Any],
+    issue: dict[str, Any],
+    comments: list[dict[str, Any]],
+    *,
+    can_assign_tasks: bool,
+) -> str:
     role_prompt = str(agent.get("adapterConfig", {}).get("promptTemplate") or "").strip()
     wake_reason = os.environ.get("PAPERCLIP_WAKE_REASON", "").strip()
     wake_comment_id = os.environ.get("PAPERCLIP_WAKE_COMMENT_ID", "").strip()
@@ -553,6 +564,25 @@ def build_prompt(agent: dict[str, Any], issue: dict[str, Any], comments: list[di
         """
         return textwrap.dedent(prompt).strip()
 
+    subtasks_schema = """
+      "subtasks": [
+        {
+          "title": "short governed issue title",
+          "description": "optional longer details",
+          "priority": "critical | high | medium | low",
+          "status": "backlog | todo | in_progress | blocked",
+          "assigneeAgentId": "uuid of delegated agent, if known",
+          "assigneeUserId": "user id, if delegated to a human"
+        }
+      ]
+"""
+
+    delegation_guidance = (
+        'If this work needs delegated follow-up, include governed subtasks in the "subtasks" array. '
+        "The worker will create them as child issues under this issue.\n"
+        "Use exact agent ids from the company context for assigneeAgentId. If you are not sure, leave assigneeAgentId blank."
+    )
+
     prompt = f"""
     Return exactly one JSON object and nothing else.
 
@@ -588,23 +618,12 @@ def build_prompt(agent: dict[str, Any], issue: dict[str, Any], comments: list[di
       "status": "in_progress" | "blocked" | "done",
       "comment_markdown": "1-3 short sentences",
       "plan_markdown": "short markdown plan, or empty string",
-      "change_summary": "very short summary, or empty string",
-      "subtasks": [
-        {{
-          "title": "short governed issue title",
-          "description": "optional longer details",
-          "priority": "critical | high | medium | low",
-          "status": "backlog | todo | in_progress | blocked",
-          "assigneeAgentId": "uuid of delegated agent, if known",
-          "assigneeUserId": "user id, if delegated to a human"
-        }}
-      ]
+      "change_summary": "very short summary, or empty string",{subtasks_schema}
     }}
 
     Keep it brief. If unsure, keep status as "in_progress".
     If browser automation is configured, prefer the named provider/command and reuse the named session profile instead of inventing a different browser path.
-    If this work needs delegated follow-up, include governed subtasks in the "subtasks" array. The worker will create them as child issues under this issue.
-    Use exact agent ids from the company context for assigneeAgentId. If you are not sure, leave assigneeAgentId blank.
+    {delegation_guidance}
     {"Do not write a plan for this run. Set plan_markdown and change_summary to empty strings. Just post a concise status update or blocker." if status_only_mode else ""}
     {"Focus on creating a concise implementation plan for this run. Include a 3-5 bullet plan and a short status update." if plan_mode else ""}
     """
@@ -807,6 +826,8 @@ def normalize_subtask_status(value: Any) -> str:
     status = str(value or "").strip().lower()
     if status not in SUBTASK_ALLOWED_STATUSES:
         return "backlog"
+    if status == "in_progress":
+        return "in_review"
     return status
 
 
@@ -815,6 +836,19 @@ def normalize_subtask_priority(value: Any) -> str:
     if priority not in SUBTASK_ALLOWED_PRIORITIES:
         return "medium"
     return priority
+
+
+def build_subtask_dedupe_key(title: str, description: str | None = None) -> str:
+    raw = f"{title} {description or ''}".lower()
+    normalized = " ".join(re.findall(r"[a-z0-9]+", raw))
+    tokens = set(normalized.split())
+    if (
+        "mailchimp" in tokens
+        and ("secret" in tokens or ("api" in tokens and "key" in tokens))
+        and ("adam" in tokens or "provide" in tokens or "request" in tokens or "provision" in tokens)
+    ):
+        return "mailchimp-secret-escalation"
+    return normalized
 
 
 def ensure_issue_checkout(issue: dict[str, Any], agent_id: str) -> bool:
@@ -948,11 +982,28 @@ def create_subtasks(
     existing_children = api_request("GET", f"/companies/{company_id}/issues?{existing_children_query}")
     if not isinstance(existing_children, list):
         raise WorkerError("Failed to load existing child issues for parent task")
-    existing_by_title = {
-        str(child.get("title") or "").strip().casefold(): child
-        for child in existing_children
-        if str(child.get("title") or "").strip()
-    }
+    existing_by_key: dict[str, dict[str, Any]] = {}
+    for child in existing_children:
+        child_title = str(child.get("title") or "").strip()
+        if not child_title:
+            continue
+        existing_by_key[build_subtask_dedupe_key(child_title, str(child.get("description") or "").strip())] = child
+
+    goal_id = str(parent_issue.get("goalId") or "").strip()
+    if goal_id:
+        goal_issues = api_request("GET", f"/companies/{company_id}/issues?goalId={urllib.parse.quote(goal_id)}")
+        if isinstance(goal_issues, list):
+            for existing_issue in goal_issues:
+                if str(existing_issue.get("status") or "").strip().lower() not in OPEN_SUBTASK_DEDUPE_STATUSES:
+                    continue
+                existing_title = str(existing_issue.get("title") or "").strip()
+                if not existing_title:
+                    continue
+                key = build_subtask_dedupe_key(
+                    existing_title,
+                    str(existing_issue.get("description") or "").strip(),
+                )
+                existing_by_key.setdefault(key, existing_issue)
     company_agents = api_request("GET", f"/companies/{company_id}/agents")
     valid_agent_ids: set[str] | None = None
     if isinstance(company_agents, list):
@@ -970,15 +1021,15 @@ def create_subtasks(
             valid_agent_ids=valid_agent_ids,
             allow_assignments=allow_assignments,
         )
-        normalized_title = payload["title"].strip().casefold()
-        existing = existing_by_title.get(normalized_title)
+        dedupe_key = build_subtask_dedupe_key(payload["title"], str(payload.get("description") or "").strip())
+        existing = existing_by_key.get(dedupe_key)
         if existing:
             debug(
                 f"Reusing existing subtask {existing.get('identifier') or existing.get('id')} "
                 f"for {payload['title']!r}"
             )
             created.append(existing)
-            existing_by_title[normalized_title] = existing
+            existing_by_key[dedupe_key] = existing
             continue
         debug(
             "Creating governed subtask "
@@ -994,7 +1045,7 @@ def create_subtasks(
         if not isinstance(issue, dict):
             raise WorkerError("Paperclip API returned an invalid subtask creation response")
         created.append(issue)
-        existing_by_title[normalized_title] = issue
+        existing_by_key[dedupe_key] = issue
         debug(
             f"Created subtask {issue.get('identifier') or issue.get('id')} "
             f"-> {issue.get('title') or payload['title']!r}"
@@ -1091,7 +1142,7 @@ def main() -> int:
     if not isinstance(comments, list):
         comments = []
 
-    prompt = build_prompt(agent, issue, comments)
+    prompt = build_prompt(agent, issue, comments, can_assign_tasks=can_assign_tasks)
     debug(f"Built prompt ({len(prompt)} chars)")
     hermes_output = run_hermes_with_retry(agent, issue, prompt, skills_dir=skills_dir)
 
