@@ -128,6 +128,7 @@ export function ToggleField({
         {hint && <HintIcon text={hint} />}
       </div>
       <button
+        data-slot="toggle"
         className={cn(
           "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
           checked ? "bg-green-600" : "bg-muted"
@@ -176,6 +177,7 @@ export function ToggleWithNumber({
           {hint && <HintIcon text={hint} />}
         </div>
         <button
+          data-slot="toggle"
           className={cn(
             "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
             checked ? "bg-green-600" : "bg-muted"
