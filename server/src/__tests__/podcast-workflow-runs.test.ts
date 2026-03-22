@@ -129,6 +129,38 @@ afterEach(async () => {
 });
 
 describe("runPodcastWorkflowAction", () => {
+  it("uses the configured python binary for python scripts", async () => {
+    const workflow = await createTempWorkflow();
+    const scriptPath = path.join(workflow.manifest.runtimeRoot ?? "", "generate_board_review.py");
+    await fs.writeFile(scriptPath, "#!/usr/bin/env python3\nprint('ok')\n", "utf8");
+    await fs.chmod(scriptPath, 0o755);
+
+    const original = process.env.PAPERCLIP_PYTHON_BIN;
+    process.env.PAPERCLIP_PYTHON_BIN = "/opt/homebrew/bin/python3";
+
+    try {
+      const result = await runPodcastWorkflowAction({
+        workflow: {
+          ...workflow,
+          scriptRefs: {
+            ...workflow.scriptRefs,
+            generateBoardReviewPath: scriptPath,
+          },
+        },
+        request: {
+          action: "generate_board_review",
+          manifestPath: workflow.manifest.manifestPath,
+        },
+        recorder: createRecorderDouble(),
+      });
+
+      expect(result.operation.command).toContain("/opt/homebrew/bin/python3");
+    } finally {
+      if (original === undefined) delete process.env.PAPERCLIP_PYTHON_BIN;
+      else process.env.PAPERCLIP_PYTHON_BIN = original;
+    }
+  });
+
   it("marks successful non-final actions as active", async () => {
     const workflow = await createTempWorkflow();
     const result = await runPodcastWorkflowAction({

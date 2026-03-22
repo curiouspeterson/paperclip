@@ -10,6 +10,15 @@ import type { WorkspaceOperationRecorder } from "./workspace-operations.js";
 
 type RunAction = RunPodcastWorkflow["action"];
 
+function resolvePythonBin(): string {
+  return (
+    process.env.PAPERCLIP_PYTHON_BIN?.trim() ||
+    process.env.RU_PYTHON_BIN?.trim() ||
+    process.env.PYTHON_BIN?.trim() ||
+    "python3"
+  );
+}
+
 function requireString(
   value: string | null | undefined,
   message: string,
@@ -56,7 +65,7 @@ function resolveRuntimeRoot(
 
 function commandForScript(scriptPath: string) {
   const ext = path.extname(scriptPath).toLowerCase();
-  if (ext === ".py") return { command: "python3", args: [scriptPath] };
+  if (ext === ".py") return { command: resolvePythonBin(), args: [scriptPath] };
   if (ext === ".mjs") return { command: "node", args: [scriptPath] };
   if (ext === ".sh") return { command: "bash", args: [scriptPath] };
   throw new Error(`Unsupported script type: ${scriptPath}`);

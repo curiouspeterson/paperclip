@@ -1,0 +1,8 @@
+anthropic
+openai
+Pillow
+PyYAML
+pytest
+python-dotenv
+mlx-whisper
+yt-dlp

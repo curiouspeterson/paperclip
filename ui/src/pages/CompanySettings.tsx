@@ -578,6 +578,108 @@ export function CompanySettings() {
         </div>
       </div>
 
+      {/* Agent onboarding */}
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Agent onboarding
+        </div>
+        <div className="space-y-3 rounded-md border border-border px-4 py-4">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">
+              OpenClaw uses an invite prompt. Hermes is configured locally from the agent editor.
+            </span>
+            <HintIcon text="OpenClaw gets a copy-ready onboarding prompt. Hermes opens the local agent setup flow." />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Settings className="h-4 w-4 text-muted-foreground" />
+                OpenClaw Gateway
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Generate a copy-ready invite prompt for a remote OpenClaw agent.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => inviteMutation.mutate()}
+                  disabled={inviteMutation.isPending}
+                >
+                  {inviteMutation.isPending
+                    ? "Generating..."
+                    : "Generate Invite Prompt"}
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Bot className="h-4 w-4 text-muted-foreground" />
+                Hermes Agent
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Open the local Hermes setup flow with adapter defaults prefilled.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate("/agents/new?adapterType=process&preset=hermes_agent")}
+                >
+                  Create Hermes Agent
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+          {inviteError && (
+            <p className="text-sm text-destructive">{inviteError}</p>
+          )}
+          {inviteSnippet && (
+            <div className="rounded-md border border-border bg-muted/30 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-muted-foreground">
+                  OpenClaw Invite Prompt
+                </div>
+                {snippetCopied && (
+                  <span
+                    key={snippetCopyDelightId}
+                    className="flex items-center gap-1 text-xs text-green-600 animate-pulse"
+                  >
+                    <Check className="h-3 w-3" />
+                    Copied
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 space-y-1.5">
+                <textarea
+                  className="h-[28rem] w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none"
+                  value={inviteSnippet}
+                  readOnly
+                />
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(inviteSnippet);
+                        setSnippetCopied(true);
+                        setSnippetCopyDelightId((prev) => prev + 1);
+                        setTimeout(() => setSnippetCopied(false), 2000);
+                      } catch {
+                        /* clipboard may not be available */
+                      }
+                    }}
+                  >
+                    {snippetCopied ? "Copied snippet" : "Copy snippet"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Mailchimp */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -796,108 +898,6 @@ export function CompanySettings() {
                 </div>
               </div>
             </>
-          )}
-        </div>
-      </div>
-
-      {/* Agent onboarding */}
-      <div className="space-y-4">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Agent onboarding
-        </div>
-        <div className="space-y-3 rounded-md border border-border px-4 py-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">
-              OpenClaw uses an invite prompt. Hermes is configured locally from the agent editor.
-            </span>
-            <HintIcon text="OpenClaw gets a copy-ready onboarding prompt. Hermes opens the local agent setup flow." />
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-md border border-border bg-muted/20 p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Settings className="h-4 w-4 text-muted-foreground" />
-                OpenClaw Gateway
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Generate a copy-ready invite prompt for a remote OpenClaw agent.
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => inviteMutation.mutate()}
-                  disabled={inviteMutation.isPending}
-                >
-                  {inviteMutation.isPending
-                    ? "Generating..."
-                    : "Generate Invite Prompt"}
-                </Button>
-              </div>
-            </div>
-            <div className="rounded-md border border-border bg-muted/20 p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Bot className="h-4 w-4 text-muted-foreground" />
-                Hermes Agent
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Open the local Hermes setup flow with adapter defaults prefilled.
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate("/agents/new?adapterType=process&preset=hermes_agent")}
-                >
-                  Create Hermes Agent
-                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
-          {inviteError && (
-            <p className="text-sm text-destructive">{inviteError}</p>
-          )}
-          {inviteSnippet && (
-            <div className="rounded-md border border-border bg-muted/30 p-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-muted-foreground">
-                  OpenClaw Invite Prompt
-                </div>
-                {snippetCopied && (
-                  <span
-                    key={snippetCopyDelightId}
-                    className="flex items-center gap-1 text-xs text-green-600 animate-pulse"
-                  >
-                    <Check className="h-3 w-3" />
-                    Copied
-                  </span>
-                )}
-              </div>
-              <div className="mt-1 space-y-1.5">
-                <textarea
-                  className="h-[28rem] w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none"
-                  value={inviteSnippet}
-                  readOnly
-                />
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(inviteSnippet);
-                        setSnippetCopied(true);
-                        setSnippetCopyDelightId((prev) => prev + 1);
-                        setTimeout(() => setSnippetCopied(false), 2000);
-                      } catch {
-                        /* clipboard may not be available */
-                      }
-                    }}
-                  >
-                    {snippetCopied ? "Copied snippet" : "Copy snippet"}
-                  </Button>
-                </div>
-              </div>
-            </div>
           )}
         </div>
       </div>

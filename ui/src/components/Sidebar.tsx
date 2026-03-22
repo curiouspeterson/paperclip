@@ -16,6 +16,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
+import { SidebarContent } from "./SidebarContent";
 import { SidebarProjects } from "./SidebarProjects";
 import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
@@ -104,6 +105,8 @@ export function Sidebar() {
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
           <SidebarNavItem to="/podcast-ops" label="Podcast Ops" icon={Radio} />
         </SidebarSection>
+
+        <SidebarContent />
 
         <SidebarProjects />
 

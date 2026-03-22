@@ -8,6 +8,10 @@ coverage/
 .DS_Store
 data/
 .paperclip/
+.runtime/
+__pycache__/
+*.pyc
+*.pyo
 .pnpm-store/
 tmp-*
 cli/tmp/

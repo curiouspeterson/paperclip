@@ -79,6 +79,19 @@ export const statusBadge: Record<string, string> = {
 export const statusBadgeDefault = "bg-muted text-muted-foreground";
 
 // ---------------------------------------------------------------------------
+// Workflow stage status text colors
+// ---------------------------------------------------------------------------
+
+export const workflowStageStatusText: Record<string, string> = {
+  ready: "text-green-600 dark:text-green-400",
+  missing: "text-red-600 dark:text-red-400",
+  blocked: "text-red-600 dark:text-red-400",
+  pending: "text-yellow-600 dark:text-yellow-400",
+};
+
+export const workflowStageStatusTextDefault = "text-muted-foreground";
+
+// ---------------------------------------------------------------------------
 // Agent status dot — solid background for small indicator dots
 // ---------------------------------------------------------------------------
 

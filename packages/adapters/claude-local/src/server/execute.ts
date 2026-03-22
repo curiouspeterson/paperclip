@@ -19,6 +19,7 @@ import {
   ensureCommandResolvable,
   ensurePathInEnv,
   renderTemplate,
+  renderPaperclipIssueWorkflowNote,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import {
@@ -392,15 +393,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  const issueWorkflowNote = renderPaperclipIssueWorkflowNote(env);
   const prompt = joinPromptSections([
     renderedBootstrapPrompt,
     sessionHandoffNote,
+    issueWorkflowNote,
     renderedPrompt,
   ]);
   const promptMetrics = {
     promptChars: prompt.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
+    issueWorkflowNoteChars: issueWorkflowNote.length,
     heartbeatPromptChars: renderedPrompt.length,
   };
 

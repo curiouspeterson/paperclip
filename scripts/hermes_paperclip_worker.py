@@ -382,6 +382,7 @@ def build_runtime_preflight(agent: dict[str, Any], issue: dict[str, Any]) -> str
 
     if any(token in title for token in ("mailchimp", "newsletter", "campaign")):
         checks.append(f"MAILCHIMP_API_KEY={env_presence('MAILCHIMP_API_KEY')}")
+        checks.append("MAILCHIMP_API_KEY_USAGE=already_available_in_worker_runtime")
         checks.append("MAILCHIMP_WEBHOOK_SECRET=not_required_by_current_integration")
 
     if any(token in title for token in ("instagram", "tiktok", "social poster", "social", "x.com", "twitter", "x ")):
@@ -562,6 +563,13 @@ def build_prompt(
             "If Instagram, TikTok, or X credentials are present, do not create secret-provisioning tasks for them. "
             "Focus on workflow setup, content templates, validation, and login/session verification."
         )
+    mailchimp_guidance = ""
+    if any(token in issue_title_lower for token in ("mailchimp", "newsletter", "campaign")):
+        mailchimp_guidance = (
+            "Mailchimp credentials may already be bound in the runtime preflight above. "
+            "If MAILCHIMP_API_KEY is present, use it directly for Mailchimp API requests. "
+            "Do not create secret-provisioning tasks or ask for the key again."
+        )
     clip_guidance = ""
     if any(token in issue_title_lower for token in ("riverside", "youtube", "clip", "short-form")):
         clip_guidance = (
@@ -599,6 +607,7 @@ def build_prompt(
         {fable_guidance or "No special platform guidance."}
 
         Additional guidance:
+        {mailchimp_guidance or "No special Mailchimp guidance."}
         {social_guidance or "No special social guidance."}
         {clip_guidance or "No special clip guidance."}
 
@@ -679,13 +688,14 @@ def build_prompt(
       "change_summary": "very short summary, or empty string",{subtasks_schema}
     }}
 
-    Keep it brief. If unsure, keep status as "in_progress".
-    If browser automation is configured, prefer the named provider/command and reuse the named session profile instead of inventing a different browser path.
-    If Fable is involved, do not propose API-integration or API-secret tasks; use iPhone Mirroring when possible.
-    {social_guidance}
-    {clip_guidance}
-    {delegation_guidance}
-    {"Do not write a plan for this run. Set plan_markdown and change_summary to empty strings. Just post a concise status update or blocker." if status_only_mode else ""}
+        Keep it brief. If unsure, keep status as "in_progress".
+        If browser automation is configured, prefer the named provider/command and reuse the named session profile instead of inventing a different browser path.
+        {mailchimp_guidance}
+        If Fable is involved, do not propose API-integration or API-secret tasks; use iPhone Mirroring when possible.
+        {social_guidance}
+        {clip_guidance}
+        {delegation_guidance}
+        {"Do not write a plan for this run. Set plan_markdown and change_summary to empty strings. Just post a concise status update or blocker." if status_only_mode else ""}
     {"Focus on creating a concise implementation plan for this run. Include a 3-5 bullet plan and a short status update." if plan_mode else ""}
     """
     return textwrap.dedent(prompt).strip()

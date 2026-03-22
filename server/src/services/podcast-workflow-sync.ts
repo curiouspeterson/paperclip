@@ -288,7 +288,7 @@ export async function syncPodcastWorkflowToPaperclip(input: {
 
     const optionalDocSpecs = [
       { key: "riverside_runbook", title: "Riverside Runbook", path: resolvePathIfPresent(operations.riverside_runbook_path), intro: "# Riverside Runbook\n", changeSummary: "Synced Riverside non-live runbook from episode batch" },
-      { key: "siteground_runbook", title: "SiteGround Runbook", path: resolvePathIfPresent(operations.siteground_runbook_path), intro: "# SiteGround Runbook\n", changeSummary: "Synced SiteGround non-live runbook from episode batch" },
+      { key: "vercel_runbook", title: "Vercel Runbook", path: resolvePathIfPresent(operations.vercel_runbook_path), intro: "# Vercel Runbook\n", changeSummary: "Synced Vercel deployment runbook from episode batch" },
       { key: "fable_runbook", title: "Fable Runbook", path: resolvePathIfPresent(operations.fable_runbook_path), intro: "# Fable Runbook\n", changeSummary: "Synced Fable non-live runbook from episode batch" },
     ];
 

@@ -17,6 +17,8 @@ import { Routines } from "./pages/Routines";
 import { RoutineDetail } from "./pages/RoutineDetail";
 import { ExecutionWorkspaceDetail } from "./pages/ExecutionWorkspaceDetail";
 import { Goals } from "./pages/Goals";
+import { Content } from "./pages/Content";
+import { ContentEpisodeDetail } from "./pages/ContentEpisodeDetail";
 import { PodcastWorkflows } from "./pages/PodcastWorkflows";
 import { PodcastWorkflowDetail } from "./pages/PodcastWorkflowDetail";
 import { GoalDetail } from "./pages/GoalDetail";
@@ -158,6 +160,8 @@ function boardRoutes() {
       <Route path="routines/:routineId" element={<RoutineDetail />} />
       <Route path="execution-workspaces/:workspaceId" element={<ExecutionWorkspaceDetail />} />
       <Route path="goals" element={<Goals />} />
+      <Route path="content" element={<Content />} />
+      <Route path="content/:workflowId" element={<ContentEpisodeDetail />} />
       <Route path="podcast-ops" element={<PodcastWorkflows />} />
       <Route path="podcast-ops/:workflowId" element={<PodcastWorkflowDetail />} />
       <Route path="goals/:goalId" element={<GoalDetail />} />
@@ -339,6 +343,8 @@ export function App() {
           <Route path="projects/:projectId/issues" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/issues/:filter" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/configuration" element={<UnprefixedBoardRedirect />} />
+          <Route path="content" element={<UnprefixedBoardRedirect />} />
+          <Route path="content/:workflowId" element={<UnprefixedBoardRedirect />} />
           <Route path="podcast-ops" element={<UnprefixedBoardRedirect />} />
           <Route path="podcast-ops/:workflowId" element={<UnprefixedBoardRedirect />} />
           <Route path="tests/ux/runs" element={<UnprefixedBoardRedirect />} />

@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-03-17T21:55:50.150538+00:00",
+  "updated_at": "2026-03-22T20:15:36.961876+00:00",
   "featured": {
-    "episode_id": "20260317-29-truth-and-measure-by-roslyn-sinclair",
+    "episode_id": "20260322-29-truth-and-measure-by-roslyn-sinclair",
     "title": "29. Truth and Measure by Roslyn Sinclair",
     "episode_number": 29,
     "public_url": "https://www.youtube.com/watch?v=H5fSuLMbSTo",
@@ -11,10 +11,26 @@
     "hero_summary": "29. Truth and Measure by Roslyn Sinclair lands best as a warm, reader-first moment built around so it's long, but it's, i love the fashion talk philosophy, uh, passion. and also...",
     "featured_quote": "So it's long, but it's, I love the fashion talk philosophy, uh, passion. And also there...",
     "recent_summary": "29. Truth and Measure by Roslyn Sinclair lands best as a warm, reader-first moment built around so it's long, but it's, i love the fashion talk phi...",
-    "created_at": "2026-03-17T20:45:49.723577+00:00",
-    "updated_at": "2026-03-17T21:55:50.124481+00:00"
+    "created_at": "2026-03-22T17:59:06.318850+00:00",
+    "updated_at": "2026-03-22T20:15:36.961653+00:00",
+    "publish_date": "2026-03-10T00:00:00+00:00"
   },
   "recent": [
+    {
+      "episode_id": "20260322-29-truth-and-measure-by-roslyn-sinclair",
+      "title": "29. Truth and Measure by Roslyn Sinclair",
+      "episode_number": 29,
+      "public_url": "https://www.youtube.com/watch?v=H5fSuLMbSTo",
+      "embed_url": "https://www.youtube.com/embed/H5fSuLMbSTo",
+      "channel_url": "https://www.youtube.com/@RomanceUnzipped/videos",
+      "hook": "So it's long, but it's, I love the fashion talk philosophy, uh, passion. And also there...",
+      "hero_summary": "29. Truth and Measure by Roslyn Sinclair lands best as a warm, reader-first moment built around so it's long, but it's, i love the fashion talk philosophy, uh, passion. and also...",
+      "featured_quote": "So it's long, but it's, I love the fashion talk philosophy, uh, passion. And also there...",
+      "recent_summary": "29. Truth and Measure by Roslyn Sinclair lands best as a warm, reader-first moment built around so it's long, but it's, i love the fashion talk phi...",
+      "created_at": "2026-03-22T17:59:06.318850+00:00",
+      "updated_at": "2026-03-22T20:15:36.961653+00:00",
+      "publish_date": "2026-03-10T00:00:00+00:00"
+    },
     {
       "episode_id": "20260317-29-truth-and-measure-by-roslyn-sinclair",
       "title": "29. Truth and Measure by Roslyn Sinclair",
@@ -30,22 +46,38 @@
       "updated_at": "2026-03-17T21:55:50.124481+00:00"
     },
     {
-      "episode_id": "20260317-28-i-think-they-love-you-by-julian-winters",
+      "episode_id": "20260322-28-i-think-they-love-you-by-julian-winters",
       "title": "28. I Think They Love You by Julian Winters",
       "episode_number": 28,
       "public_url": "https://www.youtube.com/watch?v=auGAHns-6Jk",
       "embed_url": "https://www.youtube.com/embed/auGAHns-6Jk",
       "channel_url": "https://www.youtube.com/@RomanceUnzipped/videos",
-      "hook": "We love a good sibling dynamic.",
-      "hero_summary": "We're chatting about Julian Winters' adult debut and the sibling dynamic that truly stole the show.",
-      "featured_quote": "We love a good sibling dynamic.",
-      "recent_summary": "We're chatting about Julian Winters' adult debut and the sibling dynamic that truly stole the show.",
-      "created_at": "2026-03-17T18:37:12.785667+00:00",
-      "updated_at": "2026-03-17T21:55:50.150360+00:00"
+      "hook": "He just thinks of himself as, oh, I want to be like my dad. My dad's retiring. I need t...",
+      "hero_summary": "28. I Think They Love You by Julian Winters lands best as a warm, reader-first moment built around he just thinks of himself as, oh, i want to be like my dad. my dad's retiring....",
+      "featured_quote": "He just thinks of himself as, oh, I want to be like my dad. My dad's retiring. I need t...",
+      "recent_summary": "28. I Think They Love You by Julian Winters lands best as a warm, reader-first moment built around he just thinks of himself as, oh, i want to be l...",
+      "created_at": "2026-03-22T19:43:54.963084+00:00",
+      "updated_at": "2026-03-22T19:58:45.868853+00:00",
+      "publish_date": "2026-02-24T00:00:00+00:00"
     }
   ],
   "entries": [
     {
+      "episode_id": "20260322-29-truth-and-measure-by-roslyn-sinclair",
+      "title": "29. Truth and Measure by Roslyn Sinclair",
+      "episode_number": 29,
+      "public_url": "https://www.youtube.com/watch?v=H5fSuLMbSTo",
+      "embed_url": "https://www.youtube.com/embed/H5fSuLMbSTo",
+      "channel_url": "https://www.youtube.com/@RomanceUnzipped/videos",
+      "hook": "So it's long, but it's, I love the fashion talk philosophy, uh, passion. And also there...",
+      "hero_summary": "29. Truth and Measure by Roslyn Sinclair lands best as a warm, reader-first moment built around so it's long, but it's, i love the fashion talk philosophy, uh, passion. and also...",
+      "featured_quote": "So it's long, but it's, I love the fashion talk philosophy, uh, passion. And also there...",
+      "recent_summary": "29. Truth and Measure by Roslyn Sinclair lands best as a warm, reader-first moment built around so it's long, but it's, i love the fashion talk phi...",
+      "created_at": "2026-03-22T17:59:06.318850+00:00",
+      "updated_at": "2026-03-22T20:15:36.961653+00:00",
+      "publish_date": "2026-03-10T00:00:00+00:00"
+    },
+    {
       "episode_id": "20260317-29-truth-and-measure-by-roslyn-sinclair",
       "title": "29. Truth and Measure by Roslyn Sinclair",
       "episode_number": 29,
@@ -60,6 +92,21 @@
       "updated_at": "2026-03-17T21:55:50.124481+00:00"
     },
     {
+      "episode_id": "20260322-28-i-think-they-love-you-by-julian-winters",
+      "title": "28. I Think They Love You by Julian Winters",
+      "episode_number": 28,
+      "public_url": "https://www.youtube.com/watch?v=auGAHns-6Jk",
+      "embed_url": "https://www.youtube.com/embed/auGAHns-6Jk",
+      "channel_url": "https://www.youtube.com/@RomanceUnzipped/videos",
+      "hook": "He just thinks of himself as, oh, I want to be like my dad. My dad's retiring. I need t...",
+      "hero_summary": "28. I Think They Love You by Julian Winters lands best as a warm, reader-first moment built around he just thinks of himself as, oh, i want to be like my dad. my dad's retiring....",
+      "featured_quote": "He just thinks of himself as, oh, I want to be like my dad. My dad's retiring. I need t...",
+      "recent_summary": "28. I Think They Love You by Julian Winters lands best as a warm, reader-first moment built around he just thinks of himself as, oh, i want to be l...",
+      "created_at": "2026-03-22T19:43:54.963084+00:00",
+      "updated_at": "2026-03-22T19:58:45.868853+00:00",
+      "publish_date": "2026-02-24T00:00:00+00:00"
+    },
+    {
       "episode_id": "20260317-28-i-think-they-love-you-by-julian-winters",
       "title": "28. I Think They Love You by Julian Winters",
       "episode_number": 28,
@@ -72,6 +119,21 @@
       "recent_summary": "We're chatting about Julian Winters' adult debut and the sibling dynamic that truly stole the show.",
       "created_at": "2026-03-17T18:37:12.785667+00:00",
       "updated_at": "2026-03-17T21:55:50.150360+00:00"
+    },
+    {
+      "episode_id": "20260322-ep27",
+      "title": "27. Lizard Holds The Sun by Dani Trujillo",
+      "episode_number": 27,
+      "public_url": "https://www.youtube.com/watch?v=huCg3DRSF18",
+      "embed_url": "https://www.youtube.com/embed/huCg3DRSF18",
+      "channel_url": "https://www.youtube.com/@RomanceUnzipped/videos",
+      "hook": "Like he loves taking care of his family. So I think that's part of the rub is it's not...",
+      "hero_summary": "ep27 lands best as a warm, reader-first moment built around like he loves taking care of his family. so i think that's part of the rub is it's not... and the human specificity i...",
+      "featured_quote": "Like he loves taking care of his family. So I think that's part of the rub is it's not...",
+      "recent_summary": "ep27 lands best as a warm, reader-first moment built around like he loves taking care of his family. so i think that's part of the rub is it's not....",
+      "created_at": "2026-03-22T18:53:24.036923+00:00",
+      "updated_at": "2026-03-22T20:07:58.439882+00:00",
+      "publish_date": "2026-02-03T00:00:00+00:00"
     }
   ]
 }

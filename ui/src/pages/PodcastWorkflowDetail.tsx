@@ -9,6 +9,7 @@ import { podcastWorkflowsApi } from "../api/podcast-workflows";
 import { heartbeatsApi } from "../api/heartbeats";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { workflowStageStatusText, workflowStageStatusTextDefault } from "../lib/status-colors";
 import { cn, formatDateTime, relativeTime } from "../lib/utils";
 import type { PodcastWorkflow, WorkspaceOperation } from "@paperclipai/shared";
 import { redactHomePathUserSegments } from "@paperclipai/adapter-utils";
@@ -693,7 +694,8 @@ export function PodcastWorkflowDetail() {
             <div className="mt-2 flex flex-wrap gap-2">
               {Object.entries(workflow.stageStatus).map(([stage, value]) => (
                 <span key={stage} className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
-                  {stage}: {value}
+                  {stage}:{" "}
+                  <span className={workflowStageStatusText[value] ?? workflowStageStatusTextDefault}>{value}</span>
                 </span>
               ))}
             </div>
