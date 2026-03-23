@@ -49,6 +49,11 @@ export interface CompanyPortabilityCompanyManifestEntry {
   agentDefaultDangerouslyBypassSandbox: boolean | null;
 }
 
+export interface CompanyPortabilitySidebarOrder {
+  agents: string[];
+  projects: string[];
+}
+
 export interface CompanyPortabilityProjectManifestEntry {
   slug: string;
   name: string;
@@ -160,6 +165,7 @@ export interface CompanyPortabilityManifest {
   } | null;
   includes: CompanyPortabilityInclude;
   company: CompanyPortabilityCompanyManifestEntry | null;
+  sidebar: CompanyPortabilitySidebarOrder | null;
   agents: CompanyPortabilityAgentManifestEntry[];
   skills: CompanyPortabilitySkillManifestEntry[];
   projects: CompanyPortabilityProjectManifestEntry[];
@@ -295,6 +301,13 @@ export interface CompanyPortabilityImportResult {
     name: string;
     reason: string | null;
   }[];
+  projects: {
+    slug: string;
+    id: string | null;
+    action: "created" | "updated" | "skipped";
+    name: string;
+    reason: string | null;
+  }[];
   envInputs: CompanyPortabilityEnvInput[];
   warnings: string[];
 }
@@ -308,4 +321,5 @@ export interface CompanyPortabilityExportRequest {
   projectIssues?: string[];
   selectedFiles?: string[];
   expandReferencedSkills?: boolean;
+  sidebarOrder?: Partial<CompanyPortabilitySidebarOrder>;
 }

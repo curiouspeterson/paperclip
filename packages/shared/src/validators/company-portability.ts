@@ -54,6 +54,11 @@ export const portabilityCompanyManifestEntrySchema = z.object({
   agentDefaultDangerouslyBypassSandbox: z.boolean().nullable(),
 });
 
+export const portabilitySidebarOrderSchema = z.object({
+  agents: z.array(z.string().min(1)).default([]),
+  projects: z.array(z.string().min(1)).default([]),
+});
+
 export const portabilityAgentManifestEntrySchema = z.object({
   slug: z.string().min(1),
   name: z.string().min(1),
@@ -171,6 +176,7 @@ export const portabilityManifestSchema = z.object({
     skills: z.boolean(),
   }),
   company: portabilityCompanyManifestEntrySchema.nullable(),
+  sidebar: portabilitySidebarOrderSchema.nullable(),
   agents: z.array(portabilityAgentManifestEntrySchema),
   skills: z.array(portabilitySkillManifestEntrySchema).default([]),
   projects: z.array(portabilityProjectManifestEntrySchema).default([]),
@@ -217,6 +223,7 @@ export const companyPortabilityExportSchema = z.object({
   projectIssues: z.array(z.string().min(1)).optional(),
   selectedFiles: z.array(z.string().min(1)).optional(),
   expandReferencedSkills: z.boolean().optional(),
+  sidebarOrder: portabilitySidebarOrderSchema.partial().optional(),
 });
 
 export type CompanyPortabilityExport = z.infer<typeof companyPortabilityExportSchema>;
