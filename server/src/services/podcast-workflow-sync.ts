@@ -186,7 +186,13 @@ async function ensureReviewIssue(input: {
   issueIdOverride?: string | null;
 }) {
   const issues = issueService(input.db);
-  const issueId = input.issueIdOverride ?? input.workflow.issueId;
+  const manifestIssueId =
+    typeof input.manifest?.governance === "object" &&
+    input.manifest.governance &&
+    typeof (input.manifest.governance as Record<string, unknown>).paperclip_issue_id === "string"
+      ? String((input.manifest.governance as Record<string, unknown>).paperclip_issue_id).trim()
+      : "";
+  const issueId = input.issueIdOverride ?? (manifestIssueId || input.workflow.issueId);
   if (issueId) {
     const issue = await issues.getById(issueId);
     if (!issue) throw new Error("Linked issue not found for sync_to_paperclip");

@@ -188,7 +188,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.environ["SCRIPT_DIR_ENV"])
-from pipeline_common import atomic_save_json, load_json
+from pipeline_common import atomic_save_json, load_json, normalize_publish_metadata
 
 manifest_path = Path(os.environ["MANIFEST_PATH_ENV"]).expanduser().resolve()
 manifest = load_json(manifest_path)
@@ -206,7 +206,7 @@ if source_channel_url:
     source["channel_url"] = source_channel_url
     homepage["channel_url"] = source_channel_url
 if publish_date:
-    homepage["publish_date"] = publish_date
+    normalize_publish_metadata(manifest, publish_date)
 
 atomic_save_json(manifest_path, manifest)
 PY

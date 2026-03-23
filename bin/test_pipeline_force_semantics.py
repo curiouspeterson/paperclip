@@ -400,6 +400,74 @@ def test_initialize_episode_manifest_upgrades_existing_operations_targets() -> N
         assert "siteground_runbook" not in manifest["status"]
         assert manifest["status"]["vercel_runbook"] == "pending"
 
+
+def test_initialize_episode_manifest_normalizes_publish_metadata_on_rerun() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        source = root / "27. Lizard Holds The Sun by Dani Trujillo.mp4"
+        source.write_text("media", encoding="utf-8")
+
+        module_name = "paperclip_initialize_episode_manifest_publish_metadata_test_module"
+        spec = importlib.util.spec_from_file_location(module_name, Path(__file__).resolve().parent / "initialize_episode_manifest.py")
+        if spec is None or spec.loader is None:
+            raise RuntimeError("Could not load initialize_episode_manifest.py for testing")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+
+        episode_id = "20260322-ep27"
+        episode_root = root / "episodes" / episode_id
+        manifests_dir = episode_root / "manifests"
+        manifests_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = manifests_dir / f"{episode_id}.json"
+        save_json(
+            manifest_path,
+            {
+                "episode_id": episode_id,
+                "title": "27. Lizard Holds The Sun by Dani Trujillo",
+                "created_at": "2026-03-22T00:00:00+00:00",
+                "published_at": "2026-03-22",
+                "upload_date": None,
+                "source": {
+                    "media_path": str(source),
+                    "public_url": "https://www.youtube.com/watch?v=huCg3DRSF18",
+                },
+                "governance": {
+                    "paperclip_issue_id": "issue-27",
+                    "board_review_synced_at": "2026-03-22T19:16:36.034Z",
+                    "board_approval": "pending",
+                },
+                "homepage": {
+                    "publish_date": "2026-03-22",
+                    "public_url": "https://www.youtube.com/watch?v=huCg3DRSF18",
+                },
+            },
+        )
+
+        old_argv = sys.argv[:]
+        try:
+            sys.argv = [
+                "initialize_episode_manifest.py",
+                "--source",
+                str(source),
+                "--root",
+                str(root),
+                "--episode-id",
+                episode_id,
+                "--publish-date",
+                "2026-02-03T00:00:00+00:00",
+            ]
+            module.main()
+        finally:
+            sys.argv = old_argv
+
+        manifest = load_json(manifest_path)
+        assert manifest["homepage"]["publish_date"] == "2026-02-03T00:00:00+00:00"
+        assert manifest["published_at"] == "2026-02-03T00:00:00+00:00"
+        assert manifest["upload_date"] == "2026-02-03T00:00:00+00:00"
+        assert manifest["governance"]["paperclip_issue_id"] == "issue-27"
+        assert manifest["homepage"]["public_url"] == "https://www.youtube.com/watch?v=huCg3DRSF18"
+
     def test_ready_stage_without_provenance_aborts(self) -> None:
         """Verify that a 'ready' upstream stage with no provenance causes a hard abort."""
         import pytest

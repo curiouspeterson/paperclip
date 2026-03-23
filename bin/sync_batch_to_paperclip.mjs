@@ -71,9 +71,6 @@ function parseArgs(argv) {
   if (!args.apiUrl) {
     throw new Error("PAPERCLIP_API_URL required (via env or --api-url)");
   }
-  if (!args.companyId && !args.issueId) {
-    throw new Error("--company-id is required when creating a new issue (or set PAPERCLIP_COMPANY_ID). Provide --issue-id to update an existing issue.");
-  }
   args.apiUrl = args.apiUrl.replace(/\/+$/, "");
   return args;
 }
@@ -98,6 +95,11 @@ function expandUserAndResolve(input) {
 
 function resolveIfPresent(filePath) {
   return expandUserAndResolve(filePath);
+}
+
+function resolveManifestIssueId(manifest) {
+  const issueId = manifest?.governance?.paperclip_issue_id;
+  return typeof issueId === "string" && issueId.trim() ? issueId.trim() : "";
 }
 
 function writeManifestAtomic(filePath, manifest) {
@@ -342,6 +344,12 @@ async function main() {
   }
 
   const manifest = readJson(manifestPath);
+  if (!args.issueId) {
+    args.issueId = resolveManifestIssueId(manifest);
+  }
+  if (!args.companyId && !args.issueId) {
+    throw new Error("--company-id is required when creating a new issue (or set PAPERCLIP_COMPANY_ID). Provide --issue-id to update an existing issue.");
+  }
 
   // Mark stage as running before any API work
   manifest.status = manifest.status ?? {};

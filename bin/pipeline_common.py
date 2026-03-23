@@ -19,6 +19,31 @@ def save_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def normalize_publish_metadata(manifest: dict, publish_date: str | None = None) -> str | None:
+    """Keep the manifest's canonical publish fields aligned.
+
+    Priority order:
+    1. Explicit publish_date argument
+    2. Existing homepage.publish_date
+    3. Existing published_at
+    4. Existing upload_date
+    """
+    homepage = manifest.setdefault("homepage", {})
+    canonical = (
+        (publish_date or "").strip()
+        or str(homepage.get("publish_date") or "").strip()
+        or str(manifest.get("published_at") or "").strip()
+        or str(manifest.get("upload_date") or "").strip()
+    )
+    if not canonical:
+        return None
+
+    homepage["publish_date"] = canonical
+    manifest["published_at"] = canonical
+    manifest["upload_date"] = canonical
+    return canonical
+
+
 def write_text(path: Path, body: str, *, overwrite: bool = False) -> bool:
     """Write text to a file only if it doesn't exist or overwrite is True.
 

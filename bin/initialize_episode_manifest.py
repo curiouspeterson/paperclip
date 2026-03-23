@@ -14,7 +14,15 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pipeline_common import atomic_save_json, episode_root_path, episode_runtime_dirs, load_json, resolve_path, save_json
+from pipeline_common import (
+    atomic_save_json,
+    episode_root_path,
+    episode_runtime_dirs,
+    load_json,
+    normalize_publish_metadata,
+    resolve_path,
+    save_json,
+)
 
 
 MEDIA_EXTENSIONS = {".mp3", ".mp4", ".m4a", ".mov", ".mkv", ".wav", ".webm"}
@@ -223,6 +231,11 @@ def main() -> int:
             if passthrough_key in existing and passthrough_key not in manifest:
                 manifest[passthrough_key] = existing[passthrough_key]
 
+    normalize_publish_metadata(
+        manifest,
+        args.publish_date or os.environ.get("RU_PUBLISH_DATE"),
+    )
+
     # Save manifest atomically (manifest is the primary contract)
     atomic_save_json(manifest_path, manifest)
 
@@ -237,6 +250,8 @@ def main() -> int:
         "source_filename": source.name,
         "source_extension": source.suffix.lower(),
         "source_size_bytes": stat.st_size,
+        "published_at": manifest.get("published_at"),
+        "upload_date": manifest.get("upload_date"),
         "detected_at": created_at,
         "source_modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
         "manifest_path": str(manifest_path),

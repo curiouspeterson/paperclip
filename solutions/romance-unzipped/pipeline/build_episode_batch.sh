@@ -182,7 +182,11 @@ if [[ -n "$SOURCE_PUBLIC_URL" || -n "$SOURCE_CHANNEL_URL" ]]; then
   SCRIPT_DIR_ENV="$SCRIPT_DIR" MANIFEST_PATH_ENV="$MANIFEST_PATH" SOURCE_PUBLIC_URL_ENV="$SOURCE_PUBLIC_URL" SOURCE_CHANNEL_URL_ENV="$SOURCE_CHANNEL_URL" "$PYTHON_BIN" - <<'PY'
 import json
 import os
+import sys
 from pathlib import Path
+
+sys.path.insert(0, os.environ["SCRIPT_DIR_ENV"])
+from pipeline_common import normalize_publish_metadata
 
 manifest_path = Path(os.environ["MANIFEST_PATH_ENV"]).expanduser().resolve()
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -198,6 +202,8 @@ if source_public_url:
 if source_channel_url:
     source["channel_url"] = source_channel_url
     homepage["channel_url"] = source_channel_url
+
+normalize_publish_metadata(manifest, os.environ.get("RU_PUBLISH_DATE", "").strip())
 
 manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 PY

@@ -67,9 +67,6 @@ function parseArgs(argv) {
   if (!args.manifest) {
     throw new Error("--manifest is required");
   }
-  if (!args.companyId) {
-    throw new Error("--company-id is required (or set PAPERCLIP_COMPANY_ID)");
-  }
   args.apiUrl = args.apiUrl.replace(/\/+$/, "");
   return args;
 }
@@ -87,6 +84,11 @@ function resolveIfPresent(filePath) {
     return "";
   }
   return path.resolve(filePath);
+}
+
+function resolveManifestIssueId(manifest) {
+  const issueId = manifest?.governance?.paperclip_issue_id;
+  return typeof issueId === "string" && issueId.trim() ? issueId.trim() : "";
 }
 
 function sha256File(filePath) {
@@ -302,6 +304,12 @@ async function main() {
   }
 
   const manifest = readJson(manifestPath);
+  if (!args.issueId) {
+    args.issueId = resolveManifestIssueId(manifest);
+  }
+  if (!args.companyId && !args.issueId) {
+    throw new Error("--company-id is required when creating a new issue (or set PAPERCLIP_COMPANY_ID). Provide --issue-id to update an existing issue.");
+  }
   let issue = null;
   if (args.issueId) {
     issue = await getIssue(args.apiUrl, args.apiKey, args.issueId);
