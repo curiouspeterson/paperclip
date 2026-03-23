@@ -359,14 +359,17 @@ describe("issue service contracts", () => {
     } as any);
 
     expect(first.created).toBe(true);
+    expect(first.issue.delegationKey).toMatch(/^delegated:/);
     expect(second.created).toBe(false);
     expect(second.issue.id).toBe(first.issue.id);
+    expect(second.issue.delegationKey).toBe(first.issue.delegationKey);
 
     const rows = await db
-      .select({ id: issues.id })
+      .select({ id: issues.id, delegationKey: issues.delegationKey })
       .from(issues)
       .where(eq(issues.companyId, companyId));
     expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.id === first.issue.id)?.delegationKey).toBe(first.issue.delegationKey);
 
     const company = await db
       .select({ issueCounter: companies.issueCounter })
@@ -374,6 +377,48 @@ describe("issue service contracts", () => {
       .where(eq(companies.id, companyId))
       .then((result) => result[0]);
     expect(company?.issueCounter).toBe(1);
+  });
+
+  it("reuses a delegated child by explicit delegation key even when the title changes", async () => {
+    const companyId = await seedCompany("Alpha");
+    const managerAgentId = await seedAgent(companyId, "Manager");
+    const workerAgentId = await seedAgent(companyId, "Worker");
+    const parentId = randomUUID();
+
+    await db.insert(issues).values({
+      id: parentId,
+      companyId,
+      title: "Parent task",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: managerAgentId,
+      createdByAgentId: managerAgentId,
+    });
+
+    const svc = issueService(db);
+    const first = await svc.create(companyId, {
+      title: "Implement Hermes wrapper",
+      parentId,
+      delegationKey: "newsletter.hermes-wrapper",
+      assigneeAgentId: workerAgentId,
+      createdByAgentId: managerAgentId,
+      status: "todo",
+      priority: "medium",
+    } as any);
+    const second = await svc.create(companyId, {
+      title: "Fix syntax in Hermes wrapper",
+      parentId,
+      delegationKey: "newsletter.hermes-wrapper",
+      assigneeAgentId: workerAgentId,
+      createdByAgentId: managerAgentId,
+      status: "todo",
+      priority: "medium",
+    } as any);
+
+    expect(first.created).toBe(true);
+    expect(first.issue.delegationKey).toBe("newsletter.hermes-wrapper");
+    expect(second.created).toBe(false);
+    expect(second.issue.id).toBe(first.issue.id);
   });
 
   it.each([

@@ -133,6 +133,7 @@ function makeIssue(id: string, isUnreadForMe: boolean): Issue {
     projectWorkspaceId: null,
     goalId: null,
     parentId: null,
+    delegationKey: null,
     title: `Issue ${id}`,
     description: null,
     status: "todo",

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
@@ -40,8 +41,69 @@ function normalizeDelegatedIssueTitle(value: string | null | undefined) {
   return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function normalizeDelegationKey(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function deriveDelegationKey(input: {
+  createdByAgentId: string;
+  title: string;
+  assigneeAgentId?: string | null;
+  assigneeUserId?: string | null;
+  projectId?: string | null;
+  goalId?: string | null;
+  requestDepth?: number | null;
+}) {
+  const hash = createHash("sha256");
+  hash.update(JSON.stringify({
+    createdByAgentId: input.createdByAgentId,
+    title: normalizeDelegatedIssueTitle(input.title),
+    assigneeAgentId: input.assigneeAgentId ?? null,
+    assigneeUserId: input.assigneeUserId ?? null,
+    projectId: input.projectId ?? null,
+    goalId: input.goalId ?? null,
+    requestDepth: input.requestDepth ?? 0,
+  }));
+  return `delegated:${hash.digest("hex")}`;
+}
+
+function resolveDelegationKey(input: {
+  parentId?: string | null;
+  createdByAgentId?: string | null;
+  title: string;
+  assigneeAgentId?: string | null;
+  assigneeUserId?: string | null;
+  projectId?: string | null;
+  goalId?: string | null;
+  requestDepth?: number | null;
+  delegationKey?: string | null;
+}) {
+  if (!input.parentId || !input.createdByAgentId) return null;
+  if (!input.assigneeAgentId && !input.assigneeUserId) return null;
+  const explicitKey = normalizeDelegationKey(input.delegationKey);
+  if (explicitKey) return explicitKey;
+  return deriveDelegationKey({
+    createdByAgentId: input.createdByAgentId,
+    title: input.title,
+    assigneeAgentId: input.assigneeAgentId ?? null,
+    assigneeUserId: input.assigneeUserId ?? null,
+    projectId: input.projectId ?? null,
+    goalId: input.goalId ?? null,
+    requestDepth: input.requestDepth ?? 0,
+  });
+}
+
 function nullSafeEqual(left: string | null | undefined, right: string | null | undefined) {
   return (left ?? null) === (right ?? null);
+}
+
+function isUniqueViolation(error: unknown, constraint?: string) {
+  return !!error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: string }).code === "23505" &&
+    (constraint === undefined || ("constraint" in error && (error as { constraint?: string }).constraint === constraint));
 }
 
 function assertTransition(from: string, to: string) {
@@ -376,6 +438,33 @@ export function issueService(db: Db) {
     if (!duplicate) return null;
 
     return withIssueLabels(database as Db, [duplicate]).then((rows) => rows[0] ?? null);
+  }
+
+  async function findOpenDelegatedChildByKey(
+    database: Pick<Db, "select">,
+    input: {
+      companyId: string;
+      parentId: string;
+      delegationKey: string;
+    },
+  ) {
+    const row = await database
+      .select()
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, input.companyId),
+          eq(issues.parentId, input.parentId),
+          eq(issues.delegationKey, input.delegationKey),
+          inArray(issues.status, [...OPEN_ISSUE_STATUSES]),
+          isNull(issues.hiddenAt),
+        ),
+      )
+      .orderBy(desc(issues.updatedAt), desc(issues.createdAt))
+      .then((rows) => rows[0] ?? null);
+    if (!row) return null;
+
+    return withIssueLabels(database as Db, [row]).then((rows) => rows[0] ?? null);
   }
 
   function redactIssueComment<T extends { body: string }>(comment: T, censorUsernameInLogs: boolean): T {
@@ -817,104 +906,152 @@ export function issueService(db: Db) {
       if (data.status === "in_progress") {
         throw unprocessable("Use checkout to set issue status to in_progress");
       }
-      return db.transaction(async (tx) => {
-        const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
-        const resolvedGoalId = resolveIssueGoalId({
-          projectId: issueData.projectId,
-          goalId: issueData.goalId,
-          defaultGoalId: defaultCompanyGoal?.id ?? null,
-        });
-        const duplicateDelegatedChild =
-          issueData.createdByAgentId &&
-          issueData.parentId &&
-          (issueData.assigneeAgentId || issueData.assigneeUserId)
-            ? await findOpenDelegatedChildDuplicate(tx, {
-                companyId,
-                parentId: issueData.parentId,
-                createdByAgentId: issueData.createdByAgentId,
-                title: issueData.title,
-                assigneeAgentId: issueData.assigneeAgentId ?? null,
-                assigneeUserId: issueData.assigneeUserId ?? null,
-                projectId: issueData.projectId ?? null,
-                goalId: resolvedGoalId,
-                requestDepth: issueData.requestDepth ?? 0,
-              })
-            : null;
-        if (duplicateDelegatedChild) {
-          return { issue: duplicateDelegatedChild, created: false };
+      let delegatedLookup:
+        | {
+          parentId: string;
+          delegationKey: string;
         }
-        let executionWorkspaceSettings =
-          (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
-        if (executionWorkspaceSettings == null && issueData.projectId) {
-          const project = await tx
-            .select({ executionWorkspacePolicy: projects.executionWorkspacePolicy })
-            .from(projects)
-            .where(and(eq(projects.id, issueData.projectId), eq(projects.companyId, companyId)))
-            .then((rows) => rows[0] ?? null);
-          executionWorkspaceSettings =
-            defaultIssueExecutionWorkspaceSettingsForProject(
-              gateProjectExecutionWorkspacePolicy(
-                parseProjectExecutionWorkspacePolicy(project?.executionWorkspacePolicy),
-                isolatedWorkspacesEnabled,
-              ),
-            ) as Record<string, unknown> | null;
-        }
-        let projectWorkspaceId = issueData.projectWorkspaceId ?? null;
-        if (!projectWorkspaceId && issueData.projectId) {
-          const project = await tx
-            .select({
-              executionWorkspacePolicy: projects.executionWorkspacePolicy,
-            })
-            .from(projects)
-            .where(and(eq(projects.id, issueData.projectId), eq(projects.companyId, companyId)))
-            .then((rows) => rows[0] ?? null);
-          const projectPolicy = parseProjectExecutionWorkspacePolicy(project?.executionWorkspacePolicy);
-          projectWorkspaceId = projectPolicy?.defaultProjectWorkspaceId ?? null;
-          if (!projectWorkspaceId) {
-            projectWorkspaceId = await tx
-              .select({ id: projectWorkspaces.id })
-              .from(projectWorkspaces)
-              .where(and(eq(projectWorkspaces.projectId, issueData.projectId), eq(projectWorkspaces.companyId, companyId)))
-              .orderBy(desc(projectWorkspaces.isPrimary), asc(projectWorkspaces.createdAt), asc(projectWorkspaces.id))
-              .then((rows) => rows[0]?.id ?? null);
+        | null = null;
+      try {
+        return await db.transaction(async (tx) => {
+          const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
+          const resolvedGoalId = resolveIssueGoalId({
+            projectId: issueData.projectId,
+            goalId: issueData.goalId,
+            defaultGoalId: defaultCompanyGoal?.id ?? null,
+          });
+          const delegationKey = resolveDelegationKey({
+            parentId: issueData.parentId ?? null,
+            createdByAgentId: issueData.createdByAgentId ?? null,
+            title: issueData.title,
+            assigneeAgentId: issueData.assigneeAgentId ?? null,
+            assigneeUserId: issueData.assigneeUserId ?? null,
+            projectId: issueData.projectId ?? null,
+            goalId: resolvedGoalId,
+            requestDepth: issueData.requestDepth ?? 0,
+            delegationKey: issueData.delegationKey ?? null,
+          });
+          delegatedLookup =
+            issueData.parentId && delegationKey
+              ? { parentId: issueData.parentId, delegationKey }
+              : null;
+          const duplicateDelegatedChildByKey =
+            delegatedLookup
+              ? await findOpenDelegatedChildByKey(tx, {
+                  companyId,
+                  parentId: delegatedLookup.parentId,
+                  delegationKey: delegatedLookup.delegationKey,
+                })
+              : null;
+          if (duplicateDelegatedChildByKey) {
+            return { issue: duplicateDelegatedChildByKey, created: false };
           }
+          const duplicateDelegatedChild =
+            issueData.createdByAgentId &&
+            issueData.parentId &&
+            (issueData.assigneeAgentId || issueData.assigneeUserId)
+              ? await findOpenDelegatedChildDuplicate(tx, {
+                  companyId,
+                  parentId: issueData.parentId,
+                  createdByAgentId: issueData.createdByAgentId,
+                  title: issueData.title,
+                  assigneeAgentId: issueData.assigneeAgentId ?? null,
+                  assigneeUserId: issueData.assigneeUserId ?? null,
+                  projectId: issueData.projectId ?? null,
+                  goalId: resolvedGoalId,
+                  requestDepth: issueData.requestDepth ?? 0,
+                })
+              : null;
+          if (duplicateDelegatedChild) {
+            return { issue: duplicateDelegatedChild, created: false };
+          }
+          let executionWorkspaceSettings =
+            (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
+          if (executionWorkspaceSettings == null && issueData.projectId) {
+            const project = await tx
+              .select({ executionWorkspacePolicy: projects.executionWorkspacePolicy })
+              .from(projects)
+              .where(and(eq(projects.id, issueData.projectId), eq(projects.companyId, companyId)))
+              .then((rows) => rows[0] ?? null);
+            executionWorkspaceSettings =
+              defaultIssueExecutionWorkspaceSettingsForProject(
+                gateProjectExecutionWorkspacePolicy(
+                  parseProjectExecutionWorkspacePolicy(project?.executionWorkspacePolicy),
+                  isolatedWorkspacesEnabled,
+                ),
+              ) as Record<string, unknown> | null;
+          }
+          let projectWorkspaceId = issueData.projectWorkspaceId ?? null;
+          if (!projectWorkspaceId && issueData.projectId) {
+            const project = await tx
+              .select({
+                executionWorkspacePolicy: projects.executionWorkspacePolicy,
+              })
+              .from(projects)
+              .where(and(eq(projects.id, issueData.projectId), eq(projects.companyId, companyId)))
+              .then((rows) => rows[0] ?? null);
+            const projectPolicy = parseProjectExecutionWorkspacePolicy(project?.executionWorkspacePolicy);
+            projectWorkspaceId = projectPolicy?.defaultProjectWorkspaceId ?? null;
+            if (!projectWorkspaceId) {
+              projectWorkspaceId = await tx
+                .select({ id: projectWorkspaces.id })
+                .from(projectWorkspaces)
+                .where(and(eq(projectWorkspaces.projectId, issueData.projectId), eq(projectWorkspaces.companyId, companyId)))
+                .orderBy(desc(projectWorkspaces.isPrimary), asc(projectWorkspaces.createdAt), asc(projectWorkspaces.id))
+                .then((rows) => rows[0]?.id ?? null);
+            }
+          }
+          const [company] = await tx
+            .update(companies)
+            .set({ issueCounter: sql`${companies.issueCounter} + 1` })
+            .where(eq(companies.id, companyId))
+            .returning({ issueCounter: companies.issueCounter, issuePrefix: companies.issuePrefix });
+
+          const issueNumber = company.issueCounter;
+          const identifier = `${company.issuePrefix}-${issueNumber}`;
+
+          const values = {
+            ...issueData,
+            delegationKey,
+            originKind: issueData.originKind ?? "manual",
+            goalId: resolvedGoalId,
+            ...(projectWorkspaceId ? { projectWorkspaceId } : {}),
+            ...(executionWorkspaceSettings ? { executionWorkspaceSettings } : {}),
+            companyId,
+            issueNumber,
+            identifier,
+          } as typeof issues.$inferInsert;
+          if (values.status === "in_progress" && !values.startedAt) {
+            values.startedAt = new Date();
+          }
+          if (values.status === "done") {
+            values.completedAt = new Date();
+          }
+          if (values.status === "cancelled") {
+            values.cancelledAt = new Date();
+          }
+
+          const [issue] = await tx.insert(issues).values(values).returning();
+          if (inputLabelIds) {
+            await syncIssueLabels(issue.id, companyId, inputLabelIds, tx);
+          }
+          const [enriched] = await withIssueLabels(tx, [issue]);
+          return { issue: enriched, created: true };
+        });
+      } catch (error) {
+        if (!delegatedLookup || !isUniqueViolation(error, "issues_open_delegation_key_uq")) {
+          throw error;
         }
-        const [company] = await tx
-          .update(companies)
-          .set({ issueCounter: sql`${companies.issueCounter} + 1` })
-          .where(eq(companies.id, companyId))
-          .returning({ issueCounter: companies.issueCounter, issuePrefix: companies.issuePrefix });
-
-        const issueNumber = company.issueCounter;
-        const identifier = `${company.issuePrefix}-${issueNumber}`;
-
-        const values = {
-          ...issueData,
-          originKind: issueData.originKind ?? "manual",
-          goalId: resolvedGoalId,
-          ...(projectWorkspaceId ? { projectWorkspaceId } : {}),
-          ...(executionWorkspaceSettings ? { executionWorkspaceSettings } : {}),
+        const existing = await findOpenDelegatedChildByKey(db, {
           companyId,
-          issueNumber,
-          identifier,
-        } as typeof issues.$inferInsert;
-        if (values.status === "in_progress" && !values.startedAt) {
-          values.startedAt = new Date();
+          parentId: delegatedLookup.parentId,
+          delegationKey: delegatedLookup.delegationKey,
+        });
+        if (!existing) {
+          throw error;
         }
-        if (values.status === "done") {
-          values.completedAt = new Date();
-        }
-        if (values.status === "cancelled") {
-          values.cancelledAt = new Date();
-        }
-
-        const [issue] = await tx.insert(issues).values(values).returning();
-        if (inputLabelIds) {
-          await syncIssueLabels(issue.id, companyId, inputLabelIds, tx);
-        }
-        const [enriched] = await withIssueLabels(tx, [issue]);
-        return { issue: enriched, created: true };
-      });
+        return { issue: existing, created: false };
+      }
     },
 
     update: async (id: string, data: Partial<typeof issues.$inferInsert> & { labelIds?: string[] }) => {

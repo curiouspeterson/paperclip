@@ -27,6 +27,7 @@ export const issues = pgTable(
     projectWorkspaceId: uuid("project_workspace_id").references(() => projectWorkspaces.id, { onDelete: "set null" }),
     goalId: uuid("goal_id").references(() => goals.id),
     parentId: uuid("parent_id").references((): AnyPgColumn => issues.id),
+    delegationKey: text("delegation_key"),
     title: text("title").notNull(),
     description: text("description"),
     status: text("status").notNull().default("backlog"),
@@ -77,6 +78,14 @@ export const issues = pgTable(
     projectWorkspaceIdx: index("issues_company_project_workspace_idx").on(table.companyId, table.projectWorkspaceId),
     executionWorkspaceIdx: index("issues_company_execution_workspace_idx").on(table.companyId, table.executionWorkspaceId),
     identifierIdx: uniqueIndex("issues_identifier_idx").on(table.identifier),
+    openDelegationKeyIdx: uniqueIndex("issues_open_delegation_key_uq")
+      .on(table.companyId, table.parentId, table.delegationKey)
+      .where(
+        sql`${table.parentId} is not null
+          and ${table.delegationKey} is not null
+          and ${table.hiddenAt} is null
+          and ${table.status} in ('backlog', 'todo', 'in_progress', 'in_review', 'blocked')`,
+      ),
     openRoutineExecutionIdx: uniqueIndex("issues_open_routine_execution_uq")
       .on(table.companyId, table.originKind, table.originId)
       .where(

@@ -249,6 +249,27 @@ describe("issue contract routes", () => {
     expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", { title: "Updated title" });
   });
 
+  it("rejects delegationKey on issue patch requests", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "todo",
+      assigneeAgentId: AGENT_ONE_ID,
+    }));
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .patch("/api/issues/11111111-1111-4111-8111-111111111111")
+      .send({ delegationKey: "newsletter.hermes-wrapper" });
+
+    expect(res.status).toBe(400);
+    expect(mockIssueService.update).not.toHaveBeenCalled();
+  });
+
   it("allows an agent to create an assigned child issue under their own parent issue", async () => {
     mockIssueService.getById.mockResolvedValueOnce(makeIssue({
       id: "22222222-2222-4222-8222-222222222222",
