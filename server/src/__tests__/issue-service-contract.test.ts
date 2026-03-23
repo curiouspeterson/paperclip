@@ -421,6 +421,147 @@ describe("issue service contracts", () => {
     expect(second.issue.id).toBe(first.issue.id);
   });
 
+  it("backfills legacy delegated children so future creates reuse them", async () => {
+    const companyId = await seedCompany("Alpha");
+    const managerAgentId = await seedAgent(companyId, "Manager");
+    const workerAgentId = await seedAgent(companyId, "Worker");
+    const parentId = randomUUID();
+    const legacyChildId = randomUUID();
+
+    await db.insert(issues).values({
+      id: parentId,
+      companyId,
+      title: "Parent task",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: managerAgentId,
+      createdByAgentId: managerAgentId,
+    });
+    await db.insert(issues).values({
+      id: legacyChildId,
+      companyId,
+      parentId,
+      title: "Implement Hermes wrapper",
+      status: "todo",
+      priority: "medium",
+      assigneeAgentId: workerAgentId,
+      createdByAgentId: managerAgentId,
+    });
+
+    const svc = issueService(db);
+    const result = await svc.backfillDelegationKeys({ companyId });
+
+    expect(result.updatedCount).toBe(1);
+    expect(result.skippedIssues).toEqual([]);
+
+    const backfilled = await svc.getById(legacyChildId);
+    expect(backfilled?.delegationKey).toMatch(/^delegated:/);
+
+    const created = await svc.create(companyId, {
+      title: "  Implement   Hermes wrapper ",
+      parentId,
+      assigneeAgentId: workerAgentId,
+      createdByAgentId: managerAgentId,
+      status: "todo",
+      priority: "medium",
+    } as any);
+
+    expect(created.created).toBe(false);
+    expect(created.issue.id).toBe(legacyChildId);
+  });
+
+  it("reports conflicting legacy delegated children without backfilling them", async () => {
+    const companyId = await seedCompany("Alpha");
+    const managerAgentId = await seedAgent(companyId, "Manager");
+    const workerAgentId = await seedAgent(companyId, "Worker");
+    const parentId = randomUUID();
+    const firstLegacyChildId = randomUUID();
+    const secondLegacyChildId = randomUUID();
+
+    await db.insert(issues).values({
+      id: parentId,
+      companyId,
+      title: "Parent task",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: managerAgentId,
+      createdByAgentId: managerAgentId,
+    });
+    await db.insert(issues).values([
+      {
+        id: firstLegacyChildId,
+        companyId,
+        parentId,
+        title: "Implement Hermes wrapper",
+        status: "todo",
+        priority: "medium",
+        assigneeAgentId: workerAgentId,
+        createdByAgentId: managerAgentId,
+      },
+      {
+        id: secondLegacyChildId,
+        companyId,
+        parentId,
+        title: "  Implement   Hermes wrapper  ",
+        status: "todo",
+        priority: "medium",
+        assigneeAgentId: workerAgentId,
+        createdByAgentId: managerAgentId,
+      },
+    ]);
+
+    const result = await issueService(db).backfillDelegationKeys({ companyId });
+
+    expect(result.updatedCount).toBe(0);
+    expect(result.skippedIssues).toHaveLength(2);
+    expect(result.skippedIssues.every((entry) => entry.reason === "conflicting_legacy_duplicates")).toBe(true);
+
+    const rows = await db
+      .select({ id: issues.id, delegationKey: issues.delegationKey })
+      .from(issues)
+      .where(eq(issues.companyId, companyId));
+    expect(rows.filter((row) => row.id !== parentId).every((row) => row.delegationKey == null)).toBe(true);
+  });
+
+  it("rejects delegated child creation when a parent already has too many open delegated children", async () => {
+    const companyId = await seedCompany("Alpha");
+    const managerAgentId = await seedAgent(companyId, "Manager");
+    const workerAgentId = await seedAgent(companyId, "Worker");
+    const parentId = randomUUID();
+
+    await db.insert(issues).values({
+      id: parentId,
+      companyId,
+      title: "Parent task",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: managerAgentId,
+      createdByAgentId: managerAgentId,
+    });
+
+    for (let index = 0; index < 20; index += 1) {
+      await issueService(db).create(companyId, {
+        title: `Delegated child ${index + 1}`,
+        parentId,
+        assigneeAgentId: workerAgentId,
+        createdByAgentId: managerAgentId,
+        status: "todo",
+        priority: "medium",
+      } as any);
+    }
+
+    await expect(
+      issueService(db).create(companyId, {
+        title: "Delegated child 21",
+        parentId,
+        assigneeAgentId: workerAgentId,
+        createdByAgentId: managerAgentId,
+        status: "todo",
+        priority: "medium",
+      } as any),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
   it.each([
     { status: "done", timestampField: "completedAt" as const },
     { status: "cancelled", timestampField: "cancelledAt" as const },

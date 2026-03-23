@@ -906,12 +906,8 @@ export function issueService(db: Db) {
       if (data.status === "in_progress") {
         throw unprocessable("Use checkout to set issue status to in_progress");
       }
-      let delegatedLookup:
-        | {
-          parentId: string;
-          delegationKey: string;
-        }
-        | null = null;
+      let delegatedParentId: string | null = null;
+      let delegatedKey: string | null = null;
       try {
         return await db.transaction(async (tx) => {
           const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
@@ -931,16 +927,14 @@ export function issueService(db: Db) {
             requestDepth: issueData.requestDepth ?? 0,
             delegationKey: issueData.delegationKey ?? null,
           });
-          delegatedLookup =
-            issueData.parentId && delegationKey
-              ? { parentId: issueData.parentId, delegationKey }
-              : null;
+          delegatedParentId = issueData.parentId ?? null;
+          delegatedKey = delegationKey;
           const duplicateDelegatedChildByKey =
-            delegatedLookup
+            delegatedParentId && delegatedKey
               ? await findOpenDelegatedChildByKey(tx, {
                   companyId,
-                  parentId: delegatedLookup.parentId,
-                  delegationKey: delegatedLookup.delegationKey,
+                  parentId: delegatedParentId,
+                  delegationKey: delegatedKey,
                 })
               : null;
           if (duplicateDelegatedChildByKey) {
@@ -1039,13 +1033,13 @@ export function issueService(db: Db) {
           return { issue: enriched, created: true };
         });
       } catch (error) {
-        if (!delegatedLookup || !isUniqueViolation(error, "issues_open_delegation_key_uq")) {
+        if (!delegatedParentId || !delegatedKey || !isUniqueViolation(error, "issues_open_delegation_key_uq")) {
           throw error;
         }
         const existing = await findOpenDelegatedChildByKey(db, {
           companyId,
-          parentId: delegatedLookup.parentId,
-          delegationKey: delegatedLookup.delegationKey,
+          parentId: delegatedParentId,
+          delegationKey: delegatedKey,
         });
         if (!existing) {
           throw error;
