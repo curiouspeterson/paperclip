@@ -110,6 +110,7 @@ export type {
 export type { Goal } from "./goal.js";
 export type {
   Approval,
+  ApprovalLinkedIssueSummary,
   ApprovalComment,
   BrowserSessionHandoffApprovalPayload,
   SecretProvisioningRequiredApprovalPayload,

@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import {
   ISSUE_CHECKOUT_EXPECTED_STATUSES,
+  type AddIssueCommentResult,
   addIssueCommentSchema,
   checkoutIssueSchema,
   createIssueSchema,
@@ -230,7 +231,7 @@ export function registerIssueCommands(program: Command): void {
             body: opts.body,
             reopen: opts.reopen,
           });
-          const comment = await ctx.api.post<IssueComment>(`/api/issues/${issueId}/comments`, payload);
+          const comment = await ctx.api.post<AddIssueCommentResult>(`/api/issues/${issueId}/comments`, payload);
           printOutput(comment, { json: ctx.json });
         } catch (err) {
           handleCommandError(err);

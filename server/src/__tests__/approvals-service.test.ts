@@ -52,6 +52,17 @@ function createApproval(status: string): ApprovalRecord {
   };
 }
 
+function createBudgetApproval(status: string): ApprovalRecord {
+  return {
+    id: "approval-1",
+    companyId: "company-1",
+    type: "budget_override_required",
+    status,
+    payload: { policyId: "policy-1" },
+    requestedByAgentId: null,
+  };
+}
+
 function createDbStub(selectResults: ApprovalRecord[][], updateResults: ApprovalRecord[]) {
   const pendingSelectResults = [...selectResults];
   const selectWhere = vi.fn(async () => pendingSelectResults.shift() ?? []);
@@ -181,6 +192,24 @@ describe("approvalService resolution idempotency", () => {
     await expect(svc.approve("approval-1", "board", "ship it")).rejects.toThrow("activate failed");
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(mockNotifyHireApproved).not.toHaveBeenCalled();
+  });
+
+  it("rejects generic approval for budget override approvals", async () => {
+    const dbStub = createDbStub([[createBudgetApproval("pending")]], []);
+    const svc = approvalService(dbStub.db as any);
+
+    await expect(svc.approve("approval-1", "board", "ship it")).rejects.toThrow(
+      /Resolve budget override approvals from the budget incident controls/i,
+    );
+  });
+
+  it("rejects revision lifecycle changes for budget override approvals", async () => {
+    const dbStub = createDbStub([[createBudgetApproval("pending")]], []);
+    const svc = approvalService(dbStub.db as any);
+
+    await expect(svc.requestRevision("approval-1", "board", "revise")).rejects.toThrow(
+      /Resolve budget override approvals from the budget incident controls/i,
+    );
   });
 
   it("lists approval comments for the approval company", async () => {

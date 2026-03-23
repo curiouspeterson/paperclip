@@ -35,6 +35,13 @@ export function approvalService(db: Db) {
     return existing;
   }
 
+  function assertBudgetApprovalHandledViaIncidents(existing: ApprovalRecord) {
+    if (existing.type !== "budget_override_required") return;
+    throw unprocessable(
+      "Resolve budget override approvals from the budget incident controls instead of generic approval actions",
+    );
+  }
+
   async function resolveApproval(
     database: DbLike,
     id: string,
@@ -43,6 +50,7 @@ export function approvalService(db: Db) {
     decisionNote: string | null | undefined,
   ): Promise<ResolutionResult> {
     const existing = await getExistingApproval(database, id);
+    assertBudgetApprovalHandledViaIncidents(existing);
     if (!canResolveStatuses.has(existing.status)) {
       if (existing.status === targetStatus) {
         return { approval: existing, applied: false };
@@ -215,6 +223,7 @@ export function approvalService(db: Db) {
 
     requestRevision: async (id: string, decidedByUserId: string, decisionNote?: string | null) => {
       const existing = await getExistingApproval(db, id);
+      assertBudgetApprovalHandledViaIncidents(existing);
       if (existing.status !== "pending") {
         throw unprocessable("Only pending approvals can request revision");
       }
@@ -236,6 +245,7 @@ export function approvalService(db: Db) {
 
     resubmit: async (id: string, payload?: Record<string, unknown>) => {
       const existing = await getExistingApproval(db, id);
+      assertBudgetApprovalHandledViaIncidents(existing);
       if (existing.status !== "revision_requested") {
         throw unprocessable("Only revision requested approvals can be resubmitted");
       }

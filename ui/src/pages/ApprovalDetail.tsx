@@ -286,7 +286,7 @@ export function ApprovalDetail() {
               Resolve this budget stop from the budget controls on <Link to="/costs" className="underline underline-offset-2">/costs</Link>.
             </p>
           )}
-          {approval.status === "pending" && (
+          {approval.status === "pending" && !isBudgetApproval && (
             <Button
               size="sm"
               variant="outline"
@@ -296,7 +296,7 @@ export function ApprovalDetail() {
               Request revision
             </Button>
           )}
-          {approval.status === "revision_requested" && (
+          {approval.status === "revision_requested" && !isBudgetApproval && (
             <Button
               size="sm"
               variant="outline"

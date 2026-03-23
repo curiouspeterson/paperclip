@@ -234,6 +234,7 @@ export type {
   IssueLabel,
   Goal,
   Approval,
+  ApprovalLinkedIssueSummary,
   ApprovalComment,
   BrowserSessionHandoffApprovalPayload,
   SecretProvisioningRequiredApprovalPayload,

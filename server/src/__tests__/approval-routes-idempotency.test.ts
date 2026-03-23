@@ -1,8 +1,10 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ApprovalLinkedIssueSummary } from "@paperclipai/shared";
 import { approvalRoutes } from "../routes/approvals.js";
 import { errorHandler } from "../middleware/index.js";
+import { unprocessable } from "../errors.js";
 
 const mockApprovalService = vi.hoisted(() => ({
   list: vi.fn(),
@@ -135,6 +137,73 @@ describe("approval routes idempotent retries", () => {
     expect(res.status).toBe(200);
     expect(mockLogActivity).not.toHaveBeenCalled();
   });
+
+  it("returns approval-linked issues using the summary contract shape", async () => {
+    const linkedIssues: ApprovalLinkedIssueSummary[] = [
+      {
+        id: "issue-1",
+        companyId: "company-1",
+        projectId: "project-1",
+        goalId: null,
+        parentId: null,
+        title: "Budget incident follow-up",
+        description: "Resolve the blocked run",
+        status: "in_progress",
+        priority: "high",
+        assigneeAgentId: "agent-1",
+        createdByAgentId: null,
+        createdByUserId: "user-1",
+        issueNumber: 42,
+        identifier: "PAP-42",
+        requestDepth: 0,
+        billingCode: null,
+        startedAt: "2026-03-23T16:00:00.000Z",
+        completedAt: null,
+        cancelledAt: null,
+        createdAt: "2026-03-23T16:00:00.000Z",
+        updatedAt: "2026-03-23T16:05:00.000Z",
+      },
+    ];
+    mockIssueApprovalService.listIssuesForApproval.mockResolvedValue(linkedIssues);
+
+    const res = await request(createApp()).get("/api/approvals/approval-1/issues");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(linkedIssues);
+    expect(mockIssueApprovalService.listIssuesForApproval).toHaveBeenCalledWith("approval-1");
+  });
+
+  it.each([
+    ["/api/approvals/approval-1/approve", "approve"],
+    ["/api/approvals/approval-1/reject", "reject"],
+    ["/api/approvals/approval-1/request-revision", "requestRevision"],
+    ["/api/approvals/approval-1/resubmit", "resubmit"],
+  ] as const)(
+    "surfaces budget override approvals as unprocessable for %s",
+    async (path, method) => {
+      mockApprovalService.getById.mockResolvedValue({
+        id: "approval-1",
+        companyId: "company-1",
+        type: "budget_override_required",
+        status: "pending",
+        payload: {},
+        requestedByAgentId: "agent-1",
+      });
+      mockApprovalService[method].mockRejectedValue(
+        unprocessable(
+          "Resolve budget override approvals from the budget incident controls instead of generic approval actions",
+        ),
+      );
+
+      const res = await request(createApp()).post(path).send({ decisionNote: "ship it" });
+
+      expect(res.status).toBe(422);
+      expect(res.body).toEqual({
+        error: "Resolve budget override approvals from the budget incident controls instead of generic approval actions",
+      });
+      expect(mockLogActivity).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ["/api/approvals/approval-1/approve", "approve"],

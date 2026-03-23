@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { approvals, issueApprovals, issues } from "@paperclipai/db";
+import type { ApprovalLinkedIssueSummary } from "@paperclipai/shared";
 import { notFound, unprocessable } from "../errors.js";
 import { redactEventPayload } from "../redaction.js";
 
@@ -70,7 +71,7 @@ export function issueApprovalService(db: Db) {
       }));
     },
 
-    listIssuesForApproval: async (approvalId: string) => {
+    listIssuesForApproval: async (approvalId: string): Promise<ApprovalLinkedIssueSummary[]> => {
       const approval = await getApproval(approvalId);
       if (!approval) throw notFound("Approval not found");
 

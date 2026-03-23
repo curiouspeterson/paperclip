@@ -31,6 +31,30 @@ export interface Approval {
   updatedAt: Date;
 }
 
+export interface ApprovalLinkedIssueSummary {
+  id: string;
+  companyId: string;
+  projectId: string | null;
+  goalId: string | null;
+  parentId: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  assigneeAgentId: string | null;
+  createdByAgentId: string | null;
+  createdByUserId: string | null;
+  issueNumber: number | null;
+  identifier: string | null;
+  requestDepth: number;
+  billingCode: string | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ApprovalComment {
   id: string;
   companyId: string;
