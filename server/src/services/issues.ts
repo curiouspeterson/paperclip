@@ -329,7 +329,9 @@ function withActiveRuns(
 export function issueService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
 
-  async function findOpenDelegatedChildDuplicate(input: {
+  async function findOpenDelegatedChildDuplicate(
+    database: Pick<Db, "select">,
+    input: {
     companyId: string;
     parentId: string;
     createdByAgentId: string;
@@ -339,7 +341,8 @@ export function issueService(db: Db) {
     projectId?: string | null;
     goalId?: string | null;
     requestDepth?: number | null;
-  }) {
+  },
+  ) {
     const normalizedTitle = normalizeDelegatedIssueTitle(input.title);
     const assigneeAgentId = input.assigneeAgentId ?? null;
     const assigneeUserId = input.assigneeUserId ?? null;
@@ -347,7 +350,7 @@ export function issueService(db: Db) {
     const goalId = input.goalId ?? null;
     const requestDepth = input.requestDepth ?? 0;
 
-    const candidates = await db
+    const candidates = await database
       .select()
       .from(issues)
       .where(
@@ -372,7 +375,7 @@ export function issueService(db: Db) {
     });
     if (!duplicate) return null;
 
-    return withIssueLabels(db, [duplicate]).then((rows) => rows[0] ?? null);
+    return withIssueLabels(database as Db, [duplicate]).then((rows) => rows[0] ?? null);
   }
 
   function redactIssueComment<T extends { body: string }>(comment: T, censorUsernameInLogs: boolean): T {
@@ -814,27 +817,32 @@ export function issueService(db: Db) {
       if (data.status === "in_progress") {
         throw unprocessable("Use checkout to set issue status to in_progress");
       }
-      const duplicateDelegatedChild =
-        issueData.createdByAgentId &&
-        issueData.parentId &&
-        (issueData.assigneeAgentId || issueData.assigneeUserId)
-          ? await findOpenDelegatedChildDuplicate({
-              companyId,
-              parentId: issueData.parentId,
-              createdByAgentId: issueData.createdByAgentId,
-              title: issueData.title,
-              assigneeAgentId: issueData.assigneeAgentId ?? null,
-              assigneeUserId: issueData.assigneeUserId ?? null,
-              projectId: issueData.projectId ?? null,
-              goalId: issueData.goalId ?? null,
-              requestDepth: issueData.requestDepth ?? 0,
-            })
-          : null;
-      if (duplicateDelegatedChild) {
-        return { issue: duplicateDelegatedChild, created: false };
-      }
       return db.transaction(async (tx) => {
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
+        const resolvedGoalId = resolveIssueGoalId({
+          projectId: issueData.projectId,
+          goalId: issueData.goalId,
+          defaultGoalId: defaultCompanyGoal?.id ?? null,
+        });
+        const duplicateDelegatedChild =
+          issueData.createdByAgentId &&
+          issueData.parentId &&
+          (issueData.assigneeAgentId || issueData.assigneeUserId)
+            ? await findOpenDelegatedChildDuplicate(tx, {
+                companyId,
+                parentId: issueData.parentId,
+                createdByAgentId: issueData.createdByAgentId,
+                title: issueData.title,
+                assigneeAgentId: issueData.assigneeAgentId ?? null,
+                assigneeUserId: issueData.assigneeUserId ?? null,
+                projectId: issueData.projectId ?? null,
+                goalId: resolvedGoalId,
+                requestDepth: issueData.requestDepth ?? 0,
+              })
+            : null;
+        if (duplicateDelegatedChild) {
+          return { issue: duplicateDelegatedChild, created: false };
+        }
         let executionWorkspaceSettings =
           (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
         if (executionWorkspaceSettings == null && issueData.projectId) {
@@ -883,11 +891,7 @@ export function issueService(db: Db) {
         const values = {
           ...issueData,
           originKind: issueData.originKind ?? "manual",
-          goalId: resolveIssueGoalId({
-            projectId: issueData.projectId,
-            goalId: issueData.goalId,
-            defaultGoalId: defaultCompanyGoal?.id ?? null,
-          }),
+          goalId: resolvedGoalId,
           ...(projectWorkspaceId ? { projectWorkspaceId } : {}),
           ...(executionWorkspaceSettings ? { executionWorkspaceSettings } : {}),
           companyId,

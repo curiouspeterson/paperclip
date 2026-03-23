@@ -120,7 +120,7 @@ function makeIssue(overrides?: Partial<Record<string, unknown>>) {
 describe("issue contract routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockIssueService.create.mockResolvedValue(makeIssue());
+    mockIssueService.create.mockResolvedValue({ issue: makeIssue(), created: true });
     mockIssueService.assertCheckoutOwner.mockResolvedValue({
       id: "11111111-1111-4111-8111-111111111111",
       status: "in_progress",
@@ -255,12 +255,15 @@ describe("issue contract routes", () => {
       status: "todo",
       assigneeAgentId: AGENT_ONE_ID,
     }));
-    mockIssueService.create.mockResolvedValue(makeIssue({
-      id: "33333333-3333-4333-8333-333333333333",
-      title: "Delegated child issue",
-      parentId: "22222222-2222-4222-8222-222222222222",
-      assigneeAgentId: AGENT_TWO_ID,
-    }));
+    mockIssueService.create.mockResolvedValue({
+      issue: makeIssue({
+        id: "33333333-3333-4333-8333-333333333333",
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      }),
+      created: true,
+    });
 
     const res = await request(
       createApp({
@@ -286,6 +289,48 @@ describe("issue contract routes", () => {
         assigneeAgentId: AGENT_TWO_ID,
       }),
     );
+  });
+
+  it("reuses an existing delegated child issue instead of creating a duplicate", async () => {
+    mockIssueService.getById.mockResolvedValueOnce(makeIssue({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "todo",
+      assigneeAgentId: AGENT_ONE_ID,
+    }));
+    mockIssueService.create.mockResolvedValue({
+      issue: makeIssue({
+        id: "33333333-3333-4333-8333-333333333333",
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      }),
+      created: false,
+    });
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post(`/api/companies/${COMPANY_ID}/issues`)
+      .send({
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "issue.create_deduplicated",
+        entityId: "33333333-3333-4333-8333-333333333333",
+      }),
+    );
+    expect(mockHeartbeatService.wakeup).not.toHaveBeenCalled();
   });
 
   it("rejects agent-created assigned child issues when the parent issue is not owned by the actor", async () => {

@@ -170,7 +170,7 @@ describe("issue service contracts", () => {
   it("rejects a foreign goal on update", async () => {
     const companyId = await seedCompany("Alpha");
     const foreignCompanyId = await seedCompany("Beta");
-    const issue = await issueService(db).create(companyId, {
+    const { issue } = await issueService(db).create(companyId, {
       title: "Owned issue",
       status: "todo",
       priority: "medium",
@@ -193,7 +193,7 @@ describe("issue service contracts", () => {
   it("rejects a foreign parent issue on update", async () => {
     const companyId = await seedCompany("Alpha");
     const foreignCompanyId = await seedCompany("Beta");
-    const issue = await issueService(db).create(companyId, {
+    const { issue } = await issueService(db).create(companyId, {
       title: "Owned issue",
       status: "todo",
       priority: "medium",
@@ -322,6 +322,58 @@ describe("issue service contracts", () => {
     expect(updated?.executionRunId).toBeNull();
     expect(updated?.executionLockedAt).toBeNull();
     expect(updated?.executionAgentNameKey).toBeNull();
+  });
+
+  it("reuses an open delegated child issue for repeated agent delegation", async () => {
+    const companyId = await seedCompany("Alpha");
+    const managerAgentId = await seedAgent(companyId, "Manager");
+    const workerAgentId = await seedAgent(companyId, "Worker");
+    const parentId = randomUUID();
+
+    await db.insert(issues).values({
+      id: parentId,
+      companyId,
+      title: "Parent task",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: managerAgentId,
+      createdByAgentId: managerAgentId,
+    });
+
+    const svc = issueService(db);
+    const first = await svc.create(companyId, {
+      title: "Implement Hermes wrapper",
+      parentId,
+      assigneeAgentId: workerAgentId,
+      createdByAgentId: managerAgentId,
+      status: "todo",
+      priority: "medium",
+    } as any);
+    const second = await svc.create(companyId, {
+      title: "  Implement   Hermes wrapper  ",
+      parentId,
+      assigneeAgentId: workerAgentId,
+      createdByAgentId: managerAgentId,
+      status: "todo",
+      priority: "medium",
+    } as any);
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.issue.id).toBe(first.issue.id);
+
+    const rows = await db
+      .select({ id: issues.id })
+      .from(issues)
+      .where(eq(issues.companyId, companyId));
+    expect(rows).toHaveLength(2);
+
+    const company = await db
+      .select({ issueCounter: companies.issueCounter })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .then((result) => result[0]);
+    expect(company?.issueCounter).toBe(1);
   });
 
   it.each([
