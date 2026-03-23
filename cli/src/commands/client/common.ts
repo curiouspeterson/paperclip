@@ -1,5 +1,7 @@
 import pc from "picocolors";
 import type { Command } from "commander";
+import { getStoredBoardCredential, loginBoardCli } from "../../client/board-auth.js";
+import { buildCliCommandLabel } from "../../client/command-label.js";
 import { readConfig } from "../../config/store.js";
 import { readContext, resolveProfile, type ClientContextProfile } from "../../client/context.js";
 import { ApiRequestError, PaperclipApiClient } from "../../client/http.js";
@@ -77,6 +79,16 @@ export function resolveCommandContext(
     profile,
     json: Boolean(options.json),
   };
+}
+
+function shouldRecoverBoardAuth(error: ApiRequestError): boolean {
+  if (error.status === 401) return true;
+  if (error.status !== 403) return false;
+  return error.message.includes("Board access required") || error.message.includes("Instance admin required");
+}
+
+function canAttemptInteractiveBoardAuth(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
 export function printOutput(data: unknown, opts: { json?: boolean; label?: string } = {}): void {
