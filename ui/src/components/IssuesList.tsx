@@ -24,7 +24,8 @@ import { CircleDot, Plus, Filter, ArrowUpDown, Layers, Check, X, ChevronRight, L
 import { KanbanBoard } from "./KanbanBoard";
 import { HeartbeatButton } from "./HeartbeatButton";
 import { Link } from "@/lib/router";
-import type { Issue } from "@paperclipai/shared";
+import type { Issue, IssueBlockerType } from "@paperclipai/shared";
+import { blockerTypeLabels, getIssueBlockerSummary, issueMatchesBlockerTypes } from "../lib/issue-blockers";
 
 /* ── Helpers ── */
 
@@ -43,6 +44,7 @@ export type IssueViewState = {
   assignees: string[];
   labels: string[];
   projects: string[];
+  blockerTypes: IssueBlockerType[];
   sortField: "status" | "priority" | "title" | "created" | "updated";
   sortDir: "asc" | "desc";
   groupBy: "status" | "priority" | "assignee" | "none";
@@ -56,6 +58,7 @@ const defaultViewState: IssueViewState = {
   assignees: [],
   labels: [],
   projects: [],
+  blockerTypes: [],
   sortField: "updated",
   sortDir: "desc",
   groupBy: "none",
@@ -64,10 +67,21 @@ const defaultViewState: IssueViewState = {
 };
 
 const quickFilterPresets = [
-  { label: "All", statuses: [] as string[] },
-  { label: "Active", statuses: ["todo", "in_progress", "in_review", "blocked"] },
-  { label: "Backlog", statuses: ["backlog"] },
-  { label: "Done", statuses: ["done", "cancelled"] },
+  { label: "All", statuses: [] as string[], blockerTypes: [] as IssueBlockerType[] },
+  { label: "Active", statuses: ["todo", "in_progress", "in_review", "blocked"], blockerTypes: [] as IssueBlockerType[] },
+  { label: "Delegated", statuses: ["blocked"], blockerTypes: ["delegated_child_execution"] as IssueBlockerType[] },
+  { label: "Backlog", statuses: ["backlog"], blockerTypes: [] as IssueBlockerType[] },
+  { label: "Done", statuses: ["done", "cancelled"], blockerTypes: [] as IssueBlockerType[] },
+];
+
+const blockerFilterOrder: IssueBlockerType[] = [
+  "delegated_child_execution",
+  "missing_secret",
+  "browser_login_required",
+  "external_access",
+  "operator_action",
+  "unsupported_automation",
+  "unknown",
 ];
 
 function getViewState(key: string): IssueViewState {
@@ -109,6 +123,7 @@ function applyFilters(issues: Issue[], state: IssueViewState, currentUserId?: st
   }
   if (state.labels.length > 0) result = result.filter((i) => (i.labelIds ?? []).some((id) => state.labels.includes(id)));
   if (state.projects.length > 0) result = result.filter((i) => i.projectId != null && state.projects.includes(i.projectId));
+  if (state.blockerTypes.length > 0) result = result.filter((issue) => issueMatchesBlockerTypes(issue, state.blockerTypes));
   return result;
 }
 
@@ -141,6 +156,7 @@ function countActiveFilters(state: IssueViewState): number {
   if (state.assignees.length > 0) count++;
   if (state.labels.length > 0) count++;
   if (state.projects.length > 0) count++;
+  if (state.blockerTypes.length > 0) count++;
   return count;
 }
 
@@ -373,14 +389,14 @@ export function IssuesList({
                   <span className="sm:hidden text-[10px] font-medium ml-0.5">{activeFilterCount}</span>
                 )}
                 {activeFilterCount > 0 && (
-                  <X
-                    className="h-3 w-3 ml-1 hidden sm:block"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateView({ statuses: [], priorities: [], assignees: [], labels: [], projects: [] });
-                    }}
-                  />
-                )}
+                    <X
+                      className="h-3 w-3 ml-1 hidden sm:block"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateView({ statuses: [], priorities: [], assignees: [], labels: [], projects: [], blockerTypes: [] });
+                      }}
+                    />
+                  )}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-[min(480px,calc(100vw-2rem))] p-0">
@@ -390,7 +406,7 @@ export function IssuesList({
                   {activeFilterCount > 0 && (
                     <button
                       className="text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => updateView({ statuses: [], priorities: [], assignees: [], labels: [] })}
+                      onClick={() => updateView({ statuses: [], priorities: [], assignees: [], labels: [], projects: [], blockerTypes: [] })}
                     >
                       Clear
                     </button>
@@ -402,7 +418,9 @@ export function IssuesList({
                   <span className="text-xs text-muted-foreground">Quick filters</span>
                   <div className="flex flex-wrap gap-1.5">
                     {quickFilterPresets.map((preset) => {
-                      const isActive = arraysEqual(viewState.statuses, preset.statuses);
+                      const isActive =
+                        arraysEqual(viewState.statuses, preset.statuses) &&
+                        arraysEqual(viewState.blockerTypes, preset.blockerTypes);
                       return (
                         <button
                           key={preset.label}
@@ -411,7 +429,10 @@ export function IssuesList({
                               ? "bg-primary text-primary-foreground border-primary"
                               : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
                           }`}
-                          onClick={() => updateView({ statuses: isActive ? [] : [...preset.statuses] })}
+                          onClick={() => updateView({
+                            statuses: isActive ? [] : [...preset.statuses],
+                            blockerTypes: isActive ? [] : [...preset.blockerTypes],
+                          })}
                         >
                           {preset.label}
                         </button>
@@ -527,6 +548,23 @@ export function IssuesList({
                         </div>
                       </div>
                     )}
+
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">Blocker</span>
+                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                        {blockerFilterOrder.map((blockerType) => (
+                          <label key={blockerType} className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-accent/50 cursor-pointer">
+                            <Checkbox
+                              checked={viewState.blockerTypes.includes(blockerType)}
+                              onCheckedChange={() => updateView({
+                                blockerTypes: toggleInArray(viewState.blockerTypes, blockerType) as IssueBlockerType[],
+                              })}
+                            />
+                            <span className="text-sm">{blockerTypeLabels[blockerType]}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -667,6 +705,7 @@ export function IssuesList({
                 <IssueRow
                   key={issue.id}
                   issue={issue}
+                  subtitle={issue.status === "blocked" ? getIssueBlockerSummary(issue) : null}
                   issueLinkState={issueLinkState}
                   desktopLeadingSpacer
                   mobileLeading={(

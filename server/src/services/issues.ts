@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
@@ -36,6 +36,10 @@ const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "bloc
 const OPEN_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked"] as const;
 const ISSUE_CHECKOUT_ALLOWED_STATUS_SET = new Set<string>(ISSUE_CHECKOUT_EXPECTED_STATUSES);
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
+const MAX_OPEN_DELEGATED_CHILDREN_PER_PARENT = 20;
+const MAX_RECENT_DELEGATED_CHILDREN_PER_PARENT = 5;
+const DELEGATED_CHILD_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE = "delegated_child_execution";
 
 function normalizeDelegatedIssueTitle(value: string | null | undefined) {
   return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -106,6 +110,19 @@ function isUniqueViolation(error: unknown, constraint?: string) {
     (constraint === undefined || ("constraint" in error && (error as { constraint?: string }).constraint === constraint));
 }
 
+function isOpenDelegatedChild(input: {
+  parentId?: string | null;
+  createdByAgentId?: string | null;
+  assigneeAgentId?: string | null;
+  assigneeUserId?: string | null;
+}) {
+  return Boolean(
+    input.parentId &&
+    input.createdByAgentId &&
+    (input.assigneeAgentId || input.assigneeUserId),
+  );
+}
+
 function assertTransition(from: string, to: string) {
   if (!ALL_ISSUE_STATUSES.includes(to)) {
     throw conflict(`Unknown issue status: ${to}`);
@@ -134,6 +151,26 @@ function applyStatusSideEffects(
   return patch;
 }
 
+function isDelegatedChildExecutionBlockerDetails(value: Record<string, unknown> | null | undefined) {
+  return value?.blockerType === DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE;
+}
+
+function buildDelegatedChildExecutionBlockerDetails(input: {
+  delegatedChildIssueId: string;
+  delegatedChildIdentifier: string;
+}): Record<string, unknown> {
+  return {
+    blockerType: DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE,
+    summary: `Waiting on delegated child issue ${input.delegatedChildIdentifier}`,
+    detail:
+      `Delegated child ${input.delegatedChildIdentifier} is now the active execution path. ` +
+      "Resume this coordination issue only when that work changes state or needs intervention.",
+    requiredAction: "Wait for the delegated child issue to finish or manually resume coordination work.",
+    delegatedChildIssueId: input.delegatedChildIssueId,
+    delegatedChildIdentifier: input.delegatedChildIdentifier,
+  };
+}
+
 export interface IssueFilters {
   status?: string;
   assigneeAgentId?: string;
@@ -150,6 +187,7 @@ export interface IssueFilters {
 }
 
 type IssueRow = typeof issues.$inferSelect;
+type IssueCommentRow = typeof issueComments.$inferSelect;
 type IssueLabelRow = typeof labels.$inferSelect;
 type IssueActiveRunRow = {
   id: string;
@@ -163,6 +201,12 @@ type IssueActiveRunRow = {
 };
 type IssueWithLabels = IssueRow & { labels: IssueLabelRow[]; labelIds: string[] };
 type IssueWithLabelsAndRun = IssueWithLabels & { activeRun: IssueActiveRunRow | null };
+type CreateIssueResult = {
+  issue: IssueWithLabels;
+  created: boolean;
+  blockedParentIssue?: IssueWithLabels | null;
+  blockedParentComment?: IssueCommentRow | null;
+};
 type IssueUserCommentStats = {
   issueId: string;
   myLastCommentAt: Date | null;
@@ -465,6 +509,111 @@ export function issueService(db: Db) {
     if (!row) return null;
 
     return withIssueLabels(database as Db, [row]).then((rows) => rows[0] ?? null);
+  }
+
+  async function countOpenDelegatedChildrenForParent(
+    database: Pick<Db, "select">,
+    input: {
+      companyId: string;
+      parentId: string;
+      createdByAgentId: string;
+    },
+  ) {
+    const [row] = await database
+      .select({ count: sql<number>`count(*)` })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, input.companyId),
+          eq(issues.parentId, input.parentId),
+          eq(issues.createdByAgentId, input.createdByAgentId),
+          inArray(issues.status, [...OPEN_ISSUE_STATUSES]),
+          isNull(issues.hiddenAt),
+          sql`(${issues.assigneeAgentId} is not null or ${issues.assigneeUserId} is not null)`,
+        ),
+      );
+    return Number(row?.count ?? 0);
+  }
+
+  async function countRecentDelegatedChildrenForParent(
+    database: Pick<Db, "select">,
+    input: {
+      companyId: string;
+      parentId: string;
+      createdByAgentId: string;
+      since: Date;
+    },
+  ) {
+    const [row] = await database
+      .select({ count: sql<number>`count(*)` })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, input.companyId),
+          eq(issues.parentId, input.parentId),
+          eq(issues.createdByAgentId, input.createdByAgentId),
+          inArray(issues.status, [...OPEN_ISSUE_STATUSES]),
+          isNull(issues.hiddenAt),
+          sql`(${issues.assigneeAgentId} is not null or ${issues.assigneeUserId} is not null)`,
+          gte(issues.createdAt, input.since),
+        ),
+      );
+    return Number(row?.count ?? 0);
+  }
+
+  async function maybeBlockDelegatingParent(
+    database: Pick<Db, "select" | "update" | "insert">,
+    input: {
+      companyId: string;
+      parentId: string;
+      createdByAgentId: string;
+      delegatedChildIssueId: string;
+      delegatedChildIdentifier: string;
+    },
+  ) {
+    const updated = await database
+      .update(issues)
+      .set({
+        status: "blocked",
+        blockerDetails: buildDelegatedChildExecutionBlockerDetails({
+          delegatedChildIssueId: input.delegatedChildIssueId,
+          delegatedChildIdentifier: input.delegatedChildIdentifier,
+        }),
+        checkoutRunId: null,
+        executionRunId: null,
+        executionLockedAt: null,
+        executionAgentNameKey: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(issues.id, input.parentId),
+          eq(issues.companyId, input.companyId),
+          eq(issues.status, "in_progress"),
+          eq(issues.assigneeAgentId, input.createdByAgentId),
+          isNull(issues.hiddenAt),
+        ),
+      )
+      .returning()
+      .then((rows) => rows[0] ?? null);
+    if (!updated) return null;
+
+    const [comment] = await database
+      .insert(issueComments)
+      .values({
+        companyId: input.companyId,
+        issueId: input.parentId,
+        authorAgentId: input.createdByAgentId,
+        body:
+          `Delegated child ${input.delegatedChildIdentifier} is now the active execution path. ` +
+          "This coordination issue was moved to blocked until that work changes state or needs intervention.",
+      })
+      .returning();
+
+    const issue = await withIssueLabels(database as Db, [updated]).then((rows) => rows[0] ?? null);
+    if (!issue) return null;
+
+    return { issue, comment };
   }
 
   function redactIssueComment<T extends { body: string }>(comment: T, censorUsernameInLogs: boolean): T {
@@ -871,7 +1020,7 @@ export function issueService(db: Db) {
     create: async (
       companyId: string,
       data: Omit<typeof issues.$inferInsert, "companyId"> & { labelIds?: string[] },
-    ): Promise<{ issue: IssueWithLabels; created: boolean }> => {
+    ): Promise<CreateIssueResult> => {
       const { labelIds: inputLabelIds, ...issueData } = data;
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
@@ -938,7 +1087,27 @@ export function issueService(db: Db) {
                 })
               : null;
           if (duplicateDelegatedChildByKey) {
-            return { issue: duplicateDelegatedChildByKey, created: false };
+            const blockedParentResult =
+              isOpenDelegatedChild({
+                parentId: issueData.parentId ?? null,
+                createdByAgentId: issueData.createdByAgentId ?? null,
+                assigneeAgentId: issueData.assigneeAgentId ?? null,
+                assigneeUserId: issueData.assigneeUserId ?? null,
+              })
+                  ? await maybeBlockDelegatingParent(tx, {
+                      companyId,
+                      parentId: issueData.parentId!,
+                      createdByAgentId: issueData.createdByAgentId!,
+                      delegatedChildIssueId: duplicateDelegatedChildByKey.id,
+                      delegatedChildIdentifier: duplicateDelegatedChildByKey.identifier ?? duplicateDelegatedChildByKey.title,
+                    })
+                  : null;
+            return {
+              issue: duplicateDelegatedChildByKey,
+              created: false,
+              blockedParentIssue: blockedParentResult?.issue ?? null,
+              blockedParentComment: blockedParentResult?.comment ?? null,
+            };
           }
           const duplicateDelegatedChild =
             issueData.createdByAgentId &&
@@ -957,7 +1126,57 @@ export function issueService(db: Db) {
                 })
               : null;
           if (duplicateDelegatedChild) {
-            return { issue: duplicateDelegatedChild, created: false };
+            const blockedParentResult =
+              isOpenDelegatedChild({
+                parentId: issueData.parentId ?? null,
+                createdByAgentId: issueData.createdByAgentId ?? null,
+                assigneeAgentId: issueData.assigneeAgentId ?? null,
+                assigneeUserId: issueData.assigneeUserId ?? null,
+              })
+                  ? await maybeBlockDelegatingParent(tx, {
+                      companyId,
+                      parentId: issueData.parentId!,
+                      createdByAgentId: issueData.createdByAgentId!,
+                      delegatedChildIssueId: duplicateDelegatedChild.id,
+                      delegatedChildIdentifier: duplicateDelegatedChild.identifier ?? duplicateDelegatedChild.title,
+                    })
+                  : null;
+            return {
+              issue: duplicateDelegatedChild,
+              created: false,
+              blockedParentIssue: blockedParentResult?.issue ?? null,
+              blockedParentComment: blockedParentResult?.comment ?? null,
+            };
+          }
+          if (
+            isOpenDelegatedChild({
+              parentId: issueData.parentId ?? null,
+              createdByAgentId: issueData.createdByAgentId ?? null,
+              assigneeAgentId: issueData.assigneeAgentId ?? null,
+              assigneeUserId: issueData.assigneeUserId ?? null,
+            })
+          ) {
+            const openDelegatedChildCount = await countOpenDelegatedChildrenForParent(tx, {
+              companyId,
+              parentId: issueData.parentId!,
+              createdByAgentId: issueData.createdByAgentId!,
+            });
+            if (openDelegatedChildCount >= MAX_OPEN_DELEGATED_CHILDREN_PER_PARENT) {
+              throw conflict(
+                `Too many open delegated child issues under this parent. Continue existing child issues before creating more than ${MAX_OPEN_DELEGATED_CHILDREN_PER_PARENT}.`,
+              );
+            }
+            const recentDelegatedChildCount = await countRecentDelegatedChildrenForParent(tx, {
+              companyId,
+              parentId: issueData.parentId!,
+              createdByAgentId: issueData.createdByAgentId!,
+              since: new Date(Date.now() - DELEGATED_CHILD_RATE_LIMIT_WINDOW_MS),
+            });
+            if (recentDelegatedChildCount >= MAX_RECENT_DELEGATED_CHILDREN_PER_PARENT) {
+              throw conflict(
+                `Too many delegated child issues were created under this parent recently. Continue existing child issues before creating more than ${MAX_RECENT_DELEGATED_CHILDREN_PER_PARENT} in ${Math.floor(DELEGATED_CHILD_RATE_LIMIT_WINDOW_MS / 60_000)} minutes.`,
+              );
+            }
           }
           let executionWorkspaceSettings =
             (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
@@ -1030,7 +1249,27 @@ export function issueService(db: Db) {
             await syncIssueLabels(issue.id, companyId, inputLabelIds, tx);
           }
           const [enriched] = await withIssueLabels(tx, [issue]);
-          return { issue: enriched, created: true };
+          const blockedParentResult =
+            isOpenDelegatedChild({
+              parentId: issueData.parentId ?? null,
+              createdByAgentId: issueData.createdByAgentId ?? null,
+              assigneeAgentId: issueData.assigneeAgentId ?? null,
+              assigneeUserId: issueData.assigneeUserId ?? null,
+            })
+              ? await maybeBlockDelegatingParent(tx, {
+                  companyId,
+                  parentId: issueData.parentId!,
+                  createdByAgentId: issueData.createdByAgentId!,
+                  delegatedChildIssueId: enriched.id,
+                  delegatedChildIdentifier: enriched.identifier ?? enriched.title,
+                })
+              : null;
+          return {
+            issue: enriched,
+            created: true,
+            blockedParentIssue: blockedParentResult?.issue ?? null,
+            blockedParentComment: blockedParentResult?.comment ?? null,
+          };
         });
       } catch (error) {
         if (!delegatedParentId || !delegatedKey || !isUniqueViolation(error, "issues_open_delegation_key_uq")) {
@@ -1044,8 +1283,134 @@ export function issueService(db: Db) {
         if (!existing) {
           throw error;
         }
-        return { issue: existing, created: false };
+        return { issue: existing, created: false, blockedParentIssue: null, blockedParentComment: null };
       }
+    },
+
+    backfillDelegationKeys: async (input?: { companyId?: string | null }) => {
+      const conditions = [
+        isNull(issues.delegationKey),
+        isNull(issues.hiddenAt),
+        inArray(issues.status, [...OPEN_ISSUE_STATUSES]),
+        sql`${issues.parentId} is not null`,
+        sql`${issues.createdByAgentId} is not null`,
+        sql`(${issues.assigneeAgentId} is not null or ${issues.assigneeUserId} is not null)`,
+      ];
+      if (input?.companyId) {
+        conditions.push(eq(issues.companyId, input.companyId));
+      }
+
+      const [legacyRows, existingRows] = await Promise.all([
+        db
+          .select({
+            id: issues.id,
+            companyId: issues.companyId,
+            parentId: issues.parentId,
+            createdByAgentId: issues.createdByAgentId,
+            title: issues.title,
+            assigneeAgentId: issues.assigneeAgentId,
+            assigneeUserId: issues.assigneeUserId,
+            projectId: issues.projectId,
+            goalId: issues.goalId,
+            requestDepth: issues.requestDepth,
+          })
+          .from(issues)
+          .where(and(...conditions))
+          .orderBy(asc(issues.createdAt), asc(issues.id)),
+        db
+          .select({
+            id: issues.id,
+            companyId: issues.companyId,
+            parentId: issues.parentId,
+            delegationKey: issues.delegationKey,
+          })
+          .from(issues)
+          .where(
+            and(
+              isNull(issues.hiddenAt),
+              inArray(issues.status, [...OPEN_ISSUE_STATUSES]),
+              sql`${issues.parentId} is not null`,
+              sql`${issues.delegationKey} is not null`,
+              ...(input?.companyId ? [eq(issues.companyId, input.companyId)] : []),
+            ),
+          ),
+      ]);
+
+      const toTuple = (companyId: string, parentId: string, delegationKey: string) =>
+        `${companyId}:${parentId}:${delegationKey}`;
+
+      const candidates = legacyRows.map((row) => ({
+        ...row,
+        delegationKey: resolveDelegationKey({
+          parentId: row.parentId,
+          createdByAgentId: row.createdByAgentId,
+          title: row.title,
+          assigneeAgentId: row.assigneeAgentId,
+          assigneeUserId: row.assigneeUserId,
+          projectId: row.projectId,
+          goalId: row.goalId,
+          requestDepth: row.requestDepth,
+        }),
+      })).filter((row): row is typeof legacyRows[number] & { delegationKey: string } => row.delegationKey != null);
+
+      const candidateCounts = new Map<string, number>();
+      for (const candidate of candidates) {
+        const tuple = toTuple(candidate.companyId, candidate.parentId!, candidate.delegationKey);
+        candidateCounts.set(tuple, (candidateCounts.get(tuple) ?? 0) + 1);
+      }
+
+      const existingByTuple = new Map<string, string[]>();
+      for (const existing of existingRows) {
+        if (!existing.parentId || !existing.delegationKey) continue;
+        const tuple = toTuple(existing.companyId, existing.parentId, existing.delegationKey);
+        const ids = existingByTuple.get(tuple);
+        if (ids) ids.push(existing.id);
+        else existingByTuple.set(tuple, [existing.id]);
+      }
+
+      const skippedIssues: Array<{
+        issueId: string;
+        delegationKey: string;
+        reason: "conflicting_legacy_duplicates" | "key_already_in_use";
+      }> = [];
+      let updatedCount = 0;
+
+      await db.transaction(async (tx) => {
+        for (const candidate of candidates) {
+          const tuple = toTuple(candidate.companyId, candidate.parentId!, candidate.delegationKey);
+          if ((candidateCounts.get(tuple) ?? 0) > 1) {
+            skippedIssues.push({
+              issueId: candidate.id,
+              delegationKey: candidate.delegationKey,
+              reason: "conflicting_legacy_duplicates",
+            });
+            continue;
+          }
+          if ((existingByTuple.get(tuple)?.length ?? 0) > 0) {
+            skippedIssues.push({
+              issueId: candidate.id,
+              delegationKey: candidate.delegationKey,
+              reason: "key_already_in_use",
+            });
+            continue;
+          }
+
+          await tx
+            .update(issues)
+            .set({
+              delegationKey: candidate.delegationKey,
+              updatedAt: new Date(),
+            })
+            .where(eq(issues.id, candidate.id));
+          existingByTuple.set(tuple, [candidate.id]);
+          updatedCount += 1;
+        }
+      });
+
+      return {
+        updatedCount,
+        skippedIssues,
+      };
     },
 
     update: async (id: string, data: Partial<typeof issues.$inferInsert> & { labelIds?: string[] }) => {
@@ -1082,6 +1447,14 @@ export function issueService(db: Db) {
         ...(nextStatus !== undefined ? { status: nextStatus } : {}),
         updatedAt: new Date(),
       };
+      if (
+        issueData.blockerDetails === undefined &&
+        nextStatus &&
+        nextStatus !== "blocked" &&
+        isDelegatedChildExecutionBlockerDetails(existing.blockerDetails as Record<string, unknown> | null | undefined)
+      ) {
+        patch.blockerDetails = null;
+      }
 
       if (nextAssigneeAgentId && nextAssigneeUserId) {
         throw unprocessable("Issue can only have one assignee");
@@ -1210,7 +1583,7 @@ export function issueService(db: Db) {
       }
 
       const issueCompany = await db
-        .select({ companyId: issues.companyId })
+        .select({ companyId: issues.companyId, blockerDetails: issues.blockerDetails })
         .from(issues)
         .where(eq(issues.id, id))
         .then((rows) => rows[0] ?? null);
@@ -1235,6 +1608,11 @@ export function issueService(db: Db) {
           checkoutRunId,
           executionRunId: checkoutRunId,
           status: "in_progress",
+          ...(isDelegatedChildExecutionBlockerDetails(
+            issueCompany.blockerDetails as Record<string, unknown> | null | undefined,
+          )
+            ? { blockerDetails: null }
+            : {}),
           startedAt: now,
           completedAt: null,
           cancelledAt: null,
@@ -1423,6 +1801,9 @@ export function issueService(db: Db) {
         .set({
           status: "todo",
           assigneeAgentId: null,
+          ...(isDelegatedChildExecutionBlockerDetails(existing.blockerDetails as Record<string, unknown> | null | undefined)
+            ? { blockerDetails: null }
+            : {}),
           checkoutRunId: null,
           executionRunId: null,
           executionLockedAt: null,

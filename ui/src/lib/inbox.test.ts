@@ -180,6 +180,7 @@ const dashboard: DashboardSummary = {
     open: 1,
     inProgress: 0,
     blocked: 0,
+    waitingOnDelegatedChild: 0,
     done: 0,
   },
   costs: {
@@ -236,6 +237,63 @@ describe("inbox helpers", () => {
     });
 
     expect(result).toEqual({
+      inbox: 0,
+      approvals: 0,
+      failedRuns: 0,
+      joinRequests: 0,
+      unreadTouchedIssues: 0,
+      alerts: 0,
+    });
+  });
+
+  it("counts delegated coordination waits as a dashboard alert and supports dismissing it", () => {
+    const delegatedDashboard: DashboardSummary = {
+      ...dashboard,
+      agents: {
+        active: 0,
+        running: 0,
+        paused: 0,
+        error: 0,
+      },
+      costs: {
+        monthSpendCents: 100,
+        monthBudgetCents: 1000,
+        monthUtilizationPercent: 10,
+      },
+      tasks: {
+        ...dashboard.tasks,
+        waitingOnDelegatedChild: 2,
+      },
+    };
+
+    const activeResult = computeInboxBadgeData({
+      approvals: [],
+      joinRequests: [],
+      dashboard: delegatedDashboard,
+      heartbeatRuns: [],
+      unreadIssues: [],
+      dismissed: new Set<string>(),
+    });
+
+    expect(activeResult).toEqual({
+      inbox: 1,
+      approvals: 0,
+      failedRuns: 0,
+      joinRequests: 0,
+      unreadTouchedIssues: 0,
+      alerts: 1,
+    });
+
+    const dismissedResult = computeInboxBadgeData({
+      approvals: [],
+      joinRequests: [],
+      dashboard: delegatedDashboard,
+      heartbeatRuns: [],
+      unreadIssues: [],
+      dismissed: new Set<string>(["alert:delegated-work"]),
+    });
+
+    expect(dismissedResult).toEqual({
       inbox: 0,
       approvals: 0,
       failedRuns: 0,

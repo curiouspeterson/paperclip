@@ -117,6 +117,20 @@ function makeIssue(overrides?: Partial<Record<string, unknown>>) {
   };
 }
 
+function makeIssueComment(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    id: "99999999-9999-4999-8999-999999999999",
+    issueId: "11111111-1111-4111-8111-111111111111",
+    companyId: COMPANY_ID,
+    authorAgentId: AGENT_ONE_ID,
+    authorUserId: null,
+    body: "Auto-blocked after delegation.",
+    createdAt: new Date("2026-03-23T12:00:00.000Z").toISOString(),
+    updatedAt: new Date("2026-03-23T12:00:00.000Z").toISOString(),
+    ...overrides,
+  };
+}
+
 describe("issue contract routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -363,6 +377,81 @@ describe("issue contract routes", () => {
       }),
     );
     expect(mockHeartbeatService.wakeup).not.toHaveBeenCalled();
+  });
+
+  it("logs when delegated child creation blocks the parent issue", async () => {
+    mockIssueService.getById.mockResolvedValueOnce(makeIssue({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+      checkoutRunId: RUN_ID,
+    }));
+    mockIssueService.assertCheckoutOwner.mockResolvedValue({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+      checkoutRunId: RUN_ID,
+      adoptedFromRunId: null,
+    });
+    mockIssueService.create.mockResolvedValue({
+      issue: makeIssue({
+        id: "33333333-3333-4333-8333-333333333333",
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      }),
+      created: true,
+      blockedParentIssue: makeIssue({
+        id: "22222222-2222-4222-8222-222222222222",
+        status: "blocked",
+        assigneeAgentId: AGENT_ONE_ID,
+        identifier: "PAP-579",
+      }),
+      blockedParentComment: makeIssueComment({
+        issueId: "22222222-2222-4222-8222-222222222222",
+        body: "Delegated child PAP-580 is now active. This coordination issue was moved to blocked until that work changes state or needs intervention.",
+      }),
+    });
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post(`/api/companies/${COMPANY_ID}/issues`)
+      .send({
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+        assigneeAgentId: AGENT_TWO_ID,
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "issue.updated",
+        entityId: "22222222-2222-4222-8222-222222222222",
+        details: expect.objectContaining({
+          status: "blocked",
+          delegatedChildIssueId: "33333333-3333-4333-8333-333333333333",
+          source: "delegated_child_create",
+        }),
+      }),
+    );
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "issue.comment_added",
+        entityId: "22222222-2222-4222-8222-222222222222",
+        details: expect.objectContaining({
+          commentId: "99999999-9999-4999-8999-999999999999",
+          source: "delegated_child_create",
+        }),
+      }),
+    );
   });
 
   it("rejects agent-created assigned child issues when the parent issue is not owned by the actor", async () => {

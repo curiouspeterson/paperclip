@@ -46,6 +46,7 @@ export const issueBlockerDetailsSchema = z
       "browser_login_required",
       "external_access",
       "operator_action",
+      "delegated_child_execution",
       "unsupported_automation",
       "unknown",
     ]),
@@ -59,6 +60,8 @@ export const issueBlockerDetailsSchema = z
     browserProfilePath: z.string().trim().max(1000).optional().nullable(),
     approvalType: z.enum(["browser_session_handoff", "secret_provisioning_required"]).optional().nullable(),
     detectedFromRunId: z.string().uuid().optional().nullable(),
+    delegatedChildIssueId: z.string().uuid().optional().nullable(),
+    delegatedChildIdentifier: z.string().trim().max(64).optional().nullable(),
     resolvedAt: z.string().datetime().optional().nullable(),
   })
   .strict();

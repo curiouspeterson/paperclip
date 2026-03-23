@@ -139,6 +139,11 @@ export {
   type PluginBridgeErrorCode,
 } from "./constants.js";
 
+export {
+  getDashboardAlertKinds,
+  type DashboardAlertKind,
+} from "./dashboard-alerts.js";
+
 export type {
   Company,
   MailchimpAudienceSummary,

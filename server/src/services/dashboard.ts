@@ -4,6 +4,8 @@ import { agents, approvals, companies, costEvents, issues } from "@paperclipai/d
 import { notFound } from "../errors.js";
 import { budgetService } from "./budgets.js";
 
+const DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE = "delegated_child_execution";
+
 export function dashboardService(db: Db) {
   const budgets = budgetService(db);
   return {
@@ -28,6 +30,18 @@ export function dashboardService(db: Db) {
         .where(eq(issues.companyId, companyId))
         .groupBy(issues.status);
 
+      const waitingOnDelegatedChild = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, companyId),
+            eq(issues.status, "blocked"),
+            sql`${issues.blockerDetails} ->> 'blockerType' = ${DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE}`,
+          ),
+        )
+        .then((rows) => Number(rows[0]?.count ?? 0));
+
       const pendingApprovals = await db
         .select({ count: sql<number>`count(*)` })
         .from(approvals)
@@ -51,6 +65,7 @@ export function dashboardService(db: Db) {
         open: 0,
         inProgress: 0,
         blocked: 0,
+        waitingOnDelegatedChild,
         done: 0,
       };
       for (const row of taskRows) {

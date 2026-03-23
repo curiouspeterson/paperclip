@@ -99,6 +99,7 @@ export type IssueBlockerType =
   | "browser_login_required"
   | "external_access"
   | "operator_action"
+  | "delegated_child_execution"
   | "unsupported_automation"
   | "unknown";
 
@@ -114,6 +115,8 @@ export interface IssueBlockerDetails {
   browserProfilePath?: string | null;
   approvalType?: "browser_session_handoff" | "secret_provisioning_required" | null;
   detectedFromRunId?: string | null;
+  delegatedChildIssueId?: string | null;
+  delegatedChildIdentifier?: string | null;
   resolvedAt?: Date | null;
 }
 

@@ -553,6 +553,7 @@ Dashboard payload must include:
 
 - active/running/paused/error agent counts
 - open/in-progress/blocked/done issue counts
+- blocked issues waiting on delegated child execution
 - month-to-date spend and budget utilization
 - pending approvals count
 

@@ -14,6 +14,7 @@ import {
   executionWorkspaces,
   goals,
   heartbeatRuns,
+  issueComments,
   issues,
   projectWorkspaces,
   projects,
@@ -99,6 +100,7 @@ describe("issue service contracts", () => {
   }, 20_000);
 
   afterEach(async () => {
+    await db.delete(issueComments);
     await db.delete(issues);
     await db.delete(executionWorkspaces);
     await db.delete(projectWorkspaces);
@@ -528,6 +530,7 @@ describe("issue service contracts", () => {
     const managerAgentId = await seedAgent(companyId, "Manager");
     const workerAgentId = await seedAgent(companyId, "Worker");
     const parentId = randomUUID();
+    const now = new Date();
 
     await db.insert(issues).values({
       id: parentId,
@@ -540,14 +543,18 @@ describe("issue service contracts", () => {
     });
 
     for (let index = 0; index < 20; index += 1) {
-      await issueService(db).create(companyId, {
+      await db.insert(issues).values({
+        id: randomUUID(),
+        companyId,
         title: `Delegated child ${index + 1}`,
         parentId,
         assigneeAgentId: workerAgentId,
         createdByAgentId: managerAgentId,
         status: "todo",
         priority: "medium",
-      } as any);
+        createdAt: new Date(now.getTime() - ((20 - index) * 60 * 60 * 1000)),
+        updatedAt: now,
+      });
     }
 
     await expect(
@@ -560,6 +567,158 @@ describe("issue service contracts", () => {
         priority: "medium",
       } as any),
     ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("rejects delegated child creation bursts under the same parent in a short window", async () => {
+    const companyId = await seedCompany("Alpha");
+    const managerAgentId = await seedAgent(companyId, "Manager");
+    const workerAgentId = await seedAgent(companyId, "Worker");
+    const parentId = randomUUID();
+    const now = new Date();
+
+    await db.insert(issues).values({
+      id: parentId,
+      companyId,
+      title: "Coordinate newsletter launch",
+      status: "blocked",
+      priority: "medium",
+      assigneeAgentId: managerAgentId,
+      createdByAgentId: managerAgentId,
+      updatedAt: now,
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      await db.insert(issues).values({
+        id: randomUUID(),
+        companyId,
+        title: `Delegated child ${index + 1}`,
+        status: "todo",
+        priority: "medium",
+        parentId,
+        assigneeAgentId: workerAgentId,
+        createdByAgentId: managerAgentId,
+        createdAt: new Date(now.getTime() - index * 60_000),
+        updatedAt: now,
+      });
+    }
+
+    await expect(
+      issueService(db).create(companyId, {
+        title: "Delegated child 6",
+        parentId,
+        assigneeAgentId: workerAgentId,
+        createdByAgentId: managerAgentId,
+        status: "todo",
+        priority: "medium",
+      } as any),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("moves an in_progress delegating parent to blocked after creating a delegated child", async () => {
+    const companyId = await seedCompany("Alpha");
+    const managerAgentId = await seedAgent(companyId, "Manager");
+    const workerAgentId = await seedAgent(companyId, "Worker");
+    const runId = randomUUID();
+    const parentId = randomUUID();
+    const now = new Date("2026-03-23T12:00:00.000Z");
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId: managerAgentId,
+      invocationSource: "assignment",
+      status: "running",
+      startedAt: now,
+      updatedAt: now,
+    });
+    await db.insert(issues).values({
+      id: parentId,
+      companyId,
+      title: "Coordinate newsletter launch",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: managerAgentId,
+      createdByAgentId: managerAgentId,
+      checkoutRunId: runId,
+      executionRunId: runId,
+      executionAgentNameKey: "manager",
+      executionLockedAt: now,
+      startedAt: now,
+    });
+
+    const result = await issueService(db).create(companyId, {
+      title: "Implement Hermes wrapper",
+      parentId,
+      assigneeAgentId: workerAgentId,
+      createdByAgentId: managerAgentId,
+      status: "todo",
+      priority: "medium",
+    } as any);
+
+    expect(result.created).toBe(true);
+    expect(result.blockedParentIssue?.id).toBe(parentId);
+    expect(result.blockedParentIssue?.status).toBe("blocked");
+    expect(result.blockedParentIssue?.assigneeAgentId).toBe(managerAgentId);
+    expect(result.blockedParentIssue?.checkoutRunId).toBeNull();
+    expect(result.blockedParentIssue?.executionRunId).toBeNull();
+    expect(result.blockedParentIssue?.executionLockedAt).toBeNull();
+    expect(result.blockedParentIssue?.executionAgentNameKey).toBeNull();
+    expect(result.blockedParentIssue?.blockerDetails).toMatchObject({
+      blockerType: "delegated_child_execution",
+      delegatedChildIssueId: result.issue.id,
+      delegatedChildIdentifier: result.issue.identifier,
+    });
+
+    const parentComments = await db
+      .select({
+        body: issueComments.body,
+        authorAgentId: issueComments.authorAgentId,
+      })
+      .from(issueComments)
+      .where(eq(issueComments.issueId, parentId));
+
+    expect(parentComments).toHaveLength(1);
+    expect(parentComments[0]?.authorAgentId).toBe(managerAgentId);
+    expect(parentComments[0]?.body).toContain(result.issue.identifier);
+    expect(parentComments[0]?.body).toContain("blocked");
+  });
+
+  it("clears delegated execution blocker details when checkout resumes a blocked issue", async () => {
+    const companyId = await seedCompany("Alpha");
+    const agentId = await seedAgent(companyId);
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const now = new Date("2026-03-23T12:00:00.000Z");
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      status: "running",
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Coordinate newsletter launch",
+      status: "blocked",
+      priority: "medium",
+      assigneeAgentId: agentId,
+      blockerDetails: {
+        blockerType: "delegated_child_execution",
+        summary: "Waiting on delegated child issue PAP-581",
+        delegatedChildIssueId: randomUUID(),
+        delegatedChildIdentifier: "PAP-581",
+      } as any,
+    });
+
+    const checkedOut = await issueService(db).checkout(issueId, agentId, ["blocked"], runId);
+
+    expect(checkedOut?.status).toBe("in_progress");
+    expect(checkedOut?.blockerDetails).toBeNull();
   });
 
   it.each([

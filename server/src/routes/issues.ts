@@ -79,6 +79,51 @@ export function issueRoutes(db: Db, storage: StorageService) {
     };
   }
 
+  async function logDelegatedParentAutoBlock(input: {
+    companyId: string;
+    actor: ReturnType<typeof getActorInfo>;
+    blockedParentIssue: { id: string; identifier: string | null };
+    blockedParentComment?: { id: string; body: string } | null;
+    delegatedChildIssueId: string;
+  }) {
+    await logActivity(db, {
+      companyId: input.companyId,
+      actorType: input.actor.actorType,
+      actorId: input.actor.actorId,
+      agentId: input.actor.agentId,
+      runId: input.actor.runId,
+      action: "issue.updated",
+      entityType: "issue",
+      entityId: input.blockedParentIssue.id,
+      details: {
+        status: "blocked",
+        identifier: input.blockedParentIssue.identifier,
+        delegatedChildIssueId: input.delegatedChildIssueId,
+        source: "delegated_child_create",
+        _previous: { status: "in_progress" },
+      },
+    });
+
+    if (!input.blockedParentComment) return;
+
+    await logActivity(db, {
+      companyId: input.companyId,
+      actorType: input.actor.actorType,
+      actorId: input.actor.actorId,
+      agentId: input.actor.agentId,
+      runId: input.actor.runId,
+      action: "issue.comment_added",
+      entityType: "issue",
+      entityId: input.blockedParentIssue.id,
+      details: {
+        commentId: input.blockedParentComment.id,
+        bodySnippet: redactSecretSnippet(input.blockedParentComment.body),
+        source: "delegated_child_create",
+        delegatedChildIssueId: input.delegatedChildIssueId,
+      },
+    });
+  }
+
   async function runSingleFileUpload(req: Request, res: Response) {
     await new Promise<void>((resolve, reject) => {
       upload.single("file")(req, res, (err: unknown) => {
@@ -870,7 +915,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
 
     const actor = getActorInfo(req);
-    const { issue, created } = await svc.create(companyId, {
+    const { issue, created, blockedParentIssue, blockedParentComment } = await svc.create(companyId, {
       ...req.body,
       createdByAgentId: actor.agentId,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
@@ -898,6 +943,16 @@ export function issueRoutes(db: Db, storage: StorageService) {
         requestedByActorId: actor.actorId,
       });
 
+      if (blockedParentIssue) {
+        await logDelegatedParentAutoBlock({
+          companyId,
+          actor,
+          blockedParentIssue,
+          blockedParentComment,
+          delegatedChildIssueId: issue.id,
+        });
+      }
+
       res.status(201).json(issue);
       return;
     }
@@ -917,6 +972,16 @@ export function issueRoutes(db: Db, storage: StorageService) {
         parentId: issue.parentId,
       },
     });
+
+    if (blockedParentIssue) {
+      await logDelegatedParentAutoBlock({
+        companyId,
+        actor,
+        blockedParentIssue,
+        blockedParentComment,
+        delegatedChildIssueId: issue.id,
+      });
+    }
 
     res.status(200).json(issue);
   });

@@ -45,6 +45,7 @@ import {
   getInboxWorkItems,
   getLatestFailedRunsByAgent,
   getRecentTouchedIssues,
+  getVisibleDashboardAlerts,
   InboxApprovalFilter,
   saveLastInboxTab,
   shouldShowInboxSection,
@@ -594,14 +595,18 @@ export function Inbox() {
     return <EmptyState icon={InboxIcon} message="Select a company to view inbox." />;
   }
 
-  const hasRunFailures = failedRuns.length > 0;
-  const showAggregateAgentError = !!dashboard && dashboard.agents.error > 0 && !hasRunFailures && !dismissed.has("alert:agent-errors");
-  const showBudgetAlert =
-    !!dashboard &&
-    dashboard.costs.monthBudgetCents > 0 &&
-    dashboard.costs.monthUtilizationPercent >= 80 &&
-    !dismissed.has("alert:budget");
-  const hasAlerts = showAggregateAgentError || showBudgetAlert;
+  const visibleDashboardAlerts = useMemo(
+    () => getVisibleDashboardAlerts({
+      dashboard,
+      hasFailedRuns: failedRuns.length > 0,
+      dismissed,
+    }),
+    [dashboard, failedRuns, dismissed],
+  );
+  const showAggregateAgentError = visibleDashboardAlerts.includes("agent-errors");
+  const showBudgetAlert = visibleDashboardAlerts.includes("budget");
+  const showDelegatedWorkAlert = visibleDashboardAlerts.includes("delegated-work");
+  const hasAlerts = visibleDashboardAlerts.length > 0;
   const hasJoinRequests = joinRequests.length > 0;
   const showWorkItemsSection = workItemsToRender.length > 0;
   const showJoinRequestsSection =
@@ -910,6 +915,31 @@ export function Inbox() {
                   <button
                     type="button"
                     onClick={() => dismiss("alert:budget")}
+                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/alert:opacity-100"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              {showDelegatedWorkAlert && (
+                <div className="group/alert relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
+                  <Link
+                    to="/issues"
+                    className="flex flex-1 cursor-pointer items-center gap-3 no-underline text-inherit"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-sky-500" />
+                    <span className="text-sm">
+                      <span className="font-medium">{dashboard!.tasks.waitingOnDelegatedChild}</span>{" "}
+                      {dashboard!.tasks.waitingOnDelegatedChild === 1
+                        ? "coordination issue is"
+                        : "coordination issues are"}{" "}
+                      waiting on delegated work
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => dismiss("alert:delegated-work")}
                     className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/alert:opacity-100"
                     aria-label="Dismiss"
                   >

@@ -16,10 +16,11 @@ GET /api/companies/{companyId}/dashboard
 Returns a summary including:
 
 - **Agent counts** by status (active, idle, running, error, paused)
-- **Task counts** by status (backlog, todo, in_progress, blocked, done)
-- **Stale tasks** — tasks in progress with no recent activity
+- **Task counts** by status (open, in_progress, blocked, done)
+- **Delegated coordination waits** — how many blocked issues are waiting on an active delegated child issue
 - **Cost summary** — current month spend vs budget
-- **Recent activity** — latest mutations
+- **Budget incident summary** — active incidents, pending overrides, paused agents, and paused projects
+- **Pending approvals** — company-wide approval count
 
 ## Use Cases
 

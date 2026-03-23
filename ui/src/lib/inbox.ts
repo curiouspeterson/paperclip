@@ -1,3 +1,7 @@
+import {
+  getDashboardAlertKinds,
+  type DashboardAlertKind,
+} from "@paperclipai/shared";
 import type {
   Approval,
   DashboardSummary,
@@ -37,6 +41,20 @@ export interface InboxBadgeData {
   joinRequests: number;
   unreadTouchedIssues: number;
   alerts: number;
+}
+
+export function getVisibleDashboardAlerts({
+  dashboard,
+  hasFailedRuns,
+  dismissed,
+}: {
+  dashboard: DashboardSummary | undefined;
+  hasFailedRuns: boolean;
+  dismissed: Set<string>;
+}): DashboardAlertKind[] {
+  return getDashboardAlertKinds(dashboard, { hasFailedRuns }).filter(
+    (kind) => !dismissed.has(`alert:${kind}`),
+  );
 }
 
 export function loadDismissedInboxItems(): Set<string> {
@@ -229,18 +247,11 @@ export function computeInboxBadgeData({
     (run) => !dismissed.has(`run:${run.id}`),
   ).length;
   const unreadTouchedIssues = unreadIssues.length;
-  const agentErrorCount = dashboard?.agents.error ?? 0;
-  const monthBudgetCents = dashboard?.costs.monthBudgetCents ?? 0;
-  const monthUtilizationPercent = dashboard?.costs.monthUtilizationPercent ?? 0;
-  const showAggregateAgentError =
-    agentErrorCount > 0 &&
-    failedRuns === 0 &&
-    !dismissed.has("alert:agent-errors");
-  const showBudgetAlert =
-    monthBudgetCents > 0 &&
-    monthUtilizationPercent >= 80 &&
-    !dismissed.has("alert:budget");
-  const alerts = Number(showAggregateAgentError) + Number(showBudgetAlert);
+  const alerts = getVisibleDashboardAlerts({
+    dashboard,
+    hasFailedRuns: failedRuns > 0,
+    dismissed,
+  }).length;
 
   return {
     inbox: actionableApprovals + joinRequests.length + failedRuns + unreadTouchedIssues + alerts,

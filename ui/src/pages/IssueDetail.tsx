@@ -16,6 +16,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { assigneeValueFromSelection, suggestedCommentAssigneeValue } from "../lib/assignees";
 import { queryKeys } from "../lib/queryKeys";
 import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
+import { getDelegatedChildIssueTarget, getIssueBlockerDetails } from "../lib/issue-blockers";
 import { useProjectOrder } from "../hooks/useProjectOrder";
 import { relativeTime, cn, formatTokens, visibleRunCostUsd } from "../lib/utils";
 import { InlineEditor } from "../components/InlineEditor";
@@ -822,7 +823,8 @@ export function IssueDetail() {
     </>
   );
 
-  const blockerDetails = (issue.blockerDetails ?? null) as IssueBlockerDetails | null;
+  const blockerDetails = getIssueBlockerDetails(issue) as IssueBlockerDetails | null;
+  const delegatedChildTarget = getDelegatedChildIssueTarget(issue);
   const blockerSecretNames = blockerDetails?.secretNames ?? [];
 
   const openBrowserHandoffForBlocker = () => {
@@ -889,6 +891,16 @@ export function IssueDetail() {
           {blockerDetails.requiredAction ? (
             <div className="text-xs text-amber-900/80 dark:text-amber-100/80">
               Next action: {blockerDetails.requiredAction}
+            </div>
+          ) : null}
+          {delegatedChildTarget ? (
+            <div className="flex items-center gap-2 text-xs text-amber-900/80 dark:text-amber-100/80">
+              <span>Active child:</span>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-amber-950 hover:text-amber-950 dark:text-amber-100 dark:hover:text-amber-100" asChild>
+                <Link to={`/issues/${delegatedChildTarget.issuePathId}`} state={location.state}>
+                  {delegatedChildTarget.identifier}
+                </Link>
+              </Button>
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">

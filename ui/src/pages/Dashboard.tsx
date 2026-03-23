@@ -253,6 +253,9 @@ export function Dashboard() {
                 <span>
                   {data.tasks.open} open{", "}
                   {data.tasks.blocked} blocked
+                  {data.tasks.waitingOnDelegatedChild > 0
+                    ? `, ${data.tasks.waitingOnDelegatedChild} waiting on delegated work`
+                    : ""}
                 </span>
               }
             />
