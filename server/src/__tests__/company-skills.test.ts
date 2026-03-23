@@ -7,6 +7,7 @@ import {
   findMissingLocalSkillIds,
   isHermesSkillDirectoryPath,
   materializeImportedLocalSkillCopy,
+  normalizeGitHubSkillDirectory,
   parseSkillImportSourceInput,
   readLocalSkillImportFromDirectory,
 } from "../services/company-skills.js";
@@ -88,6 +89,13 @@ describe("company skill import source parsing", () => {
 });
 
 describe("project workspace skill discovery", () => {
+  it("normalizes GitHub skill directories for blob imports and legacy metadata", () => {
+    expect(normalizeGitHubSkillDirectory("retro/.", "retro")).toBe("retro");
+    expect(normalizeGitHubSkillDirectory("retro/SKILL.md", "retro")).toBe("retro");
+    expect(normalizeGitHubSkillDirectory("SKILL.md", "root-skill")).toBe("");
+    expect(normalizeGitHubSkillDirectory("", "fallback-skill")).toBe("fallback-skill");
+  });
+
   it("finds bounded skill roots under supported workspace paths", async () => {
     const workspace = await makeTempDir("paperclip-skill-workspace-");
     await writeSkillDir(workspace, "Workspace Root");
