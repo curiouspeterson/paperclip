@@ -770,7 +770,7 @@ export function buildHostServices(
       async create(params) {
         const companyId = ensureCompanyId(params.companyId);
         await ensurePluginAvailableForCompany(companyId);
-        return (await issues.create(companyId, params as any)) as Issue;
+        return (await issues.create(companyId, params as any)).issue as Issue;
       },
       async update(params) {
         const companyId = ensureCompanyId(params.companyId);

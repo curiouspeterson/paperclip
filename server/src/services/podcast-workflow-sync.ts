@@ -202,7 +202,7 @@ async function ensureReviewIssue(input: {
   const title = String(
     input.manifest.title ?? input.manifest.episode_id ?? "Episode batch review",
   ).trim();
-  const issue = await issues.create(input.workflow.companyId, {
+  const { issue } = await issues.create(input.workflow.companyId, {
     projectId: input.workflow.projectId ?? null,
     title: `Review batch: ${title}`,
     description: `Auto-created from episode batch sync for \`${input.manifest.episode_id ?? title}\`.\n\nManifest: \`${input.manifestPath}\``,

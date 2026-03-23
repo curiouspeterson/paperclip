@@ -32,8 +32,17 @@ import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallbac
 import { getDefaultCompanyGoal } from "./goals.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
+const OPEN_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked"] as const;
 const ISSUE_CHECKOUT_ALLOWED_STATUS_SET = new Set<string>(ISSUE_CHECKOUT_EXPECTED_STATUSES);
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
+
+function normalizeDelegatedIssueTitle(value: string | null | undefined) {
+  return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function nullSafeEqual(left: string | null | undefined, right: string | null | undefined) {
+  return (left ?? null) === (right ?? null);
+}
 
 function assertTransition(from: string, to: string) {
   if (!ALL_ISSUE_STATUSES.includes(to)) {
@@ -319,6 +328,52 @@ function withActiveRuns(
 
 export function issueService(db: Db) {
   const instanceSettings = instanceSettingsService(db);
+
+  async function findOpenDelegatedChildDuplicate(input: {
+    companyId: string;
+    parentId: string;
+    createdByAgentId: string;
+    title: string;
+    assigneeAgentId?: string | null;
+    assigneeUserId?: string | null;
+    projectId?: string | null;
+    goalId?: string | null;
+    requestDepth?: number | null;
+  }) {
+    const normalizedTitle = normalizeDelegatedIssueTitle(input.title);
+    const assigneeAgentId = input.assigneeAgentId ?? null;
+    const assigneeUserId = input.assigneeUserId ?? null;
+    const projectId = input.projectId ?? null;
+    const goalId = input.goalId ?? null;
+    const requestDepth = input.requestDepth ?? 0;
+
+    const candidates = await db
+      .select()
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, input.companyId),
+          eq(issues.parentId, input.parentId),
+          eq(issues.createdByAgentId, input.createdByAgentId),
+          inArray(issues.status, [...OPEN_ISSUE_STATUSES]),
+          isNull(issues.hiddenAt),
+        ),
+      )
+      .orderBy(desc(issues.updatedAt), desc(issues.createdAt));
+
+    const duplicate = candidates.find((candidate) => {
+      if (normalizeDelegatedIssueTitle(candidate.title) !== normalizedTitle) return false;
+      if (!nullSafeEqual(candidate.assigneeAgentId, assigneeAgentId)) return false;
+      if (!nullSafeEqual(candidate.assigneeUserId, assigneeUserId)) return false;
+      if (!nullSafeEqual(candidate.projectId, projectId)) return false;
+      if (!nullSafeEqual(candidate.goalId, goalId)) return false;
+      if ((candidate.requestDepth ?? 0) !== requestDepth) return false;
+      return true;
+    });
+    if (!duplicate) return null;
+
+    return withIssueLabels(db, [duplicate]).then((rows) => rows[0] ?? null);
+  }
 
   function redactIssueComment<T extends { body: string }>(comment: T, censorUsernameInLogs: boolean): T {
     return {
@@ -724,7 +779,7 @@ export function issueService(db: Db) {
     create: async (
       companyId: string,
       data: Omit<typeof issues.$inferInsert, "companyId"> & { labelIds?: string[] },
-    ) => {
+    ): Promise<{ issue: IssueWithLabels; created: boolean }> => {
       const { labelIds: inputLabelIds, ...issueData } = data;
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
@@ -758,6 +813,25 @@ export function issueService(db: Db) {
       }
       if (data.status === "in_progress") {
         throw unprocessable("Use checkout to set issue status to in_progress");
+      }
+      const duplicateDelegatedChild =
+        issueData.createdByAgentId &&
+        issueData.parentId &&
+        (issueData.assigneeAgentId || issueData.assigneeUserId)
+          ? await findOpenDelegatedChildDuplicate({
+              companyId,
+              parentId: issueData.parentId,
+              createdByAgentId: issueData.createdByAgentId,
+              title: issueData.title,
+              assigneeAgentId: issueData.assigneeAgentId ?? null,
+              assigneeUserId: issueData.assigneeUserId ?? null,
+              projectId: issueData.projectId ?? null,
+              goalId: issueData.goalId ?? null,
+              requestDepth: issueData.requestDepth ?? 0,
+            })
+          : null;
+      if (duplicateDelegatedChild) {
+        return { issue: duplicateDelegatedChild, created: false };
       }
       return db.transaction(async (tx) => {
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
@@ -835,7 +909,7 @@ export function issueService(db: Db) {
           await syncIssueLabels(issue.id, companyId, inputLabelIds, tx);
         }
         const [enriched] = await withIssueLabels(tx, [issue]);
-        return enriched;
+        return { issue: enriched, created: true };
       });
     },
 
