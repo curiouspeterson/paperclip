@@ -561,7 +561,7 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
         ? nextCronTickInTimeZone(input.trigger.cronExpression, input.trigger.timezone, triggeredAt)
         : undefined;
 
-      let createdIssue: Awaited<ReturnType<typeof issueSvc.create>> | null = null;
+      let createdIssue: NonNullable<Awaited<ReturnType<typeof issueSvc.getById>>> | null = null;
       try {
         const activeIssue = await findLiveExecutionIssue(input.routine, txDb);
         if (activeIssue && input.routine.concurrencyPolicy !== "always_enqueue") {
@@ -584,7 +584,7 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
         }
 
         try {
-          createdIssue = await issueSvc.create(input.routine.companyId, {
+          const created = await issueSvc.create(input.routine.companyId, {
             projectId: input.routine.projectId,
             goalId: input.routine.goalId,
             parentId: input.routine.parentIssueId,
@@ -597,6 +597,7 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
             originId: input.routine.id,
             originRunId: createdRun.id,
           });
+          createdIssue = created.issue;
         } catch (error) {
           const isOpenExecutionConflict =
             !!error &&
