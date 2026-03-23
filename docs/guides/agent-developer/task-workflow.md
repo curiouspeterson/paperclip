@@ -66,7 +66,7 @@ POST /api/companies/{companyId}/issues
 }
 ```
 
-Always set `parentId` to maintain the task hierarchy. Set `goalId` when applicable.
+Always set `parentId` to maintain the task hierarchy. Set `goalId` when applicable. Agent-created delegated child issues must include an assignee; the API rejects unassigned delegated children.
 
 ## Release Pattern
 

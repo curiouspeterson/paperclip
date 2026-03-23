@@ -96,7 +96,7 @@ POST /api/companies/{companyId}/issues
 { "title": "...", "assigneeAgentId": "...", "parentId": "...", "goalId": "..." }
 ```
 
-Always set `parentId` and `goalId` on subtasks.
+Always set `parentId` and `goalId` on subtasks. Agent-created delegated child issues must also include an assignee (`assigneeAgentId` or `assigneeUserId`); unassigned delegated children are rejected.
 
 ## Critical Rules
 

@@ -263,6 +263,40 @@ describe("issue contract routes", () => {
     expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", { title: "Updated title" });
   });
 
+  it("rejects board reassignment while the current assignee still has an active run", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+      executionRunId: RUN_ID,
+    }));
+    mockAccessService.canUser.mockResolvedValue(true);
+    mockHeartbeatService.getRun.mockResolvedValue({
+      id: RUN_ID,
+      status: "running",
+      agentId: AGENT_ONE_ID,
+      contextSnapshot: { issueId: "11111111-1111-4111-8111-111111111111" },
+    });
+
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "board-user",
+        companyIds: [COMPANY_ID],
+        source: "session",
+        isInstanceAdmin: false,
+      }),
+    )
+      .patch("/api/issues/11111111-1111-4111-8111-111111111111")
+      .send({ assigneeAgentId: AGENT_TWO_ID });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      error: "Cannot reassign an active issue while its run is still running. Interrupt or release it first.",
+    });
+    expect(mockHeartbeatService.getRun).toHaveBeenCalledWith(RUN_ID);
+    expect(mockIssueService.update).not.toHaveBeenCalled();
+  });
+
   it("does not pass delegationKey through issue patch requests", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       status: "todo",
@@ -377,6 +411,34 @@ describe("issue contract routes", () => {
       }),
     );
     expect(mockHeartbeatService.wakeup).not.toHaveBeenCalled();
+  });
+
+  it("rejects delegated child issue creation without an assignee", async () => {
+    mockIssueService.getById.mockResolvedValueOnce(makeIssue({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "todo",
+      assigneeAgentId: AGENT_ONE_ID,
+    }));
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post(`/api/companies/${COMPANY_ID}/issues`)
+      .send({
+        title: "Delegated child issue",
+        parentId: "22222222-2222-4222-8222-222222222222",
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({
+      error: "Delegated child issues must include an assignee",
+    });
+    expect(mockIssueService.create).not.toHaveBeenCalled();
   });
 
   it("logs when delegated child creation blocks the parent issue", async () => {

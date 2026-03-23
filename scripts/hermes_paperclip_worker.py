@@ -382,7 +382,7 @@ def build_runtime_preflight(agent: dict[str, Any], issue: dict[str, Any]) -> str
 
     if any(token in title for token in ("mailchimp", "newsletter", "campaign")):
         checks.append(f"MAILCHIMP_API_KEY={env_presence('MAILCHIMP_API_KEY')}")
-        checks.append("MAILCHIMP_API_KEY_USAGE=already_available_in_worker_runtime")
+        checks.append("MAILCHIMP_API_KEY_USAGE=available_to_heartbeat_process_env")
         checks.append("MAILCHIMP_WEBHOOK_SECRET=not_required_by_current_integration")
 
     if any(token in title for token in ("instagram", "tiktok", "social poster", "social", "x.com", "twitter", "x ")):
@@ -567,7 +567,8 @@ def build_prompt(
     if any(token in issue_title_lower for token in ("mailchimp", "newsletter", "campaign")):
         mailchimp_guidance = (
             "Mailchimp credentials may already be bound in the runtime preflight above. "
-            "If MAILCHIMP_API_KEY is present, use it directly for Mailchimp API requests. "
+            "If MAILCHIMP_API_KEY is present, it is available to the heartbeat child process for direct API calls "
+            "even if it is not visible in a separate workspace terminal. "
             "Do not create secret-provisioning tasks or ask for the key again."
         )
     clip_guidance = ""

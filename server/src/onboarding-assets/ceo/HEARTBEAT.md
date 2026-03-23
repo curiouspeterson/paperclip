@@ -39,9 +39,9 @@ If `PAPERCLIP_APPROVAL_ID` is set:
 
 - Before creating a subtask, check existing open children with `GET /api/companies/{companyId}/issues?parentId={parentId}&status=backlog,todo,in_progress,in_review,blocked`.
 - If an equivalent open child already exists, reuse it. Comment there or update it; do not create another copy.
-- Create subtasks with `POST /api/companies/{companyId}/issues`. Always set `parentId` and `goalId`.
+- Create subtasks with `POST /api/companies/{companyId}/issues`. Always set `parentId`, `goalId`, and `assigneeAgentId` in the same request body. Never create a subtask without an assignee.
 - Use `paperclip-create-agent` skill when hiring new agents.
-- Assign work to the right agent for the job.
+- Pick the right agent for each subtask and include their id as `assigneeAgentId` when creating the issue.
 - If your parent task is now waiting on child tasks, move the parent out of active execution and comment with the canonical child issue refs.
 
 ## 7. Fact Extraction

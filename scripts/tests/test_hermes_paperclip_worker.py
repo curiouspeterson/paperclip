@@ -34,7 +34,7 @@ class HermesWorkerTests(unittest.TestCase):
         with patch.dict(os.environ, {"MAILCHIMP_API_KEY": "present-us19"}, clear=False):
             preflight = worker.build_runtime_preflight(agent, issue)
         self.assertIn("MAILCHIMP_API_KEY=present", preflight)
-        self.assertIn("MAILCHIMP_API_KEY_USAGE=already_available_in_worker_runtime", preflight)
+        self.assertIn("MAILCHIMP_API_KEY_USAGE=available_to_heartbeat_process_env", preflight)
         self.assertIn("MAILCHIMP_WEBHOOK_SECRET=not_required_by_current_integration", preflight)
 
     def test_runtime_preflight_reports_fable_as_iphone_mirroring_work(self) -> None:
@@ -116,7 +116,10 @@ class HermesWorkerTests(unittest.TestCase):
             can_assign_tasks=False,
         )
         self.assertIn("Mailchimp credentials may already be bound in the runtime preflight above.", prompt)
-        self.assertIn("If MAILCHIMP_API_KEY is present, use it directly for Mailchimp API requests.", prompt)
+        self.assertIn(
+            "If MAILCHIMP_API_KEY is present, it is available to the heartbeat child process for direct API calls",
+            prompt,
+        )
         self.assertIn("Do not create secret-provisioning tasks or ask for the key again.", prompt)
 
     def test_build_prompt_blocks_invented_youtube_api_requirements_for_clip_work(self) -> None:

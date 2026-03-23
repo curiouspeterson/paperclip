@@ -381,6 +381,37 @@ describe("issue service contracts", () => {
     expect(company?.issueCounter).toBe(1);
   });
 
+  it("rejects agent-delegated child issues without an assignee", async () => {
+    const companyId = await seedCompany("Alpha");
+    const managerAgentId = await seedAgent(companyId, "Manager");
+    const parentId = randomUUID();
+
+    await db.insert(issues).values({
+      id: parentId,
+      companyId,
+      title: "Parent task",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: managerAgentId,
+      createdByAgentId: managerAgentId,
+    });
+
+    const svc = issueService(db);
+
+    await expect(
+      svc.create(companyId, {
+        title: "Unassigned delegated child",
+        parentId,
+        createdByAgentId: managerAgentId,
+        status: "todo",
+        priority: "medium",
+      } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Delegated child issues must include an assignee",
+    });
+  });
+
   it("reuses a delegated child by explicit delegation key even when the title changes", async () => {
     const companyId = await seedCompany("Alpha");
     const managerAgentId = await seedAgent(companyId, "Manager");
@@ -787,6 +818,55 @@ describe("issue service contracts", () => {
     expect(checkedOut?.status).toBe("in_progress");
     expect(checkedOut?.completedAt).toBeNull();
     expect(checkedOut?.cancelledAt).toBeNull();
+  });
+
+  it("allows checkout when a todo issue still points at a failed execution run", async () => {
+    const companyId = await seedCompany("Alpha");
+    const agentId = await seedAgent(companyId);
+    const runId = randomUUID();
+    const issueId = randomUUID();
+    const now = new Date("2026-03-23T20:21:49.245Z");
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      status: "failed",
+      startedAt: now,
+      finishedAt: new Date("2026-03-23T20:22:10.589Z"),
+      updatedAt: new Date("2026-03-23T20:22:10.589Z"),
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Retry checkout after failed run",
+      status: "todo",
+      priority: "high",
+      assigneeAgentId: agentId,
+      executionRunId: runId,
+      executionLockedAt: now,
+      executionAgentNameKey: "ceo",
+      updatedAt: now,
+    });
+
+    const nextRunId = randomUUID();
+    await db.insert(heartbeatRuns).values({
+      id: nextRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      status: "running",
+      startedAt: new Date("2026-03-23T20:22:30.000Z"),
+      updatedAt: new Date("2026-03-23T20:22:30.000Z"),
+    });
+    const checkedOut = await issueService(db).checkout(issueId, agentId, ["todo"], nextRunId);
+
+    expect(checkedOut?.status).toBe("in_progress");
+    expect(checkedOut?.assigneeAgentId).toBe(agentId);
+    expect(checkedOut?.checkoutRunId).toBe(nextRunId);
+    expect(checkedOut?.executionRunId).toBe(nextRunId);
   });
 
   it("rejects direct cross-company issue links at the database layer", async () => {

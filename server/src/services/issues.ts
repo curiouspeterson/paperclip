@@ -1031,6 +1031,9 @@ export function issueService(db: Db) {
       if (data.assigneeAgentId && data.assigneeUserId) {
         throw unprocessable("Issue can only have one assignee");
       }
+      if (data.parentId && data.createdByAgentId && !data.assigneeAgentId && !data.assigneeUserId) {
+        throw unprocessable("Delegated child issues must include an assignee");
+      }
       if (data.assigneeAgentId) {
         await assertAssignableAgent(companyId, data.assigneeAgentId);
       }
@@ -1583,12 +1586,35 @@ export function issueService(db: Db) {
       }
 
       const issueCompany = await db
-        .select({ companyId: issues.companyId, blockerDetails: issues.blockerDetails })
+        .select({
+          companyId: issues.companyId,
+          blockerDetails: issues.blockerDetails,
+          executionRunId: issues.executionRunId,
+        })
         .from(issues)
         .where(eq(issues.id, id))
         .then((rows) => rows[0] ?? null);
       if (!issueCompany) throw notFound("Issue not found");
       await assertAssignableAgent(issueCompany.companyId, agentId);
+
+      if (issueCompany.executionRunId) {
+        const executionRun = await db
+          .select({ status: heartbeatRuns.status })
+          .from(heartbeatRuns)
+          .where(eq(heartbeatRuns.id, issueCompany.executionRunId))
+          .then((rows) => rows[0] ?? null);
+        if (executionRun && executionRun.status !== "queued" && executionRun.status !== "running") {
+          await db
+            .update(issues)
+            .set({
+              executionRunId: null,
+              executionLockedAt: null,
+              executionAgentNameKey: null,
+              updatedAt: new Date(),
+            })
+            .where(and(eq(issues.id, id), eq(issues.executionRunId, issueCompany.executionRunId)));
+        }
+      }
 
       const now = new Date();
       const sameRunAssigneeCondition = checkoutRunId

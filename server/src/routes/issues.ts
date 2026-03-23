@@ -280,6 +280,27 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return true;
   }
 
+  async function findRunningExecutionForIssue(
+    issue: { id: string; assigneeAgentId: string | null; executionRunId?: string | null },
+  ) {
+    if (issue.executionRunId) {
+      const run = await heartbeat.getRun(issue.executionRunId);
+      if (run?.status === "running") return run;
+    }
+
+    if (!issue.assigneeAgentId) return null;
+    const activeRun = await heartbeat.getActiveRunForAgent(issue.assigneeAgentId);
+    const activeIssueId =
+      activeRun &&
+        activeRun.contextSnapshot &&
+        typeof activeRun.contextSnapshot === "object" &&
+        typeof (activeRun.contextSnapshot as Record<string, unknown>).issueId === "string"
+        ? ((activeRun.contextSnapshot as Record<string, unknown>).issueId as string)
+        : null;
+    if (activeRun?.status === "running" && activeIssueId === issue.id) return activeRun;
+    return null;
+  }
+
   async function normalizeIssueIdentifier(rawId: string): Promise<string> {
     if (/^[A-Z]+-\d+$/i.test(rawId)) {
       const issue = await svc.getByIdentifier(rawId);
@@ -914,7 +935,18 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
     }
 
+    const isAgentDelegationWithoutAssignee =
+      req.actor.type === "agent" &&
+      req.body.parentId &&
+      !req.body.assigneeAgentId &&
+      !req.body.assigneeUserId;
+    if (isAgentDelegationWithoutAssignee) {
+      res.status(422).json({ error: "Delegated child issues must include an assignee" });
+      return;
+    }
+
     const actor = getActorInfo(req);
+
     const { issue, created, blockedParentIssue, blockedParentComment } = await svc.create(companyId, {
       ...req.body,
       createdByAgentId: actor.agentId,
@@ -952,7 +984,6 @@ export function issueRoutes(db: Db, storage: StorageService) {
           delegatedChildIssueId: issue.id,
         });
       }
-
       res.status(201).json(issue);
       return;
     }
@@ -1010,6 +1041,20 @@ export function issueRoutes(db: Db, storage: StorageService) {
     if (assigneeWillChange) {
       if (!isAgentReturningIssueToCreator) {
         await assertCanAssignTasks(req, existing.companyId);
+      }
+    }
+    if (
+      req.actor.type === "board" &&
+      assigneeWillChange &&
+      existing.status === "in_progress" &&
+      existing.assigneeAgentId
+    ) {
+      const activeRun = await findRunningExecutionForIssue(existing);
+      if (activeRun) {
+        res.status(409).json({
+          error: "Cannot reassign an active issue while its run is still running. Interrupt or release it first.",
+        });
+        return;
       }
     }
     if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
