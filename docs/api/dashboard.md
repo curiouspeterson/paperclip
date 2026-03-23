@@ -17,7 +17,7 @@ Returns a summary including:
 
 - **Agent counts** by status (active, idle, running, error, paused)
 - **Task counts** by status (open, in_progress, blocked, done)
-- **Delegated coordination waits** — how many blocked issues are waiting on an active delegated child issue
+- **Delegated coordination waits** — how many blocked issues are waiting on active delegated child issues, plus up to three recent child targets for direct navigation
 - **Cost summary** — current month spend vs budget
 - **Budget incident summary** — active incidents, pending overrides, paused agents, and paused projects
 - **Pending approvals** — company-wide approval count

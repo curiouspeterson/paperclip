@@ -26,6 +26,7 @@ import { HeartbeatButton } from "./HeartbeatButton";
 import { Link } from "@/lib/router";
 import type { Issue, IssueBlockerType } from "@paperclipai/shared";
 import { blockerTypeLabels, getIssueBlockerSummary, issueMatchesBlockerTypes } from "../lib/issue-blockers";
+import { buildInitialIssueViewState, defaultIssueViewState } from "../lib/issues-view-state";
 
 /* ── Helpers ── */
 
@@ -52,20 +53,6 @@ export type IssueViewState = {
   collapsedGroups: string[];
 };
 
-const defaultViewState: IssueViewState = {
-  statuses: [],
-  priorities: [],
-  assignees: [],
-  labels: [],
-  projects: [],
-  blockerTypes: [],
-  sortField: "updated",
-  sortDir: "desc",
-  groupBy: "none",
-  viewMode: "list",
-  collapsedGroups: [],
-};
-
 const quickFilterPresets = [
   { label: "All", statuses: [] as string[], blockerTypes: [] as IssueBlockerType[] },
   { label: "Active", statuses: ["todo", "in_progress", "in_review", "blocked"], blockerTypes: [] as IssueBlockerType[] },
@@ -87,9 +74,9 @@ const blockerFilterOrder: IssueBlockerType[] = [
 function getViewState(key: string): IssueViewState {
   try {
     const raw = localStorage.getItem(key);
-    if (raw) return { ...defaultViewState, ...JSON.parse(raw) };
+    if (raw) return { ...defaultIssueViewState, ...JSON.parse(raw) };
   } catch { /* ignore */ }
-  return { ...defaultViewState };
+  return { ...defaultIssueViewState };
 }
 
 function saveViewState(key: string, state: IssueViewState) {
@@ -184,6 +171,7 @@ interface IssuesListProps {
   viewStateKey: string;
   issueLinkState?: unknown;
   initialAssignees?: string[];
+  initialBlockerTypes?: IssueBlockerType[];
   initialSearch?: string;
   onSearchChange?: (search: string) => void;
   onUpdateIssue: (id: string, data: Record<string, unknown>) => void;
@@ -201,6 +189,7 @@ export function IssuesList({
   viewStateKey,
   issueLinkState,
   initialAssignees,
+  initialBlockerTypes,
   initialSearch,
   onSearchChange,
   onUpdateIssue,
@@ -217,10 +206,11 @@ export function IssuesList({
   const scopedKey = selectedCompanyId ? `${viewStateKey}:${selectedCompanyId}` : viewStateKey;
 
   const [viewState, setViewState] = useState<IssueViewState>(() => {
-    if (initialAssignees) {
-      return { ...defaultViewState, assignees: initialAssignees, statuses: [] };
-    }
-    return getViewState(scopedKey);
+    return buildInitialIssueViewState({
+      storedState: getViewState(scopedKey),
+      initialAssignees,
+      initialBlockerTypes,
+    });
   });
   const [assigneePickerIssueId, setAssigneePickerIssueId] = useState<string | null>(null);
   const [assigneeSearch, setAssigneeSearch] = useState("");
@@ -244,11 +234,13 @@ export function IssuesList({
   useEffect(() => {
     if (prevScopedKey.current !== scopedKey) {
       prevScopedKey.current = scopedKey;
-      setViewState(initialAssignees
-        ? { ...defaultViewState, assignees: initialAssignees, statuses: [] }
-        : getViewState(scopedKey));
+      setViewState(buildInitialIssueViewState({
+        storedState: getViewState(scopedKey),
+        initialAssignees,
+        initialBlockerTypes,
+      }));
     }
-  }, [scopedKey, initialAssignees]);
+  }, [scopedKey, initialAssignees, initialBlockerTypes]);
 
   const updateView = useCallback((patch: Partial<IssueViewState>) => {
     setViewState((prev) => {

@@ -5,6 +5,8 @@ import type { Approval, DashboardSummary, HeartbeatRun, Issue, JoinRequest } fro
 import {
   computeInboxBadgeData,
   getApprovalsForTab,
+  getDelegatedWorkAlertHref,
+  getDelegatedWorkAlertTargets,
   getInboxWorkItems,
   getRecentTouchedIssues,
   getUnreadTouchedIssues,
@@ -181,6 +183,8 @@ const dashboard: DashboardSummary = {
     inProgress: 0,
     blocked: 0,
     waitingOnDelegatedChild: 0,
+    waitingOnDelegatedChildTarget: null,
+    waitingOnDelegatedChildTargets: [],
     done: 0,
   },
   costs: {
@@ -263,6 +267,29 @@ describe("inbox helpers", () => {
       tasks: {
         ...dashboard.tasks,
         waitingOnDelegatedChild: 2,
+        waitingOnDelegatedChildTarget: {
+          issueId: "issue-123",
+          identifier: "PAP-123",
+          parentIssueId: "issue-44",
+          parentIdentifier: "PAP-44",
+          parentTitle: "Manager issue",
+        },
+        waitingOnDelegatedChildTargets: [
+          {
+            issueId: "issue-123",
+            identifier: "PAP-123",
+            parentIssueId: "issue-44",
+            parentIdentifier: "PAP-44",
+            parentTitle: "Manager issue",
+          },
+          {
+            issueId: "issue-124",
+            identifier: "PAP-124",
+            parentIssueId: "issue-45",
+            parentIdentifier: "PAP-45",
+            parentTitle: "Other manager issue",
+          },
+        ],
       },
     };
 
@@ -301,6 +328,117 @@ describe("inbox helpers", () => {
       unreadTouchedIssues: 0,
       alerts: 0,
     });
+  });
+
+  it("links delegated-work alerts directly to the active child when a target is available", () => {
+    const delegatedDashboard: DashboardSummary = {
+      ...dashboard,
+      tasks: {
+        ...dashboard.tasks,
+        waitingOnDelegatedChild: 1,
+        waitingOnDelegatedChildTarget: {
+          issueId: "issue-123",
+          identifier: "PAP-123",
+          parentIssueId: "issue-44",
+          parentIdentifier: "PAP-44",
+          parentTitle: "Manager issue",
+        },
+        waitingOnDelegatedChildTargets: [
+          {
+            issueId: "issue-123",
+            identifier: "PAP-123",
+            parentIssueId: "issue-44",
+            parentIdentifier: "PAP-44",
+            parentTitle: "Manager issue",
+          },
+        ],
+      },
+    };
+
+    expect(getDelegatedWorkAlertHref(delegatedDashboard)).toBe("/issues/issue-123");
+  });
+
+  it("falls back to the delegated blocker list when no child target is available", () => {
+    const delegatedDashboard: DashboardSummary = {
+      ...dashboard,
+      tasks: {
+        ...dashboard.tasks,
+        waitingOnDelegatedChild: 1,
+        waitingOnDelegatedChildTarget: null,
+        waitingOnDelegatedChildTargets: [],
+      },
+    };
+
+    expect(getDelegatedWorkAlertHref(delegatedDashboard)).toBe(
+      "/issues?blocker=delegated_child_execution",
+    );
+  });
+
+  it("returns multiple delegated child targets for inbox alert actions", () => {
+    const delegatedDashboard: DashboardSummary = {
+      ...dashboard,
+      tasks: {
+        ...dashboard.tasks,
+        waitingOnDelegatedChild: 3,
+        waitingOnDelegatedChildTarget: {
+          issueId: "issue-123",
+          identifier: "PAP-123",
+          parentIssueId: "issue-44",
+          parentIdentifier: "PAP-44",
+          parentTitle: "Manager issue",
+        },
+        waitingOnDelegatedChildTargets: [
+          {
+            issueId: "issue-123",
+            identifier: "PAP-123",
+            parentIssueId: "issue-44",
+            parentIdentifier: "PAP-44",
+            parentTitle: "Manager issue",
+          },
+          {
+            issueId: "issue-124",
+            identifier: "PAP-124",
+            parentIssueId: "issue-45",
+            parentIdentifier: "PAP-45",
+            parentTitle: "Other manager issue",
+          },
+          {
+            issueId: "issue-125",
+            identifier: null,
+            parentIssueId: "issue-46",
+            parentIdentifier: null,
+            parentTitle: "Fallback manager issue",
+          },
+        ],
+      },
+    };
+
+    expect(getDelegatedWorkAlertTargets(delegatedDashboard)).toEqual([
+      {
+        issueId: "issue-123",
+        identifier: "PAP-123",
+        href: "/issues/issue-123",
+        label: "Open PAP-123",
+        breadcrumbHref: "/issues/PAP-44",
+        breadcrumbLabel: "PAP-44",
+      },
+      {
+        issueId: "issue-124",
+        identifier: "PAP-124",
+        href: "/issues/issue-124",
+        label: "Open PAP-124",
+        breadcrumbHref: "/issues/PAP-45",
+        breadcrumbLabel: "PAP-45",
+      },
+      {
+        issueId: "issue-125",
+        identifier: null,
+        href: "/issues/issue-125",
+        label: "Open child",
+        breadcrumbHref: "/issues/issue-46",
+        breadcrumbLabel: "Fallback manager issue",
+      },
+    ]);
   });
 
   it("keeps read issues in the touched list but excludes them from unread counts", () => {

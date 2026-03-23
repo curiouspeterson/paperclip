@@ -12,6 +12,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
 import { IssuesList } from "../components/IssuesList";
+import { getIssueBlockerTypesFromSearchParams } from "../lib/issues-view-state";
 import { CircleDot } from "lucide-react";
 
 export function Issues() {
@@ -22,6 +23,7 @@ export function Issues() {
   const queryClient = useQueryClient();
 
   const initialSearch = searchParams.get("q") ?? "";
+  const initialBlockerTypes = getIssueBlockerTypesFromSearchParams(searchParams);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const handleSearchChange = useCallback((search: string) => {
     clearTimeout(debounceRef.current);
@@ -124,6 +126,7 @@ export function Issues() {
       viewStateKey="paperclip:issues-view"
       issueLinkState={issueLinkState}
       initialAssignees={searchParams.get("assignee") ? [searchParams.get("assignee")!] : undefined}
+      initialBlockerTypes={initialBlockerTypes}
       initialSearch={initialSearch}
       onSearchChange={handleSearchChange}
       onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}

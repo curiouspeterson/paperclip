@@ -68,7 +68,7 @@ function createApp(
 
 describe("approval routes idempotent retries", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockHeartbeatService.wakeup.mockResolvedValue({ id: "wake-1" });
     mockIssueApprovalService.listIssuesForApproval.mockResolvedValue([{ id: "issue-1" }]);
     mockApprovalService.getById.mockResolvedValue({

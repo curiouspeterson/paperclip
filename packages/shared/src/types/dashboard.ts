@@ -1,3 +1,11 @@
+export interface DelegatedChildDashboardTarget {
+  issueId: string;
+  identifier: string | null;
+  parentIssueId: string;
+  parentIdentifier: string | null;
+  parentTitle: string;
+}
+
 export interface DashboardSummary {
   companyId: string;
   agents: {
@@ -11,6 +19,8 @@ export interface DashboardSummary {
     inProgress: number;
     blocked: number;
     waitingOnDelegatedChild: number;
+    waitingOnDelegatedChildTarget: DelegatedChildDashboardTarget | null;
+    waitingOnDelegatedChildTargets: DelegatedChildDashboardTarget[];
     done: number;
   };
   costs: {

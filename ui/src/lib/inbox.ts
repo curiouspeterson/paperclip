@@ -225,6 +225,38 @@ export function shouldShowInboxSection({
   return showOnAll;
 }
 
+export function getDelegatedWorkAlertHref(dashboard: DashboardSummary | undefined): string {
+  const targetIssueId = dashboard?.tasks.waitingOnDelegatedChildTargets[0]?.issueId
+    ?? dashboard?.tasks.waitingOnDelegatedChildTarget?.issueId;
+  if (targetIssueId) return `/issues/${targetIssueId}`;
+  return "/issues?blocker=delegated_child_execution";
+}
+
+export function getDelegatedWorkAlertTargets(dashboard: DashboardSummary | undefined): Array<{
+  issueId: string;
+  identifier: string | null;
+  href: string;
+  label: string;
+  breadcrumbHref: string;
+  breadcrumbLabel: string;
+}> {
+  const targets = dashboard?.tasks.waitingOnDelegatedChildTargets
+    && dashboard.tasks.waitingOnDelegatedChildTargets.length > 0
+    ? dashboard.tasks.waitingOnDelegatedChildTargets
+    : dashboard?.tasks.waitingOnDelegatedChildTarget
+      ? [dashboard.tasks.waitingOnDelegatedChildTarget]
+      : [];
+
+  return targets.map((target) => ({
+    issueId: target.issueId,
+    identifier: target.identifier,
+    href: `/issues/${target.issueId}`,
+    label: target.identifier ? `Open ${target.identifier}` : "Open child",
+    breadcrumbHref: `/issues/${target.parentIdentifier ?? target.parentIssueId}`,
+    breadcrumbLabel: target.parentIdentifier ?? target.parentTitle,
+  }));
+}
+
 export function computeInboxBadgeData({
   approvals,
   joinRequests,

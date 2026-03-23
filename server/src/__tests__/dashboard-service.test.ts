@@ -117,20 +117,75 @@ describe("dashboard service", () => {
   it("reports blocked delegated-child waits separately from general blocked work", async () => {
     const companyId = await seedCompany("Alpha");
     const foreignCompanyId = await seedCompany("Beta");
+    const waitingParentIssueId = randomUUID();
+    const secondWaitingParentIssueId = randomUUID();
+    const thirdWaitingParentIssueId = randomUUID();
+    const fourthWaitingParentIssueId = randomUUID();
+    const delegatedChildIssueId = randomUUID();
+    const secondDelegatedChildIssueId = randomUUID();
+    const thirdDelegatedChildIssueId = randomUUID();
+    const fourthDelegatedChildIssueId = randomUUID();
 
     await db.insert(issues).values([
       {
-        id: randomUUID(),
+        id: waitingParentIssueId,
         companyId,
         title: "Waiting on canonical child",
         status: "blocked",
         priority: "medium",
+        identifier: "PAP-44",
         blockerDetails: {
           blockerType: "delegated_child_execution",
           summary: "Waiting on delegated child issue PAP-581",
-          delegatedChildIssueId: randomUUID(),
+          delegatedChildIssueId,
           delegatedChildIdentifier: "PAP-581",
         },
+        updatedAt: new Date("2026-03-23T12:00:00.000Z"),
+      },
+      {
+        id: secondWaitingParentIssueId,
+        companyId,
+        title: "Waiting on second canonical child",
+        status: "blocked",
+        priority: "medium",
+        identifier: "PAP-45",
+        blockerDetails: {
+          blockerType: "delegated_child_execution",
+          summary: "Waiting on delegated child issue PAP-582",
+          delegatedChildIssueId: secondDelegatedChildIssueId,
+          delegatedChildIdentifier: "PAP-582",
+        },
+        updatedAt: new Date("2026-03-23T11:00:00.000Z"),
+      },
+      {
+        id: thirdWaitingParentIssueId,
+        companyId,
+        title: "Waiting on third canonical child",
+        status: "blocked",
+        priority: "medium",
+        identifier: "PAP-46",
+        blockerDetails: {
+          blockerType: "delegated_child_execution",
+          summary: "Waiting on delegated child issue PAP-583",
+          delegatedChildIssueId: thirdDelegatedChildIssueId,
+          delegatedChildIdentifier: "PAP-583",
+        },
+        updatedAt: new Date("2026-03-23T10:00:00.000Z"),
+      },
+      {
+        id: fourthWaitingParentIssueId,
+        companyId,
+        title: "Waiting on fourth canonical child",
+        status: "blocked",
+        priority: "medium",
+        identifier: "PAP-47",
+        blockerDetails: {
+          blockerType: "delegated_child_execution",
+          summary: "Waiting on delegated child issue PAP-584",
+          delegatedChildIssueId: fourthDelegatedChildIssueId,
+          delegatedChildIdentifier: "PAP-584",
+        },
+        updatedAt: new Date("2026-03-23T09:00:00.000Z"),
       },
       {
         id: randomUUID(),
@@ -180,10 +235,40 @@ describe("dashboard service", () => {
     const summary = await dashboardService(db).summary(companyId);
 
     expect(summary.tasks).toMatchObject({
-      open: 4,
+      open: 7,
       inProgress: 1,
-      blocked: 3,
-      waitingOnDelegatedChild: 1,
+      blocked: 6,
+      waitingOnDelegatedChild: 4,
+      waitingOnDelegatedChildTarget: {
+        issueId: delegatedChildIssueId,
+        identifier: "PAP-581",
+        parentIssueId: waitingParentIssueId,
+        parentIdentifier: "PAP-44",
+        parentTitle: "Waiting on canonical child",
+      },
+      waitingOnDelegatedChildTargets: [
+        {
+          issueId: delegatedChildIssueId,
+          identifier: "PAP-581",
+          parentIssueId: waitingParentIssueId,
+          parentIdentifier: "PAP-44",
+          parentTitle: "Waiting on canonical child",
+        },
+        {
+          issueId: secondDelegatedChildIssueId,
+          identifier: "PAP-582",
+          parentIssueId: secondWaitingParentIssueId,
+          parentIdentifier: "PAP-45",
+          parentTitle: "Waiting on second canonical child",
+        },
+        {
+          issueId: thirdDelegatedChildIssueId,
+          identifier: "PAP-583",
+          parentIssueId: thirdWaitingParentIssueId,
+          parentIdentifier: "PAP-46",
+          parentTitle: "Waiting on third canonical child",
+        },
+      ],
       done: 1,
     });
   });

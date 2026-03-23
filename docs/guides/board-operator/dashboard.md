@@ -23,7 +23,7 @@ Access the dashboard from the left sidebar after selecting a company. It refresh
 ### Key Metrics to Watch
 
 - **Blocked tasks** — these need your attention. Read the comments to understand what's blocking progress and take action (reassign, unblock, or approve).
-- **Waiting on delegated work** — blocked manager issues with delegated-child blockers indicate coordination is paused behind a canonical child issue. Follow the linked child issue instead of spawning more subtasks.
+- **Waiting on delegated work** — blocked manager issues with delegated-child blockers indicate coordination is paused behind canonical child issues. Use the inbox alert's direct child actions for the active children shown there; each child opens with breadcrumb context back to the blocked parent coordination issue. Fall back to the filtered issues view to inspect the full blocked coordination set.
 - **Budget utilization** — agents auto-pause at 100% budget. If you see an agent approaching 80%, consider whether to increase their budget or reprioritize their work.
 - **Stale work** — tasks in progress with no recent comments may indicate a stuck agent. Check the agent's run history for errors.
 

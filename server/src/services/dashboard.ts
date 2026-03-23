@@ -1,10 +1,11 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { agents, approvals, companies, costEvents, issues } from "@paperclipai/db";
 import { notFound } from "../errors.js";
 import { budgetService } from "./budgets.js";
 
 const DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE = "delegated_child_execution";
+const MAX_DELEGATED_CHILD_TARGETS = 3;
 
 export function dashboardService(db: Db) {
   const budgets = budgetService(db);
@@ -42,6 +43,66 @@ export function dashboardService(db: Db) {
         )
         .then((rows) => Number(rows[0]?.count ?? 0));
 
+      const waitingOnDelegatedChildTarget = await db
+        .select({
+          issueId: sql<string>`${issues.blockerDetails} ->> 'delegatedChildIssueId'`,
+          identifier: sql<string | null>`${issues.blockerDetails} ->> 'delegatedChildIdentifier'`,
+          parentIssueId: issues.id,
+          parentIdentifier: issues.identifier,
+          parentTitle: issues.title,
+        })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, companyId),
+            eq(issues.status, "blocked"),
+            isNotNull(issues.blockerDetails),
+            sql`${issues.blockerDetails} ->> 'blockerType' = ${DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE}`,
+            sql`${issues.blockerDetails} ->> 'delegatedChildIssueId' is not null`,
+          ),
+        )
+        .orderBy(desc(issues.updatedAt))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+
+      const waitingOnDelegatedChildTargets = await db
+        .select({
+          issueId: sql<string>`${issues.blockerDetails} ->> 'delegatedChildIssueId'`,
+          identifier: sql<string | null>`${issues.blockerDetails} ->> 'delegatedChildIdentifier'`,
+          parentIssueId: issues.id,
+          parentIdentifier: issues.identifier,
+          parentTitle: issues.title,
+        })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, companyId),
+            eq(issues.status, "blocked"),
+            isNotNull(issues.blockerDetails),
+            sql`${issues.blockerDetails} ->> 'blockerType' = ${DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE}`,
+            sql`${issues.blockerDetails} ->> 'delegatedChildIssueId' is not null`,
+          ),
+        )
+        .orderBy(desc(issues.updatedAt))
+        .limit(10)
+        .then((rows) => {
+          const deduped: Array<{
+            issueId: string;
+            identifier: string | null;
+            parentIssueId: string;
+            parentIdentifier: string | null;
+            parentTitle: string;
+          }> = [];
+          const seenIssueIds = new Set<string>();
+          for (const row of rows) {
+            if (!row.issueId || seenIssueIds.has(row.issueId)) continue;
+            seenIssueIds.add(row.issueId);
+            deduped.push(row);
+            if (deduped.length >= MAX_DELEGATED_CHILD_TARGETS) break;
+          }
+          return deduped;
+        });
+
       const pendingApprovals = await db
         .select({ count: sql<number>`count(*)` })
         .from(approvals)
@@ -61,11 +122,33 @@ export function dashboardService(db: Db) {
         agentCounts[bucket] = (agentCounts[bucket] ?? 0) + count;
       }
 
-      const taskCounts: Record<string, number> = {
+      const taskCounts: {
+        open: number;
+        inProgress: number;
+        blocked: number;
+        waitingOnDelegatedChild: number;
+        waitingOnDelegatedChildTarget: {
+          issueId: string;
+          identifier: string | null;
+          parentIssueId: string;
+          parentIdentifier: string | null;
+          parentTitle: string;
+        } | null;
+        waitingOnDelegatedChildTargets: Array<{
+          issueId: string;
+          identifier: string | null;
+          parentIssueId: string;
+          parentIdentifier: string | null;
+          parentTitle: string;
+        }>;
+        done: number;
+      } = {
         open: 0,
         inProgress: 0,
         blocked: 0,
         waitingOnDelegatedChild,
+        waitingOnDelegatedChildTarget,
+        waitingOnDelegatedChildTargets,
         done: 0,
       };
       for (const row of taskRows) {

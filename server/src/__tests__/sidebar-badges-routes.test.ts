@@ -73,6 +73,8 @@ describe("sidebar badge routes", () => {
         inProgress: 1,
         blocked: 2,
         waitingOnDelegatedChild: 0,
+        waitingOnDelegatedChildTarget: null,
+        waitingOnDelegatedChildTargets: [],
         done: 1,
       },
       costs: {
@@ -104,6 +106,20 @@ describe("sidebar badge routes", () => {
         inProgress: 1,
         blocked: 2,
         waitingOnDelegatedChild: 3,
+        waitingOnDelegatedChildTarget: {
+          issueId: "issue-123",
+          identifier: "PAP-123",
+        },
+        waitingOnDelegatedChildTargets: [
+          {
+            issueId: "issue-123",
+            identifier: "PAP-123",
+          },
+          {
+            issueId: "issue-124",
+            identifier: "PAP-124",
+          },
+        ],
         done: 1,
       },
       costs: {

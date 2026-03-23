@@ -42,6 +42,8 @@ import type { Approval, HeartbeatRun, Issue, JoinRequest } from "@paperclipai/sh
 import {
   ACTIONABLE_APPROVAL_STATUSES,
   getApprovalsForTab,
+  getDelegatedWorkAlertHref,
+  getDelegatedWorkAlertTargets,
   getInboxWorkItems,
   getLatestFailedRunsByAgent,
   getRecentTouchedIssues,
@@ -606,6 +608,8 @@ export function Inbox() {
   const showAggregateAgentError = visibleDashboardAlerts.includes("agent-errors");
   const showBudgetAlert = visibleDashboardAlerts.includes("budget");
   const showDelegatedWorkAlert = visibleDashboardAlerts.includes("delegated-work");
+  const delegatedWorkAlertHref = getDelegatedWorkAlertHref(dashboard);
+  const delegatedWorkAlertTargets = getDelegatedWorkAlertTargets(dashboard);
   const hasAlerts = visibleDashboardAlerts.length > 0;
   const hasJoinRequests = joinRequests.length > 0;
   const showWorkItemsSection = workItemsToRender.length > 0;
@@ -923,9 +927,9 @@ export function Inbox() {
                 </div>
               )}
               {showDelegatedWorkAlert && (
-                <div className="group/alert relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
+                <div className="group/alert relative flex items-start gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
                   <Link
-                    to="/issues"
+                    to="/issues?blocker=delegated_child_execution"
                     className="flex flex-1 cursor-pointer items-center gap-3 no-underline text-inherit"
                   >
                     <AlertTriangle className="h-4 w-4 shrink-0 text-sky-500" />
@@ -937,14 +941,46 @@ export function Inbox() {
                       waiting on delegated work
                     </span>
                   </Link>
-                  <button
-                    type="button"
-                    onClick={() => dismiss("alert:delegated-work")}
-                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/alert:opacity-100"
-                    aria-label="Dismiss"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    {delegatedWorkAlertTargets.length > 0 ? delegatedWorkAlertTargets.map((target) => (
+                      <Button
+                        key={target.issueId}
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5"
+                        asChild
+                      >
+                        <Link
+                          to={target.href}
+                          state={createIssueDetailLocationState(
+                            target.breadcrumbLabel,
+                            target.breadcrumbHref,
+                          )}
+                        >
+                          {target.label}
+                        </Link>
+                      </Button>
+                    )) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5"
+                        asChild
+                      >
+                        <Link to={delegatedWorkAlertHref} state={issueLinkState}>
+                          Open child
+                        </Link>
+                      </Button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => dismiss("alert:delegated-work")}
+                      className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/alert:opacity-100"
+                      aria-label="Dismiss"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -114,7 +114,7 @@ No section header — these are always at the top, below the company header.
   My Issues
 ```
 
-- **Inbox** — items requiring the board operator's attention. Badge count on the right. Includes: pending approvals, budget alerts, failed heartbeats. The number is the total unread/unresolved count.
+- **Inbox** — items requiring the board operator's attention. Badge count on the right. Includes: pending approvals, budget alerts, delegated-work coordination alerts, and failed heartbeats. Delegated-work alerts open the blocked issues list and also provide direct actions to the active child issues shown in the alert when known; those child actions carry breadcrumb context back to the blocked parent coordination issue. The number is the total unread/unresolved count.
 - **My Issues** — issues created by or assigned to the board operator.
 
 ### 3.3 Work Section
@@ -823,7 +823,7 @@ Items are grouped by category, with the most actionable items first:
 - **[View details →]** link for complex approvals (approve_ceo_strategy) that need full review before deciding.
 - "See all approvals →" link in the category header navigates to `/approvals`.
 
-**Alerts.** Agent errors (failed heartbeats, error status) and budget alerts (agents or company approaching 80% or 100% limits). Each links to the relevant agent or cost page.
+**Alerts.** Agent errors (failed heartbeats, error status), budget alerts (agents or company approaching 80% or 100% limits), and delegated-work coordination alerts when blocked manager issues are waiting on delegated child execution. Each links to the relevant agent, cost, or issues view, and delegated-work alerts also expose direct child-issue actions for the recent delegated targets returned by the dashboard summary. Those child actions open issue detail with a breadcrumb back to the waiting parent issue.
 
 **Stale work.** Tasks in `in_progress` or `todo` with no activity (no comments, no status changes) beyond a configurable threshold (default: 24h). Each shows issue key, title, and time since last activity. Clicking navigates to the issue.
 
