@@ -66,13 +66,13 @@ pnpm paperclipai agent get <agent-id>
 
 ```sh
 # List approvals
-pnpm paperclipai approval list [--status pending]
+pnpm paperclipai approval list --company-id <company-id> [--status pending]
 
 # Get approval
 pnpm paperclipai approval get <approval-id>
 
 # Create approval
-pnpm paperclipai approval create --type hire_agent --payload '{"name":"..."}' [--issue-ids <id1,id2>]
+pnpm paperclipai approval create --company-id <company-id> --type hire_agent --payload '{"name":"..."}' [--issue-ids <id1,id2>]
 
 # Approve
 pnpm paperclipai approval approve <approval-id> [--decision-note "..."]

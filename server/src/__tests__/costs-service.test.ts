@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { costRoutes } from "../routes/costs.js";
+import { costService } from "../services/costs.ts";
 import { errorHandler } from "../middleware/index.js";
 
 function makeDb(overrides: Record<string, unknown> = {}) {
@@ -222,5 +223,93 @@ describe("cost routes", () => {
 
     expect(res.status).toBe(403);
     expect(mockAgentService.update).not.toHaveBeenCalled();
+  });
+});
+
+function createCostServiceDb(selectResults: unknown[]) {
+  const pending = [...selectResults];
+  const chain = {
+    from: vi.fn(() => chain),
+    where: vi.fn(() => chain),
+    leftJoin: vi.fn(() => chain),
+    innerJoin: vi.fn(() => chain),
+    groupBy: vi.fn(() => chain),
+    orderBy: vi.fn(() => chain),
+    limit: vi.fn(() => chain),
+    then: vi.fn((resolve: (value: unknown[]) => unknown) => Promise.resolve(resolve(pending.shift() ?? []))),
+  };
+
+  return {
+    select: vi.fn(() => chain),
+    insert: vi.fn(() => ({
+      values: vi.fn(() => ({
+        returning: vi.fn(async () => []),
+      })),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(async () => []),
+      })),
+    })),
+  };
+}
+
+describe("costService.createEvent", () => {
+  it("rejects issue links that point at another company", async () => {
+    const db = createCostServiceDb([
+      [{ id: "agent-1", companyId: "company-1" }],
+      [{ id: "issue-1", companyId: "company-2" }],
+    ]);
+
+    const service = costService(db as any);
+
+    await expect(
+      service.createEvent("company-1", {
+        agentId: "agent-1",
+        issueId: "issue-1",
+        projectId: null,
+        goalId: null,
+        heartbeatRunId: null,
+        billingCode: null,
+        provider: "openai",
+        biller: "openai",
+        billingType: "unknown",
+        model: "gpt-test",
+        inputTokens: 1,
+        cachedInputTokens: 0,
+        outputTokens: 1,
+        costCents: 1,
+        occurredAt: new Date(),
+      }),
+    ).rejects.toThrow(/issue does not belong to company/i);
+  });
+
+  it("rejects project links that point at another company", async () => {
+    const db = createCostServiceDb([
+      [{ id: "agent-1", companyId: "company-1" }],
+      [{ id: "project-1", companyId: "company-2" }],
+    ]);
+
+    const service = costService(db as any);
+
+    await expect(
+      service.createEvent("company-1", {
+        agentId: "agent-1",
+        issueId: null,
+        projectId: "project-1",
+        goalId: null,
+        heartbeatRunId: null,
+        billingCode: null,
+        provider: "openai",
+        biller: "openai",
+        billingType: "unknown",
+        model: "gpt-test",
+        inputTokens: 1,
+        cachedInputTokens: 0,
+        outputTokens: 1,
+        costCents: 1,
+        occurredAt: new Date(),
+      }),
+    ).rejects.toThrow(/project does not belong to company/i);
   });
 });

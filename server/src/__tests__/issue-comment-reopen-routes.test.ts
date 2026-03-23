@@ -25,11 +25,16 @@ const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
 }));
 
+const mockBudgetService = vi.hoisted(() => ({
+  getInvocationBlock: vi.fn(),
+}));
+
 const mockLogActivity = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("../services/index.js", () => ({
   accessService: () => mockAccessService,
   agentService: () => mockAgentService,
+  budgetService: () => mockBudgetService,
   documentService: () => ({}),
   executionWorkspaceService: () => ({}),
   goalService: () => ({}),
@@ -78,6 +83,7 @@ function makeIssue(status: "todo" | "done") {
 describe("issue comment reopen routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBudgetService.getInvocationBlock.mockResolvedValue(null);
     mockIssueService.addComment.mockResolvedValue({
       id: "comment-1",
       issueId: "11111111-1111-4111-8111-111111111111",

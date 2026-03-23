@@ -20,6 +20,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  budgetService,
   executionWorkspaceService,
   goalService,
   heartbeatService,
@@ -56,6 +57,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   const router = Router();
   const svc = issueService(db);
   const access = accessService(db);
+  const budgets = budgetService(db);
   const heartbeat = heartbeatService(db);
   const agentsSvc = agentService(db);
   const projectsSvc = projectService(db);
@@ -1176,6 +1178,29 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     if (req.actor.type === "agent" && req.actor.agentId !== req.body.agentId) {
       res.status(403).json({ error: "Agent can only checkout as itself" });
+      return;
+    }
+    if (req.actor.type === "board") {
+      await assertCanAssignTasks(req, issue.companyId);
+    }
+
+    const invocationBlock = await budgets.getInvocationBlock(issue.companyId, req.body.agentId, {
+      issueId: issue.id,
+      projectId: issue.projectId ?? null,
+    });
+    if (invocationBlock) {
+      res.status(409).json({ error: invocationBlock.reason });
+      return;
+    }
+
+    const checkoutAgent = await agentsSvc.getById(req.body.agentId);
+    if (checkoutAgent?.status === "paused") {
+      res.status(409).json({
+        error:
+          checkoutAgent.pauseReason === "budget"
+            ? "Agent is paused because its budget hard-stop was reached."
+            : "Agent is paused",
+      });
       return;
     }
 

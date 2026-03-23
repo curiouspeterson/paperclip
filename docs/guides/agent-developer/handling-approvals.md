@@ -32,10 +32,11 @@ If you are the CEO, your first strategic plan requires board approval:
 POST /api/companies/{companyId}/approvals
 {
   "type": "approve_ceo_strategy",
-  "requestedByAgentId": "{yourAgentId}",
   "payload": { "plan": "Strategic breakdown..." }
 }
 ```
+
+Paperclip records the requester from your authenticated agent key; agents should not send a different `requestedByAgentId`.
 
 ## Responding to Approval Resolutions
 

@@ -1,4 +1,4 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Db } from "@paperclipai/db";
@@ -259,6 +259,17 @@ export function agentRoutes(db: Db) {
       return req.actor.companyId;
     }
     return null;
+  }
+
+  async function loadAgentForBoardMutation(req: Request, res: Response, id: string) {
+    assertBoard(req);
+    const agent = await svc.getById(id);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return null;
+    }
+    assertCompanyAccess(req, agent.companyId);
+    return agent;
   }
 
   async function normalizeAgentReference(req: Request, rawId: string): Promise<string> {
@@ -1762,8 +1773,8 @@ export function agentRoutes(db: Db) {
   });
 
   router.post("/agents/:id/pause", async (req, res) => {
-    assertBoard(req);
     const id = req.params.id as string;
+    if (!(await loadAgentForBoardMutation(req, res, id))) return;
     const agent = await svc.pause(id);
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
@@ -1785,8 +1796,8 @@ export function agentRoutes(db: Db) {
   });
 
   router.post("/agents/:id/resume", async (req, res) => {
-    assertBoard(req);
     const id = req.params.id as string;
+    if (!(await loadAgentForBoardMutation(req, res, id))) return;
     const agent = await svc.resume(id);
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
@@ -1806,8 +1817,8 @@ export function agentRoutes(db: Db) {
   });
 
   router.post("/agents/:id/terminate", async (req, res) => {
-    assertBoard(req);
     const id = req.params.id as string;
+    if (!(await loadAgentForBoardMutation(req, res, id))) return;
     const agent = await svc.terminate(id);
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
@@ -1829,8 +1840,8 @@ export function agentRoutes(db: Db) {
   });
 
   router.delete("/agents/:id", async (req, res) => {
-    assertBoard(req);
     const id = req.params.id as string;
+    if (!(await loadAgentForBoardMutation(req, res, id))) return;
     const agent = await svc.remove(id);
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
@@ -1850,41 +1861,57 @@ export function agentRoutes(db: Db) {
   });
 
   router.get("/agents/:id/keys", async (req, res) => {
-    assertBoard(req);
     const id = req.params.id as string;
+    if (!(await loadAgentForBoardMutation(req, res, id))) return;
     const keys = await svc.listKeys(id);
     res.json(keys);
   });
 
   router.post("/agents/:id/keys", validate(createAgentKeySchema), async (req, res) => {
-    assertBoard(req);
     const id = req.params.id as string;
+    const agent = await loadAgentForBoardMutation(req, res, id);
+    if (!agent) return;
     const key = await svc.createApiKey(id, req.body.name);
 
-    const agent = await svc.getById(id);
-    if (agent) {
-      await logActivity(db, {
-        companyId: agent.companyId,
-        actorType: "user",
-        actorId: req.actor.userId ?? "board",
-        action: "agent.key_created",
-        entityType: "agent",
-        entityId: agent.id,
-        details: { keyId: key.id, name: key.name },
-      });
-    }
+    await logActivity(db, {
+      companyId: agent.companyId,
+      actorType: "user",
+      actorId: req.actor.userId ?? "board",
+      action: "agent.key_created",
+      entityType: "agent",
+      entityId: agent.id,
+      details: { keyId: key.id, name: key.name },
+    });
 
     res.status(201).json(key);
   });
 
   router.delete("/agents/:id/keys/:keyId", async (req, res) => {
-    assertBoard(req);
+    const id = req.params.id as string;
+    const agent = await loadAgentForBoardMutation(req, res, id);
+    if (!agent) return;
     const keyId = req.params.keyId as string;
+    const key = (await svc.listKeys(id)).find((candidate) => candidate.id === keyId);
+    if (!key) {
+      res.status(404).json({ error: "Key not found" });
+      return;
+    }
     const revoked = await svc.revokeKey(keyId);
     if (!revoked) {
       res.status(404).json({ error: "Key not found" });
       return;
     }
+
+    await logActivity(db, {
+      companyId: agent.companyId,
+      actorType: "user",
+      actorId: req.actor.userId ?? "board",
+      action: "agent.key_revoked",
+      entityType: "agent",
+      entityId: agent.id,
+      details: { keyId },
+    });
+
     res.json({ ok: true });
   });
 

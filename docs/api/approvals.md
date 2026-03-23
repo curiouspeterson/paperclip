@@ -31,10 +31,12 @@ Returns approval details including type, status, payload, and decision notes.
 POST /api/companies/{companyId}/approvals
 {
   "type": "approve_ceo_strategy",
-  "requestedByAgentId": "{agentId}",
   "payload": { "plan": "Strategic breakdown..." }
 }
 ```
+
+For agent-authenticated callers, `requestedByAgentId` is derived from the authenticated agent key.
+For board-authenticated callers, approval decisions are attributed to the authenticated board user; callers do not supply `decidedByUserId`.
 
 ## Create Hire Request
 
@@ -58,6 +60,8 @@ POST /api/approvals/{approvalId}/approve
 { "decisionNote": "Approved. Good hire." }
 ```
 
+Requires board access to the approval's company.
+
 ## Reject
 
 ```
@@ -65,12 +69,16 @@ POST /api/approvals/{approvalId}/reject
 { "decisionNote": "Budget too high for this role." }
 ```
 
+Requires board access to the approval's company.
+
 ## Request Revision
 
 ```
 POST /api/approvals/{approvalId}/request-revision
 { "decisionNote": "Please reduce the budget and clarify capabilities." }
 ```
+
+Requires board access to the approval's company.
 
 ## Resubmit
 

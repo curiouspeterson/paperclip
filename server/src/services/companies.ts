@@ -308,7 +308,13 @@ export function companyService(db: Db) {
         const affectedAgents = await tx
           .select({ id: agents.id })
           .from(agents)
-          .where(and(eq(agents.companyId, companyId), eq(agents.status, "paused")));
+          .where(
+            and(
+              eq(agents.companyId, companyId),
+              eq(agents.status, "paused"),
+              eq(agents.pauseReason, "manual"),
+            ),
+          );
 
         await tx
           .update(companies)
@@ -329,7 +335,13 @@ export function companyService(db: Db) {
               pausedAt: null,
               updatedAt: now,
             })
-            .where(and(eq(agents.companyId, companyId), eq(agents.status, "paused")));
+            .where(
+              and(
+                eq(agents.companyId, companyId),
+                eq(agents.status, "paused"),
+                eq(agents.pauseReason, "manual"),
+              ),
+            );
         }
 
         const row = await getCompanyQuery(tx)

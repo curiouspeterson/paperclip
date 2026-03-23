@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { activityLog, agents, companies, costEvents, issues, projects } from "@paperclipai/db";
+import { activityLog, agents, companies, costEvents, goals, heartbeatRuns, issues, projects } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 import { budgetService, type BudgetServiceHooks } from "./budgets.js";
 
@@ -45,6 +45,20 @@ async function getMonthlySpendTotal(
 
 export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
   const budgets = budgetService(db, budgetHooks);
+
+  async function assertLinkedRecordCompany(
+    companyId: string,
+    label: "Issue" | "Project" | "Goal" | "Heartbeat run",
+    linkedCompanyId: string | null | undefined,
+  ) {
+    if (!linkedCompanyId) {
+      throw notFound(`${label} not found`);
+    }
+    if (linkedCompanyId !== companyId) {
+      throw unprocessable(`${label} does not belong to company`);
+    }
+  }
+
   return {
     createEvent: async (companyId: string, data: Omit<typeof costEvents.$inferInsert, "companyId">) => {
       const agent = await db
@@ -56,6 +70,42 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
       if (!agent) throw notFound("Agent not found");
       if (agent.companyId !== companyId) {
         throw unprocessable("Agent does not belong to company");
+      }
+
+      if (data.issueId) {
+        const issue = await db
+          .select({ companyId: issues.companyId })
+          .from(issues)
+          .where(eq(issues.id, data.issueId))
+          .then((rows) => rows[0] ?? null);
+        await assertLinkedRecordCompany(companyId, "Issue", issue?.companyId);
+      }
+
+      if (data.projectId) {
+        const project = await db
+          .select({ companyId: projects.companyId })
+          .from(projects)
+          .where(eq(projects.id, data.projectId))
+          .then((rows) => rows[0] ?? null);
+        await assertLinkedRecordCompany(companyId, "Project", project?.companyId);
+      }
+
+      if (data.goalId) {
+        const goal = await db
+          .select({ companyId: goals.companyId })
+          .from(goals)
+          .where(eq(goals.id, data.goalId))
+          .then((rows) => rows[0] ?? null);
+        await assertLinkedRecordCompany(companyId, "Goal", goal?.companyId);
+      }
+
+      if (data.heartbeatRunId) {
+        const run = await db
+          .select({ companyId: heartbeatRuns.companyId })
+          .from(heartbeatRuns)
+          .where(eq(heartbeatRuns.id, data.heartbeatRunId))
+          .then((rows) => rows[0] ?? null);
+        await assertLinkedRecordCompany(companyId, "Heartbeat run", run?.companyId);
       }
 
       const event = await db
@@ -355,7 +405,7 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         })
         .from(costEvents)
         .leftJoin(runProjectLinks, eq(costEvents.heartbeatRunId, runProjectLinks.runId))
-        .innerJoin(projects, sql`${projects.id} = ${effectiveProjectId}`)
+        .innerJoin(projects, and(eq(projects.companyId, companyId), sql`${projects.id} = ${effectiveProjectId}`))
         .where(and(...conditions, sql`${effectiveProjectId} is not null`))
         .groupBy(effectiveProjectId, projects.name)
         .orderBy(desc(costCentsExpr));

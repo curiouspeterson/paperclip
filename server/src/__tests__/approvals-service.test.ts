@@ -7,14 +7,29 @@ const mockAgentService = vi.hoisted(() => ({
   terminate: vi.fn(),
 }));
 
+const mockBudgetService = vi.hoisted(() => ({
+  upsertPolicy: vi.fn(),
+}));
+
 const mockNotifyHireApproved = vi.hoisted(() => vi.fn());
+const mockInstanceSettingsService = vi.hoisted(() => ({
+  getGeneral: vi.fn(),
+}));
 
 vi.mock("../services/agents.js", () => ({
   agentService: vi.fn(() => mockAgentService),
 }));
 
+vi.mock("../services/budgets.js", () => ({
+  budgetService: vi.fn(() => mockBudgetService),
+}));
+
 vi.mock("../services/hire-hook.js", () => ({
   notifyHireApproved: mockNotifyHireApproved,
+}));
+
+vi.mock("../services/instance-settings.js", () => ({
+  instanceSettingsService: vi.fn(() => mockInstanceSettingsService),
 }));
 
 type ApprovalRecord = {
@@ -55,13 +70,50 @@ function createDbStub(selectResults: ApprovalRecord[][], updateResults: Approval
   };
 }
 
+function createCommentDbStub() {
+  const approval = createApproval("pending");
+  const comment = {
+    id: "comment-1",
+    companyId: "company-1",
+    approvalId: "approval-1",
+    authorAgentId: null,
+    authorUserId: "user-1",
+    body: "Looks good",
+    createdAt: new Date("2026-03-22T00:00:00.000Z"),
+    updatedAt: new Date("2026-03-22T00:00:00.000Z"),
+  };
+  const pendingSelectResults = [[approval], [comment]];
+  const pendingInsertResults = [[comment]];
+
+  const selectChain = {
+    from: vi.fn(() => selectChain),
+    where: vi.fn(() => selectChain),
+    orderBy: vi.fn(() => selectChain),
+    then: vi.fn((resolve: (value: unknown[]) => unknown) => Promise.resolve(resolve(pendingSelectResults.shift() ?? []))),
+  };
+
+  return {
+    db: {
+      select: vi.fn(() => selectChain),
+      insert: vi.fn(() => ({
+        values: vi.fn(() => ({
+          returning: vi.fn(async () => pendingInsertResults.shift() ?? []),
+        })),
+      })),
+    },
+    comment,
+  };
+}
+
 describe("approvalService resolution idempotency", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAgentService.activatePendingApproval.mockResolvedValue(undefined);
     mockAgentService.create.mockResolvedValue({ id: "agent-1" });
     mockAgentService.terminate.mockResolvedValue(undefined);
+    mockBudgetService.upsertPolicy.mockResolvedValue(undefined);
     mockNotifyHireApproved.mockResolvedValue(undefined);
+    mockInstanceSettingsService.getGeneral.mockResolvedValue({ censorUsernameInLogs: false });
   });
 
   it("treats repeated approve retries as no-ops after another worker resolves the approval", async () => {
@@ -103,5 +155,59 @@ describe("approvalService resolution idempotency", () => {
     expect(result.applied).toBe(true);
     expect(mockAgentService.activatePendingApproval).toHaveBeenCalledWith("agent-1");
     expect(mockNotifyHireApproved).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses a transaction when approving a hire if the database exposes one", async () => {
+    const approved = createApproval("approved");
+    const dbStub = createDbStub([[createApproval("pending")]], [approved]);
+    const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(dbStub.db));
+
+    const svc = approvalService({ ...dbStub.db, transaction } as any);
+    const result = await svc.approve("approval-1", "board", "ship it");
+
+    expect(result.applied).toBe(true);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(mockAgentService.activatePendingApproval).toHaveBeenCalledWith("agent-1");
+  });
+
+  it("does not emit hire notifications when a transactional approval side effect fails", async () => {
+    const approved = createApproval("approved");
+    const dbStub = createDbStub([[createApproval("pending")]], [approved]);
+    const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(dbStub.db));
+    mockAgentService.activatePendingApproval.mockRejectedValueOnce(new Error("activate failed"));
+
+    const svc = approvalService({ ...dbStub.db, transaction } as any);
+
+    await expect(svc.approve("approval-1", "board", "ship it")).rejects.toThrow("activate failed");
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(mockNotifyHireApproved).not.toHaveBeenCalled();
+  });
+
+  it("lists approval comments for the approval company", async () => {
+    const dbStub = createCommentDbStub();
+
+    const svc = approvalService(dbStub.db as any);
+    const comments = await svc.listComments("approval-1");
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0]).toMatchObject({
+      id: dbStub.comment.id,
+      approvalId: "approval-1",
+      companyId: "company-1",
+    });
+  });
+
+  it("adds approval comments for the approval company", async () => {
+    const dbStub = createCommentDbStub();
+
+    const svc = approvalService(dbStub.db as any);
+    const comment = await svc.addComment("approval-1", "Looks good", { userId: "user-1" });
+
+    expect(comment).toMatchObject({
+      id: dbStub.comment.id,
+      approvalId: "approval-1",
+      companyId: "company-1",
+      authorUserId: "user-1",
+    });
   });
 });

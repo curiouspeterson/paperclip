@@ -47,11 +47,11 @@ cp .env.example .env
 # DATABASE_URL=postgres://paperclip:paperclip@localhost:5432/paperclip
 ```
 
-Run migrations (once the migration generation issue is fixed) or use `drizzle-kit push`:
+Generate and apply Paperclip migrations with the repo scripts:
 
 ```sh
-DATABASE_URL=postgres://paperclip:paperclip@localhost:5432/paperclip \
-  npx drizzle-kit push
+pnpm db:generate
+pnpm db:migrate
 ```
 
 Start the server:
@@ -94,7 +94,7 @@ Set `DATABASE_URL` in your `.env`:
 DATABASE_URL=postgres://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
 ```
 
-If using connection pooling (port 6543), the `postgres` client must disable prepared statements. Update `packages/db/src/client.ts`:
+If using connection pooling (port 6543), the `postgres` client typically needs prepared statements disabled. Configure that in [client.ts](/Users/adampeterson/GitHub/paperclip/packages/db/src/client.ts) for your deployment instead of editing ad hoc in docs examples.
 
 ```ts
 export function createDb(url: string) {
@@ -106,9 +106,9 @@ export function createDb(url: string) {
 ### Push the schema
 
 ```sh
-# Use the direct connection (port 5432) for schema changes
+# Use the direct connection (port 5432) for Paperclip schema changes
 DATABASE_URL=postgres://postgres.[PROJECT-REF]:[PASSWORD]@...5432/postgres \
-  npx drizzle-kit push
+  pnpm db:migrate
 ```
 
 ### Free tier limits

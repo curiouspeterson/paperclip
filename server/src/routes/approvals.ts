@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import type { Db } from "@paperclipai/db";
 import {
   addApprovalCommentSchema,
@@ -10,6 +10,7 @@ import {
 import { validate } from "../middleware/validate.js";
 import { logger } from "../middleware/logger.js";
 import {
+  agentService,
   approvalService,
   heartbeatService,
   issueApprovalService,
@@ -28,11 +29,61 @@ function redactApprovalPayload<T extends { payload: Record<string, unknown> }>(a
 
 export function approvalRoutes(db: Db) {
   const router = Router();
+  const agents = agentService(db);
   const svc = approvalService(db);
   const heartbeat = heartbeatService(db);
   const issueApprovalsSvc = issueApprovalService(db);
   const secretsSvc = secretService(db);
   const strictSecretsMode = process.env.PAPERCLIP_SECRETS_STRICT_MODE === "true";
+
+  async function resolveRequestedByAgentId(
+    req: Request,
+    res: Response,
+    companyId: string,
+    requestedByAgentId: string | null | undefined,
+  ) {
+    if (req.actor.type === "agent") {
+      if (
+        requestedByAgentId &&
+        req.actor.agentId &&
+        requestedByAgentId !== req.actor.agentId
+      ) {
+        res.status(403).json({ error: "Agent can only create approvals as itself" });
+        return { ok: false as const, value: null };
+      }
+      return { ok: true as const, value: req.actor.agentId ?? null };
+    }
+
+    if (!requestedByAgentId) {
+      return { ok: true as const, value: null };
+    }
+
+    const requester = await agents.getById(requestedByAgentId);
+    if (!requester) {
+      res.status(422).json({ error: "Requesting agent not found" });
+      return { ok: false as const, value: null };
+    }
+    if (requester.companyId !== companyId) {
+      res.status(422).json({ error: "Requesting agent must belong to the same company" });
+      return { ok: false as const, value: null };
+    }
+
+    return { ok: true as const, value: requester.id };
+  }
+
+  async function loadApprovalForMutation(req: Request, res: Response, id: string) {
+    const approval = await svc.getById(id);
+    if (!approval) {
+      res.status(404).json({ error: "Approval not found" });
+      return null;
+    }
+    assertCompanyAccess(req, approval.companyId);
+    return approval;
+  }
+
+  function decisionActorUserId(req: Request) {
+    return req.actor.userId ?? "board";
+  }
 
   router.get("/companies/:companyId/approvals", async (req, res) => {
     const companyId = req.params.companyId as string;
@@ -70,14 +121,20 @@ export function approvalRoutes(db: Db) {
             { strictMode: strictSecretsMode },
           )
         : approvalInput.payload;
+    const requestedByAgent = await resolveRequestedByAgentId(
+      req,
+      res,
+      companyId,
+      approvalInput.requestedByAgentId ?? null,
+    );
+    if (!requestedByAgent.ok) return;
 
     const actor = getActorInfo(req);
     const approval = await svc.create(companyId, {
       ...approvalInput,
       payload: normalizedPayload,
       requestedByUserId: actor.actorType === "user" ? actor.actorId : null,
-      requestedByAgentId:
-        approvalInput.requestedByAgentId ?? (actor.actorType === "agent" ? actor.actorId : null),
+      requestedByAgentId: requestedByAgent.value,
       status: "pending",
       decisionNote: null,
       decidedByUserId: null,
@@ -121,9 +178,10 @@ export function approvalRoutes(db: Db) {
   router.post("/approvals/:id/approve", validate(resolveApprovalSchema), async (req, res) => {
     assertBoard(req);
     const id = req.params.id as string;
+    if (!(await loadApprovalForMutation(req, res, id))) return;
     const { approval, applied } = await svc.approve(
       id,
-      req.body.decidedByUserId ?? "board",
+      decisionActorUserId(req),
       req.body.decisionNote,
     );
 
@@ -216,9 +274,10 @@ export function approvalRoutes(db: Db) {
   router.post("/approvals/:id/reject", validate(resolveApprovalSchema), async (req, res) => {
     assertBoard(req);
     const id = req.params.id as string;
+    if (!(await loadApprovalForMutation(req, res, id))) return;
     const { approval, applied } = await svc.reject(
       id,
-      req.body.decidedByUserId ?? "board",
+      decisionActorUserId(req),
       req.body.decisionNote,
     );
 
@@ -243,9 +302,10 @@ export function approvalRoutes(db: Db) {
     async (req, res) => {
       assertBoard(req);
       const id = req.params.id as string;
+      if (!(await loadApprovalForMutation(req, res, id))) return;
       const approval = await svc.requestRevision(
         id,
-        req.body.decidedByUserId ?? "board",
+        decisionActorUserId(req),
         req.body.decisionNote,
       );
 

@@ -61,6 +61,10 @@ const mockExecutionWorkspaceService = vi.hoisted(() => ({
   getByIdForCompany: vi.fn(),
 }));
 
+const mockBudgetService = vi.hoisted(() => ({
+  getInvocationBlock: vi.fn(),
+}));
+
 const mockLogActivity = vi.hoisted(() => vi.fn(async () => undefined));
 
 const COMPANY_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -71,6 +75,7 @@ const RUN_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 vi.mock("../services/index.js", () => ({
   accessService: () => mockAccessService,
   agentService: () => mockAgentService,
+  budgetService: () => mockBudgetService,
   documentService: () => mockDocumentService,
   executionWorkspaceService: () => mockExecutionWorkspaceService,
   goalService: () => mockGoalService,
@@ -169,6 +174,13 @@ describe("issue contract routes", () => {
     mockWorkProductService.update.mockResolvedValue(null);
     mockWorkProductService.remove.mockResolvedValue(null);
     mockExecutionWorkspaceService.getByIdForCompany.mockResolvedValue(null);
+    mockBudgetService.getInvocationBlock.mockResolvedValue(null);
+    mockAgentService.getById.mockResolvedValue({
+      id: AGENT_ONE_ID,
+      companyId: COMPANY_ID,
+      status: "idle",
+      role: "general",
+    });
   });
 
   it("rejects generic in_progress updates before they reach the service", async () => {
@@ -454,6 +466,88 @@ describe("issue contract routes", () => {
       ["todo", "backlog", "blocked", "in_review"],
       RUN_ID,
     );
+  });
+
+  it("requires tasks:assign permission for board-driven checkout", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "todo",
+      assigneeAgentId: AGENT_ONE_ID,
+    }));
+    mockAccessService.canUser.mockResolvedValue(false);
+
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "board-user",
+        companyIds: [COMPANY_ID],
+        source: "session",
+        isInstanceAdmin: false,
+      }),
+    )
+      .post("/api/issues/11111111-1111-4111-8111-111111111111/checkout")
+      .send({ agentId: AGENT_ONE_ID, expectedStatuses: ["todo"] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("tasks:assign");
+    expect(mockIssueService.checkout).not.toHaveBeenCalled();
+  });
+
+  it("rejects checkout when the target agent is manually paused", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "todo",
+      assigneeAgentId: AGENT_ONE_ID,
+    }));
+    mockAgentService.getById.mockResolvedValue({
+      id: AGENT_ONE_ID,
+      companyId: COMPANY_ID,
+      status: "paused",
+      pauseReason: "manual",
+      role: "general",
+    });
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post("/api/issues/11111111-1111-4111-8111-111111111111/checkout")
+      .send({ agentId: AGENT_ONE_ID, expectedStatuses: ["todo"] });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/agent is paused/i);
+    expect(mockIssueService.checkout).not.toHaveBeenCalled();
+  });
+
+  it("rejects checkout when budget or company policy blocks new work", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "todo",
+      assigneeAgentId: AGENT_ONE_ID,
+      projectId: "project-1",
+    }));
+    mockBudgetService.getInvocationBlock.mockResolvedValue({
+      scopeType: "company",
+      scopeId: COMPANY_ID,
+      scopeName: "Paperclip",
+      reason: "Company is paused because its budget hard-stop was reached.",
+    });
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post("/api/issues/11111111-1111-4111-8111-111111111111/checkout")
+      .send({ agentId: AGENT_ONE_ID, expectedStatuses: ["todo"] });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("Company is paused because its budget hard-stop was reached.");
+    expect(mockIssueService.checkout).not.toHaveBeenCalled();
   });
 
   it.each(["done", "cancelled"] as const)(

@@ -35,6 +35,13 @@ const baseAgent = {
 const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
   create: vi.fn(),
+  pause: vi.fn(),
+  resume: vi.fn(),
+  terminate: vi.fn(),
+  remove: vi.fn(),
+  listKeys: vi.fn(),
+  createApiKey: vi.fn(),
+  revokeKey: vi.fn(),
   updatePermissions: vi.fn(),
   getChainOfCommand: vi.fn(),
   resolveByReference: vi.fn(),
@@ -137,6 +144,30 @@ describe("agent permission routes", () => {
     mockAgentService.getChainOfCommand.mockResolvedValue([]);
     mockAgentService.resolveByReference.mockResolvedValue({ ambiguous: false, agent: baseAgent });
     mockAgentService.create.mockResolvedValue(baseAgent);
+    mockAgentService.pause.mockResolvedValue(baseAgent);
+    mockAgentService.resume.mockResolvedValue(baseAgent);
+    mockAgentService.terminate.mockResolvedValue(baseAgent);
+    mockAgentService.remove.mockResolvedValue(baseAgent);
+    mockAgentService.listKeys.mockResolvedValue([
+      {
+        id: "key-1",
+        name: "Primary",
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+        revokedAt: null,
+      },
+    ]);
+    mockAgentService.createApiKey.mockResolvedValue({
+      id: "key-1",
+      name: "Primary",
+      token: "paperclip_test_token",
+      createdAt: new Date("2026-03-19T00:00:00.000Z"),
+    });
+    mockAgentService.revokeKey.mockResolvedValue({
+      id: "key-1",
+      name: "Primary",
+      createdAt: new Date("2026-03-19T00:00:00.000Z"),
+      revokedAt: new Date("2026-03-20T00:00:00.000Z"),
+    });
     mockAgentService.updatePermissions.mockResolvedValue(baseAgent);
     mockAccessService.getMembership.mockResolvedValue({
       id: "membership-1",
@@ -271,5 +302,82 @@ describe("agent permission routes", () => {
     );
     expect(res.body.access.canAssignTasks).toBe(true);
     expect(res.body.access.taskAssignSource).toBe("agent_creator");
+  });
+
+  it.each([
+    ["post", `/api/agents/${agentId}/pause`, "pause"],
+    ["post", `/api/agents/${agentId}/resume`, "resume"],
+    ["post", `/api/agents/${agentId}/terminate`, "terminate"],
+    ["delete", `/api/agents/${agentId}`, "remove"],
+    ["get", `/api/agents/${agentId}/keys`, "listKeys"],
+    ["post", `/api/agents/${agentId}/keys`, "createApiKey"],
+  ] as const)(
+    "rejects %s %s for board users outside the agent company",
+    async (method, path, serviceMethod) => {
+      const app = createApp({
+        type: "board",
+        userId: "other-board",
+        source: "session",
+        isInstanceAdmin: false,
+        companyIds: ["33333333-3333-4333-8333-333333333333"],
+      });
+
+      const req = request(app)[method](path);
+      const res = method === "post" && path.endsWith("/keys")
+        ? await req.send({ name: "Primary" })
+        : await req.send({});
+
+      expect(res.status).toBe(403);
+      expect(mockAgentService[serviceMethod]).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects revoking a key that does not belong to the requested agent", async () => {
+    mockAgentService.listKeys.mockResolvedValueOnce([
+      {
+        id: "key-2",
+        name: "Other",
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+        revokedAt: null,
+      },
+    ]);
+
+    const app = createApp({
+      type: "board",
+      userId: "board-user",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+      companyIds: [companyId],
+    });
+
+    const res = await request(app).delete(`/api/agents/${agentId}/keys/key-1`);
+
+    expect(res.status).toBe(404);
+    expect(mockAgentService.revokeKey).not.toHaveBeenCalled();
+  });
+
+  it("logs key revocation for the agent company", async () => {
+    const app = createApp({
+      type: "board",
+      userId: "board-user",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+      companyIds: [companyId],
+    });
+
+    const res = await request(app).delete(`/api/agents/${agentId}/keys/key-1`);
+
+    expect(res.status).toBe(200);
+    expect(mockAgentService.revokeKey).toHaveBeenCalledWith("key-1");
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        companyId,
+        action: "agent.key_revoked",
+        entityType: "agent",
+        entityId: agentId,
+        details: { keyId: "key-1" },
+      }),
+    );
   });
 });
