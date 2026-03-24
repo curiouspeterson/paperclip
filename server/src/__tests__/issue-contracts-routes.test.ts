@@ -216,6 +216,35 @@ describe("issue contract routes", () => {
     expect(mockIssueService.update).not.toHaveBeenCalled();
   });
 
+  it("does not wake the assignee when the assignee agent comments on its own issue", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+    }));
+    mockIssueService.addComment.mockResolvedValue(
+      makeIssueComment({
+        issueId: "11111111-1111-4111-8111-111111111111",
+        authorAgentId: AGENT_ONE_ID,
+        body: "Progress update from the assignee agent.",
+      }),
+    );
+
+    const res = await request(
+      createApp({
+        type: "agent",
+        agentId: AGENT_ONE_ID,
+        companyId: COMPANY_ID,
+        runId: RUN_ID,
+      }),
+    )
+      .post("/api/issues/11111111-1111-4111-8111-111111111111/comments")
+      .send({ body: "Progress update from the assignee agent." });
+
+    expect(res.status).toBe(201);
+    expect(mockIssueService.addComment).toHaveBeenCalled();
+    expect(mockHeartbeatService.wakeup).not.toHaveBeenCalled();
+  });
+
   it("requires agent ownership for non-checkout issue patches", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       status: "todo",

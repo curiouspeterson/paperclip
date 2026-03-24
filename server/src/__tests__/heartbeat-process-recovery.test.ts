@@ -341,4 +341,234 @@ describe("heartbeat orphaned process recovery", () => {
     expect(run?.errorCode).toBeNull();
     expect(run?.error).toBeNull();
   });
+
+  it("fails stale deferred issue promotion when the issue was reassigned to another agent", async () => {
+    const companyId = randomUUID();
+    const newsletterAgentId = randomUUID();
+    const platformIntegratorId = randomUUID();
+    const runId = randomUUID();
+    const wakeupRequestId = randomUUID();
+    const deferredWakeupId = randomUUID();
+    const issueId = randomUUID();
+    const now = new Date("2026-03-23T19:44:28.000Z");
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Romance Unzipped",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values([
+      {
+        id: newsletterAgentId,
+        companyId,
+        name: "Newsletter Agent",
+        role: "engineer",
+        status: "idle",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+      {
+        id: platformIntegratorId,
+        companyId,
+        name: "Platform Integrator",
+        role: "engineer",
+        status: "idle",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+    ]);
+
+    await db.insert(agentWakeupRequests).values([
+      {
+        id: wakeupRequestId,
+        companyId,
+        agentId: newsletterAgentId,
+        source: "assignment",
+        triggerDetail: "system",
+        reason: "issue_assigned",
+        payload: { issueId },
+        status: "claimed",
+        runId,
+        claimedAt: now,
+      },
+      {
+        id: deferredWakeupId,
+        companyId,
+        agentId: platformIntegratorId,
+        source: "assignment",
+        triggerDetail: "system",
+        reason: "issue_execution_deferred",
+        payload: { issueId, _paperclipWakeContext: { issueId, reason: "assignment" } },
+        status: "deferred_issue_execution",
+      },
+    ]);
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId: newsletterAgentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "running",
+      wakeupRequestId,
+      contextSnapshot: { issueId },
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Promote deferred issue execution safely",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: newsletterAgentId,
+      checkoutRunId: runId,
+      executionRunId: runId,
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+    });
+
+    const heartbeat = heartbeatService(db);
+    await heartbeat.cancelRun(runId);
+
+    const promotedRuns = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.agentId, platformIntegratorId));
+    expect(promotedRuns).toHaveLength(0);
+
+    const deferredWakeup = await db
+      .select()
+      .from(agentWakeupRequests)
+      .where(eq(agentWakeupRequests.id, deferredWakeupId))
+      .then((rows) => rows[0] ?? null);
+    expect(deferredWakeup?.status).toBe("failed");
+    expect(deferredWakeup?.error).toBe(
+      "Deferred wake could not be promoted: issue is no longer assigned to this agent",
+    );
+
+    const issue = await db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+    expect(issue?.assigneeAgentId).toBe(newsletterAgentId);
+    expect(issue?.executionRunId).toBeNull();
+  });
+
+  it("cancels a stale queued issue run when the issue was reassigned before claim", async () => {
+    const companyId = randomUUID();
+    const newsletterAgentId = randomUUID();
+    const platformIntegratorId = randomUUID();
+    const runId = randomUUID();
+    const wakeupRequestId = randomUUID();
+    const issueId = randomUUID();
+    const now = new Date("2026-03-23T19:44:28.000Z");
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Romance Unzipped",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values([
+      {
+        id: newsletterAgentId,
+        companyId,
+        name: "Newsletter Agent",
+        role: "engineer",
+        status: "idle",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+      {
+        id: platformIntegratorId,
+        companyId,
+        name: "Platform Integrator",
+        role: "engineer",
+        status: "idle",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+    ]);
+
+    await db.insert(agentWakeupRequests).values({
+      id: wakeupRequestId,
+      companyId,
+      agentId: platformIntegratorId,
+      source: "assignment",
+      triggerDetail: "system",
+      reason: "issue_assigned",
+      payload: { issueId },
+      status: "queued",
+      runId,
+      requestedAt: now,
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId: platformIntegratorId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "queued",
+      wakeupRequestId,
+      contextSnapshot: { issueId },
+      updatedAt: now,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Prevent stale queued execution after reassignment",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: newsletterAgentId,
+      checkoutRunId: null,
+      executionRunId: runId,
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+    });
+
+    const heartbeat = heartbeatService(db);
+    await heartbeat.resumeQueuedRuns();
+
+    const run = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.id, runId))
+      .then((rows) => rows[0] ?? null);
+    expect(run?.status).toBe("cancelled");
+    expect(run?.error).toBe("Cancelled because issue is no longer assigned to this agent");
+
+    const wakeup = await db
+      .select()
+      .from(agentWakeupRequests)
+      .where(eq(agentWakeupRequests.id, wakeupRequestId))
+      .then((rows) => rows[0] ?? null);
+    expect(wakeup?.status).toBe("cancelled");
+    expect(wakeup?.error).toBe("Cancelled because issue is no longer assigned to this agent");
+
+    const issue = await db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+    expect(issue?.assigneeAgentId).toBe(newsletterAgentId);
+    expect(issue?.executionRunId).toBeNull();
+  });
 });

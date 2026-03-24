@@ -132,6 +132,22 @@ class HermesWorkerTests(unittest.TestCase):
         self.assertIn("do not create provisioning tasks", prompt.lower())
         self.assertIn("Prefer browser/session-based workflows over inventing a YouTube API-key requirement", prompt)
 
+    def test_build_prompt_includes_explicit_riverside_login_focus_guidance_for_playwright(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"PAPERCLIP_BROWSER_AUTOMATION_PROVIDER": "playwright"},
+            clear=False,
+        ):
+            prompt = worker.build_prompt(
+                {"title": "Clip Extractor", "role": "content_ops", "adapterConfig": {}, "id": "agent-1"},
+                {"title": "Test Riverside FM session access with bound credentials", "description": "", "planDocument": ""},
+                [],
+                can_assign_tasks=False,
+            )
+        self.assertIn("click or focus the Email field before waiting for anything else", prompt)
+        self.assertIn("If the login page loads and appears idle, do not stop at page-load success", prompt)
+        self.assertIn("blur the password field once", prompt)
+
     def test_create_subtasks_reuses_existing_goal_mailchimp_secret_escalation(self) -> None:
         parent_issue = {"id": "parent-1", "companyId": "company-1", "goalId": "goal-1"}
         raw_subtasks = [
@@ -167,6 +183,38 @@ class HermesWorkerTests(unittest.TestCase):
             created = worker.create_subtasks(parent_issue, raw_subtasks, allow_assignments=True)
 
         self.assertEqual([existing_issue], created)
+
+    def test_create_subtasks_treats_delegated_child_throttle_as_non_fatal(self) -> None:
+        parent_issue = {"id": "parent-1", "companyId": "company-1", "goalId": "goal-1"}
+        raw_subtasks = [
+            {
+                "title": "Create test campaign with newsletter.html via Mailchimp API",
+                "description": "Use the existing template and create a test Mailchimp campaign.",
+                "status": "todo",
+                "priority": "high",
+                "assigneeAgentId": "agent-1",
+            }
+        ]
+
+        def fake_api_request(method: str, path: str, payload=None, include_run_id: bool = False, tolerate_404: bool = False):
+            if method == "GET" and path == "/companies/company-1/issues?parentId=parent-1":
+                return []
+            if method == "GET" and path == "/companies/company-1/issues?goalId=goal-1":
+                return []
+            if method == "GET" and path == "/companies/company-1/agents":
+                return [{"id": "agent-1"}]
+            if method == "POST" and path == "/companies/company-1/issues":
+                raise worker.WorkerError(
+                    "Paperclip API POST /companies/company-1/issues failed with 409: "
+                    '{"error":"Too many delegated child issues were created under this parent recently. '
+                    'Continue existing child issues before creating more than 5 in 15 minutes."}'
+                )
+            raise AssertionError(f"Unexpected API call: {method} {path}")
+
+        with patch.object(worker, "api_request", side_effect=fake_api_request):
+            created = worker.create_subtasks(parent_issue, raw_subtasks, allow_assignments=True)
+
+        self.assertEqual([], created)
 
     def test_allows_delegated_subtask_assignments_from_own_parent_issue_without_tasks_assign(self) -> None:
         agent = {

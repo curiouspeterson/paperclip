@@ -8,6 +8,7 @@ export type ValidateMailchimpMarketingApi = z.infer<typeof validateMailchimpMark
 
 export const createMailchimpCampaignSchema = z.object({
   listId: z.string().min(1),
+  templateId: z.string().trim().regex(/^\d+$/).optional().nullable(),
   subjectLine: z.string().trim().min(1),
   title: z.string().trim().min(1),
   fromName: z.string().trim().min(1),

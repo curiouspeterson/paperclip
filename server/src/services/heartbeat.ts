@@ -1544,8 +1544,45 @@ export function heartbeatService(db: Db) {
     }
 
     const context = parseObject(run.contextSnapshot);
+    const issueId = readNonEmptyString(context.issueId);
+    if (issueId) {
+      const issue = await db
+        .select({
+          id: issues.id,
+          assigneeAgentId: issues.assigneeAgentId,
+        })
+        .from(issues)
+        .where(and(eq(issues.id, issueId), eq(issues.companyId, run.companyId)))
+        .then((rows) => rows[0] ?? null);
+
+      if (!issue || issue.assigneeAgentId !== run.agentId) {
+        const cancelledAt = new Date();
+        const reason = "Cancelled because issue is no longer assigned to this agent";
+        const cancelled = await setRunStatus(run.id, "cancelled", {
+          finishedAt: cancelledAt,
+          error: reason,
+          errorCode: "cancelled",
+        });
+        await setWakeupStatus(run.wakeupRequestId, "cancelled", {
+          finishedAt: cancelledAt,
+          error: reason,
+        });
+        if (cancelled) {
+          await appendRunEvent(cancelled, 1, {
+            eventType: "lifecycle",
+            stream: "system",
+            level: "warn",
+            message: "run cancelled",
+          });
+          await releaseIssueExecutionAndPromote(cancelled);
+        }
+        await finalizeAgentStatus(run.agentId, "cancelled");
+        return null;
+      }
+    }
+
     const budgetBlock = await budgets.getInvocationBlock(run.companyId, run.agentId, {
-      issueId: readNonEmptyString(context.issueId),
+      issueId,
       projectId: readNonEmptyString(context.projectId),
     });
     if (budgetBlock) {
@@ -2704,6 +2741,7 @@ export function heartbeatService(db: Db) {
         .select({
           id: issues.id,
           companyId: issues.companyId,
+          assigneeAgentId: issues.assigneeAgentId,
         })
         .from(issues)
         .where(and(eq(issues.companyId, run.companyId), eq(issues.executionRunId, run.id)))
@@ -2743,6 +2781,19 @@ export function heartbeatService(db: Db) {
           .from(agents)
           .where(eq(agents.id, deferred.agentId))
           .then((rows) => rows[0] ?? null);
+
+        if (!issue.assigneeAgentId || issue.assigneeAgentId !== deferred.agentId) {
+          await tx
+            .update(agentWakeupRequests)
+            .set({
+              status: "failed",
+              finishedAt: new Date(),
+              error: "Deferred wake could not be promoted: issue is no longer assigned to this agent",
+              updatedAt: new Date(),
+            })
+            .where(eq(agentWakeupRequests.id, deferred.id));
+          continue;
+        }
 
         if (
           !deferredAgent ||

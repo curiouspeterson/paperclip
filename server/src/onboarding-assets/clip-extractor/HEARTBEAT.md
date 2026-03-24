@@ -22,6 +22,9 @@ Read local artifacts first. Use Riverside FM and YouTube Creator Studio as verif
 ### Riverside FM
 
 - Preferred mode: credential-based login with `RIVERSIDE_FM_USERNAME` and `RIVERSIDE_FM_PASSWORD`.
+- On the login form, enter the email and password, then wait for both fields to visibly retain their values before submitting.
+- After filling the password field, press `Tab` or click out of the field once so Riverside commits the form state before you click `Log in`.
+- If the first submit leaves you on the login page with validation errors, do not assume the credentials are wrong. Re-focus the form, confirm both values are still present, then submit again.
 - Sign in, verify the correct workspace, and confirm the episode or source media is available.
 - Use Riverside to compare local outputs against the source material, inspect timing, and confirm clip viability.
 - Do not publish or distribute from Riverside unless the task explicitly says to do so.

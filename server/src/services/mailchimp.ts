@@ -211,6 +211,7 @@ export function mailchimpService(db: Db) {
             from_name: input.fromName,
             reply_to: input.replyTo,
             preview_text: input.previewText ?? "",
+            ...(input.templateId ? { template_id: Number(input.templateId) } : {}),
           },
         }),
       });

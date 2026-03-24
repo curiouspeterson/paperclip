@@ -13,6 +13,10 @@ export interface Company {
   spentMonthlyCents: number;
   requireBoardApprovalForNewAgents: boolean;
   brandColor: string | null;
+  mailchimpDefaultListId: string | null;
+  mailchimpDefaultTemplateId: string | null;
+  mailchimpDefaultFromName: string | null;
+  mailchimpDefaultReplyTo: string | null;
   logoAssetId: string | null;
   logoUrl: string | null;
   createdAt: Date;

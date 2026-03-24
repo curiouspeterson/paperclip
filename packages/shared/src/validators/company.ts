@@ -3,6 +3,10 @@ import { COMPANY_STATUSES } from "../constants.js";
 
 const logoAssetIdSchema = z.string().uuid().nullable().optional();
 const brandColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional();
+const mailchimpTemplateIdSchema = z.string().trim().regex(/^\d+$/).nullable().optional();
+const mailchimpListIdSchema = z.string().trim().min(1).nullable().optional();
+const mailchimpFromNameSchema = z.string().trim().min(1).max(255).nullable().optional();
+const mailchimpReplyToSchema = z.string().trim().email().nullable().optional();
 
 export const createCompanySchema = z.object({
   name: z.string().min(1),
@@ -19,6 +23,10 @@ export const updateCompanySchema = createCompanySchema
     spentMonthlyCents: z.number().int().nonnegative().optional(),
     requireBoardApprovalForNewAgents: z.boolean().optional(),
     brandColor: brandColorSchema,
+    mailchimpDefaultListId: mailchimpListIdSchema,
+    mailchimpDefaultTemplateId: mailchimpTemplateIdSchema,
+    mailchimpDefaultFromName: mailchimpFromNameSchema,
+    mailchimpDefaultReplyTo: mailchimpReplyToSchema,
     logoAssetId: logoAssetIdSchema,
   });
 

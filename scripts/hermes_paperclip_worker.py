@@ -33,10 +33,18 @@ SUBTASK_ALLOWED_STATUSES = {"backlog", "todo", "in_progress", "in_review", "bloc
 CHECKOUT_EXPECTED_STATUSES = ["todo", "backlog", "blocked", "in_review"]
 SUBTASK_ALLOWED_PRIORITIES = {"critical", "high", "medium", "low"}
 OPEN_SUBTASK_DEDUPE_STATUSES = {"backlog", "todo", "in_progress", "in_review", "blocked"}
+DELEGATED_CHILD_THROTTLE_ERROR = (
+    "Too many delegated child issues were created under this parent recently."
+)
 
 
 class WorkerError(RuntimeError):
     pass
+
+
+def is_delegated_child_throttle_error(error: Exception) -> bool:
+    message = str(error)
+    return "failed with 409" in message and DELEGATED_CHILD_THROTTLE_ERROR in message
 
 
 def stderr(message: str) -> None:
@@ -578,6 +586,12 @@ def build_prompt(
             "If those credentials are present, do not create provisioning tasks for them. "
             "Prefer browser/session-based workflows over inventing a YouTube API-key requirement unless a concrete implementation step proves one is needed."
         )
+        if browser_automation and browser_automation.get("provider") == "playwright":
+            clip_guidance += (
+                " For Riverside login with Playwright MCP, click or focus the Email field before waiting for anything else. "
+                "If the login page loads and appears idle, do not stop at page-load success: focus Email, fill Email and Password, "
+                "confirm both values visibly remain in the fields, blur the password field once, then submit."
+            )
 
     # Pre-fetch company context so the LLM has real data without needing API access
     company_context = build_company_context(agent)
@@ -1117,12 +1131,21 @@ def create_subtasks(
             f"#{index + 1}: {payload['title']!r} "
             f"(assignee={payload.get('assigneeAgentId') or payload.get('assigneeUserId') or 'unassigned'})"
         )
-        issue = api_request(
-            "POST",
-            f"/companies/{company_id}/issues",
-            payload=payload,
-            include_run_id=True,
-        )
+        try:
+            issue = api_request(
+                "POST",
+                f"/companies/{company_id}/issues",
+                payload=payload,
+                include_run_id=True,
+            )
+        except WorkerError as exc:
+            if is_delegated_child_throttle_error(exc):
+                debug(
+                    "Delegated child creation throttled by Paperclip governance; "
+                    "skipping additional subtask creation for this run"
+                )
+                break
+            raise
         if not isinstance(issue, dict):
             raise WorkerError("Paperclip API returned an invalid subtask creation response")
         created.append(issue)

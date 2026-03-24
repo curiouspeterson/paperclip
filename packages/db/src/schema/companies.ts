@@ -17,6 +17,10 @@ export const companies = pgTable(
       .notNull()
       .default(true),
     brandColor: text("brand_color"),
+    mailchimpDefaultListId: text("mailchimp_default_list_id"),
+    mailchimpDefaultTemplateId: text("mailchimp_default_template_id"),
+    mailchimpDefaultFromName: text("mailchimp_default_from_name"),
+    mailchimpDefaultReplyTo: text("mailchimp_default_reply_to"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

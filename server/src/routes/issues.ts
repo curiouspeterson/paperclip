@@ -1593,7 +1593,8 @@ export function issueRoutes(db: Db, storage: StorageService) {
       const wakeups = new Map<string, Parameters<typeof heartbeat.wakeup>[1]>();
       const assigneeId = currentIssue.assigneeAgentId;
       const actorIsAgent = actor.actorType === "agent";
-      const selfComment = actorIsAgent && actor.actorId === assigneeId;
+      const selfComment =
+        (actorIsAgent && actor.actorId === assigneeId) || comment.authorAgentId === assigneeId;
       const skipWake = selfComment || isClosed;
       if (assigneeId && (reopened || !skipWake)) {
         if (reopened) {

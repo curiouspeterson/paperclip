@@ -59,6 +59,7 @@ export function CompanySettings() {
   const [snippetCopied, setSnippetCopied] = useState(false);
   const [snippetCopyDelightId, setSnippetCopyDelightId] = useState(0);
   const [mailchimpListId, setMailchimpListId] = useState("");
+  const [mailchimpTemplateId, setMailchimpTemplateId] = useState("");
   const [mailchimpTitle, setMailchimpTitle] = useState("");
   const [mailchimpSubjectLine, setMailchimpSubjectLine] = useState("");
   const [mailchimpPreviewText, setMailchimpPreviewText] = useState("");
@@ -72,6 +73,13 @@ export function CompanySettings() {
     (companyName !== selectedCompany.name ||
       description !== (selectedCompany.description ?? "") ||
       brandColor !== (selectedCompany.brandColor ?? ""));
+
+  const mailchimpDefaultsDirty =
+    !!selectedCompany &&
+    (mailchimpListId !== (selectedCompany.mailchimpDefaultListId ?? "") ||
+      mailchimpTemplateId !== (selectedCompany.mailchimpDefaultTemplateId ?? "") ||
+      mailchimpFromName !== (selectedCompany.mailchimpDefaultFromName ?? "") ||
+      mailchimpReplyTo !== (selectedCompany.mailchimpDefaultReplyTo ?? ""));
 
   const generalMutation = useMutation({
     mutationFn: (data: {
@@ -92,6 +100,23 @@ export function CompanySettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
     }
+  });
+
+  const mailchimpDefaultsMutation = useMutation({
+    mutationFn: () =>
+      companiesApi.update(selectedCompanyId!, {
+        mailchimpDefaultListId: mailchimpListId.trim() || null,
+        mailchimpDefaultTemplateId: mailchimpTemplateId.trim() || null,
+        mailchimpDefaultFromName: mailchimpFromName.trim() || null,
+        mailchimpDefaultReplyTo: mailchimpReplyTo.trim() || null,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      pushToast({
+        title: "Mailchimp defaults saved",
+        body: "Company-level Mailchimp newsletter defaults were updated.",
+      });
+    },
   });
 
   const inviteMutation = useMutation({
@@ -206,8 +231,11 @@ export function CompanySettings() {
     const overview = mailchimpOverviewQuery.data;
     if (!overview) return;
     primeMailchimpForm(overview, {
+      selectedCompany,
       mailchimpListId,
       setMailchimpListId,
+      mailchimpTemplateId,
+      setMailchimpTemplateId,
       mailchimpFromName,
       setMailchimpFromName,
       mailchimpReplyTo,
@@ -215,13 +243,16 @@ export function CompanySettings() {
     });
   }, [
     mailchimpOverviewQuery.data,
+    selectedCompany,
     mailchimpListId,
+    mailchimpTemplateId,
     mailchimpFromName,
     mailchimpReplyTo,
   ]);
 
   useEffect(() => {
     setMailchimpListId("");
+    setMailchimpTemplateId("");
     setMailchimpTitle("");
     setMailchimpSubjectLine("");
     setMailchimpPreviewText("");
@@ -235,6 +266,7 @@ export function CompanySettings() {
     mutationFn: () =>
       mailchimpApi.createCampaign(selectedCompanyId!, {
         listId: mailchimpListId,
+        templateId: mailchimpTemplateId.trim() || null,
         title: mailchimpTitle.trim(),
         subjectLine: mailchimpSubjectLine.trim(),
         previewText: mailchimpPreviewText.trim() || null,
@@ -801,6 +833,24 @@ export function CompanySettings() {
                     This creates a regular Mailchimp campaign draft and uploads the message content through the Marketing API.
                   </p>
                 </div>
+                <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium">Default newsletter settings</div>
+                      <p className="text-xs text-muted-foreground">
+                        Persist the audience, template, and sender values Romance Unzipped should use by default.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => mailchimpDefaultsMutation.mutate()}
+                      disabled={!mailchimpDefaultsDirty || mailchimpDefaultsMutation.isPending}
+                    >
+                      {mailchimpDefaultsMutation.isPending ? "Saving..." : "Save defaults"}
+                    </Button>
+                  </div>
+                </div>
                 <Field label="Audience" hint="The Mailchimp audience that should receive this newsletter.">
                   <select
                     className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
@@ -814,6 +864,15 @@ export function CompanySettings() {
                       </option>
                     ))}
                   </select>
+                </Field>
+                <Field label="Template ID" hint="Optional Mailchimp template ID to attach when creating campaign drafts.">
+                  <input
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                    inputMode="numeric"
+                    value={mailchimpTemplateId}
+                    onChange={(e) => setMailchimpTemplateId(e.target.value.replace(/[^0-9]/g, ""))}
+                    placeholder="10731120"
+                  />
                 </Field>
                 <Field label="Campaign title" hint="Internal Mailchimp title for this newsletter draft.">
                   <input
@@ -1006,8 +1065,16 @@ function MailchimpStat({
 function primeMailchimpForm(
   overview: MailchimpMarketingOverview,
   state: {
+    selectedCompany: {
+      mailchimpDefaultListId: string | null;
+      mailchimpDefaultTemplateId: string | null;
+      mailchimpDefaultFromName: string | null;
+      mailchimpDefaultReplyTo: string | null;
+    } | null;
     mailchimpListId: string;
     setMailchimpListId: (value: string) => void;
+    mailchimpTemplateId: string;
+    setMailchimpTemplateId: (value: string) => void;
     mailchimpFromName: string;
     setMailchimpFromName: (value: string) => void;
     mailchimpReplyTo: string;
@@ -1015,14 +1082,29 @@ function primeMailchimpForm(
   },
 ) {
   const firstAudience = overview.audiences[0] ?? null;
-  if (!state.mailchimpListId && firstAudience?.id) {
-    state.setMailchimpListId(firstAudience.id);
+  if (!state.mailchimpListId) {
+    if (state.selectedCompany?.mailchimpDefaultListId) {
+      state.setMailchimpListId(state.selectedCompany.mailchimpDefaultListId);
+    } else if (firstAudience?.id) {
+      state.setMailchimpListId(firstAudience.id);
+    }
   }
-  if (!state.mailchimpFromName && firstAudience?.fromName) {
-    state.setMailchimpFromName(firstAudience.fromName);
+  if (!state.mailchimpTemplateId && state.selectedCompany?.mailchimpDefaultTemplateId) {
+    state.setMailchimpTemplateId(state.selectedCompany.mailchimpDefaultTemplateId);
   }
-  if (!state.mailchimpReplyTo && firstAudience?.fromEmail) {
-    state.setMailchimpReplyTo(firstAudience.fromEmail);
+  if (!state.mailchimpFromName) {
+    if (state.selectedCompany?.mailchimpDefaultFromName) {
+      state.setMailchimpFromName(state.selectedCompany.mailchimpDefaultFromName);
+    } else if (firstAudience?.fromName) {
+      state.setMailchimpFromName(firstAudience.fromName);
+    }
+  }
+  if (!state.mailchimpReplyTo) {
+    if (state.selectedCompany?.mailchimpDefaultReplyTo) {
+      state.setMailchimpReplyTo(state.selectedCompany.mailchimpDefaultReplyTo);
+    } else if (firstAudience?.fromEmail) {
+      state.setMailchimpReplyTo(firstAudience.fromEmail);
+    }
   }
 }
 

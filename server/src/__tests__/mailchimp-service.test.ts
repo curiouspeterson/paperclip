@@ -139,6 +139,7 @@ describe("mailchimpService", () => {
     const svc = mailchimpService(createEmptyDb() as never);
     const result = await svc.createCampaign("company-1", {
       listId: "e37373151b",
+      templateId: "10731120",
       title: "Episode Drop",
       subjectLine: "New episode live",
       previewText: "This week on Romance Unzipped",
@@ -155,6 +156,11 @@ describe("mailchimpService", () => {
       status: "save",
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      settings: {
+        template_id: 10731120,
+      },
+    });
     expect(fetchMock.mock.calls[1]?.[0]).toContain("/campaigns/new-campaign/content");
   });
 });
