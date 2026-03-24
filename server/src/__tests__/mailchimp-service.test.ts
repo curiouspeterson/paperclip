@@ -145,7 +145,11 @@ describe("mailchimpService", () => {
       previewText: "This week on Romance Unzipped",
       fromName: "Annie",
       replyTo: "romanceunzipped@gmail.com",
-      html: "<h1>Hello</h1>",
+      html: `
+        <div mc:edit="preheader_text">Preview override</div>
+        <h2 mc:edit="episode_title">Episode override</h2>
+        <div mc:edit="episode_spotlight"><p>Spotlight override</p></div>
+      `,
       plainText: "Hello",
     });
 
@@ -158,9 +162,70 @@ describe("mailchimpService", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
       settings: {
+        title: "Episode Drop",
+      },
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toMatchObject({
+      settings: {
         template_id: 10731120,
       },
     });
     expect(fetchMock.mock.calls[1]?.[0]).toContain("/campaigns/new-campaign/content");
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      template: {
+        id: 10731120,
+        sections: {
+          preheader_text: "Preview override",
+          episode_title: "Episode override",
+          episode_spotlight: "<p>Spotlight override</p>",
+        },
+      },
+      plain_text: "Hello",
+    });
+  });
+
+  it("falls back to raw html upload when no template sections are present", async () => {
+    process.env.MAILCHIMP_API_KEY = "testkey-us19";
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: "html-campaign" }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "html-campaign",
+          status: "save",
+          emails_sent: 0,
+          send_time: null,
+          settings: {
+            title: "HTML Only",
+            subject_line: "HTML Only",
+            preview_text: "HTML preview",
+            from_name: "Annie",
+            reply_to: "romanceunzipped@gmail.com",
+          },
+          recipients: {
+            list_id: "e37373151b",
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const svc = mailchimpService(createEmptyDb() as never);
+    await svc.createCampaign("company-1", {
+      listId: "e37373151b",
+      templateId: "10731120",
+      title: "HTML Only",
+      subjectLine: "HTML Only",
+      previewText: "HTML preview",
+      fromName: "Annie",
+      replyTo: "romanceunzipped@gmail.com",
+      html: "<h1>No template sections here</h1>",
+      plainText: "HTML Only",
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      html: "<h1>No template sections here</h1>",
+      plain_text: "HTML Only",
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, boolean, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 
 export const companies = pgTable(
   "companies",
@@ -17,6 +17,12 @@ export const companies = pgTable(
       .notNull()
       .default(true),
     brandColor: text("brand_color"),
+    voiceDescription: text("voice_description"),
+    targetAudience: text("target_audience"),
+    defaultChannel: text("default_channel"),
+    defaultGoal: text("default_goal"),
+    voiceExamplesRight: jsonb("voice_examples_right").$type<string[]>().notNull().default([]),
+    voiceExamplesWrong: jsonb("voice_examples_wrong").$type<string[]>().notNull().default([]),
     mailchimpDefaultListId: text("mailchimp_default_list_id"),
     mailchimpDefaultTemplateId: text("mailchimp_default_template_id"),
     mailchimpDefaultFromName: text("mailchimp_default_from_name"),

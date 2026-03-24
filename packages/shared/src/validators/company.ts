@@ -3,6 +3,10 @@ import { COMPANY_STATUSES } from "../constants.js";
 
 const logoAssetIdSchema = z.string().uuid().nullable().optional();
 const brandColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional();
+const companyProfileTextSchema = z.string().trim().min(1).max(10_000).nullable().optional();
+const companyVoiceSampleSchema = z.string().trim().min(1).max(10_000);
+const voiceExamplesRightSchema = z.array(companyVoiceSampleSchema).max(10).optional();
+const voiceExamplesWrongSchema = z.array(companyVoiceSampleSchema).max(3).optional();
 const mailchimpTemplateIdSchema = z.string().trim().regex(/^\d+$/).nullable().optional();
 const mailchimpListIdSchema = z.string().trim().min(1).nullable().optional();
 const mailchimpFromNameSchema = z.string().trim().min(1).max(255).nullable().optional();
@@ -23,6 +27,12 @@ export const updateCompanySchema = createCompanySchema
     spentMonthlyCents: z.number().int().nonnegative().optional(),
     requireBoardApprovalForNewAgents: z.boolean().optional(),
     brandColor: brandColorSchema,
+    voiceDescription: companyProfileTextSchema,
+    targetAudience: companyProfileTextSchema,
+    defaultChannel: companyProfileTextSchema,
+    defaultGoal: companyProfileTextSchema,
+    voiceExamplesRight: voiceExamplesRightSchema,
+    voiceExamplesWrong: voiceExamplesWrongSchema,
     mailchimpDefaultListId: mailchimpListIdSchema,
     mailchimpDefaultTemplateId: mailchimpTemplateIdSchema,
     mailchimpDefaultFromName: mailchimpFromNameSchema,

@@ -66,6 +66,19 @@ type MailchimpCampaignResponse = {
   } | null;
 };
 
+type MailchimpTemplateContentPayload = {
+  template: {
+    id: number;
+    sections?: Record<string, string>;
+  };
+  plain_text: string;
+};
+
+type MailchimpHtmlContentPayload = {
+  html: string;
+  plain_text: string;
+};
+
 function getDatacenterFromKey(key: string) {
   const parts = key.trim().split("-");
   const datacenter = parts.at(-1)?.trim();
@@ -99,6 +112,27 @@ function mapCampaign(campaign: MailchimpCampaignResponse): MailchimpCampaignSumm
     replyTo: campaign.settings?.reply_to ?? null,
     listId: campaign.recipients?.list_id ?? null,
   };
+}
+
+function extractTemplateSections(html: string): Record<string, string> {
+  const sections: Record<string, string> = {};
+  const openingTagPattern = /<([a-z0-9:-]+)\b[^>]*\bmc:edit="([^"]+)"[^>]*>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = openingTagPattern.exec(html)) !== null) {
+    const [, tagNameRaw, sectionNameRaw] = match;
+    const tagName = tagNameRaw.toLowerCase();
+    const sectionName = sectionNameRaw.trim();
+    const startIndex = match.index + match[0].length;
+    const closingTag = `</${tagName}>`;
+    const endIndex = html.indexOf(closingTag, startIndex);
+    if (endIndex === -1) continue;
+    const content = html.slice(startIndex, endIndex).trim();
+    if (content.length === 0) continue;
+    sections[sectionName] = content;
+  }
+
+  return sections;
 }
 
 export function mailchimpService(db: Db) {
@@ -198,6 +232,7 @@ export function mailchimpService(db: Db) {
       input: CreateMailchimpCampaign,
     ): Promise<CreateMailchimpCampaignResult> => {
       const apiKey = await resolveApiKey(companyId);
+      const templateSections = input.templateId ? extractTemplateSections(input.html) : {};
       const created = await request<MailchimpCampaignResponse>(apiKey, "/campaigns", {
         method: "POST",
         body: JSON.stringify({
@@ -211,7 +246,6 @@ export function mailchimpService(db: Db) {
             from_name: input.fromName,
             reply_to: input.replyTo,
             preview_text: input.previewText ?? "",
-            ...(input.templateId ? { template_id: Number(input.templateId) } : {}),
           },
         }),
       });
@@ -220,12 +254,23 @@ export function mailchimpService(db: Db) {
         throw badRequest("Mailchimp did not return a campaign id");
       }
 
+      const contentPayload: MailchimpHtmlContentPayload | MailchimpTemplateContentPayload =
+        input.templateId && Object.keys(templateSections).length > 0
+          ? {
+            template: {
+              id: Number(input.templateId),
+              sections: templateSections,
+            },
+            plain_text: input.plainText ?? "",
+          }
+          : {
+            html: input.html,
+            plain_text: input.plainText ?? "",
+          };
+
       await request<Record<string, unknown>>(apiKey, `/campaigns/${created.id}/content`, {
         method: "PUT",
-        body: JSON.stringify({
-          html: input.html,
-          plain_text: input.plainText ?? "",
-        }),
+        body: JSON.stringify(contentPayload),
       });
 
       const details = await request<MailchimpCampaignResponse>(

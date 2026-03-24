@@ -33,6 +33,7 @@ export const companiesApi = {
       Pick<
         Company,
         "name" | "description" | "status" | "budgetMonthlyCents" | "requireBoardApprovalForNewAgents" | "brandColor" | "mailchimpDefaultListId" | "mailchimpDefaultTemplateId" | "mailchimpDefaultFromName" | "mailchimpDefaultReplyTo" | "logoAssetId"
+        | "voiceDescription" | "targetAudience" | "defaultChannel" | "defaultGoal" | "voiceExamplesRight" | "voiceExamplesWrong"
       >
     >,
   ) => api.patch<Company>(`/companies/${companyId}`, data),

@@ -13,6 +13,12 @@ export interface Company {
   spentMonthlyCents: number;
   requireBoardApprovalForNewAgents: boolean;
   brandColor: string | null;
+  voiceDescription: string | null;
+  targetAudience: string | null;
+  defaultChannel: string | null;
+  defaultGoal: string | null;
+  voiceExamplesRight: string[];
+  voiceExamplesWrong: string[];
   mailchimpDefaultListId: string | null;
   mailchimpDefaultTemplateId: string | null;
   mailchimpDefaultFromName: string | null;
