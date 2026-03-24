@@ -1015,7 +1015,6 @@ export function AgentDetail() {
 
       {activeView === "instructions" && (
         <PromptsTab
-          key={agent.id}
           agent={agent}
           companyId={resolvedCompanyId ?? undefined}
           onDirtyChange={setConfigDirty}
