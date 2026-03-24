@@ -3979,7 +3979,7 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
         if (typeof markdownRaw === "string") {
           const importedInstructionsBody = parseFrontmatterMarkdown(markdownRaw).body;
           bundleFiles[entryRelativePath] = importedInstructionsBody;
-          if (entryRelativePath !== "AGENTS.md" && !bundleFiles["AGENTS.md"]) {
+          if (entryRelativePath !== "AGENTS.md") {
             bundleFiles["AGENTS.md"] = importedInstructionsBody;
           }
         }
