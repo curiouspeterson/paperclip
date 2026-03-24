@@ -646,10 +646,10 @@ export function CompanySettings() {
             <div className="rounded-md border border-border bg-muted/20 p-3">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Bot className="h-4 w-4 text-muted-foreground" />
-                Hermes Agent
+                Hermes Worker
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Open the local Hermes setup flow with adapter defaults prefilled.
+                Create a Paperclip-managed Hermes worker with the local preset defaults prefilled.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button
@@ -657,7 +657,7 @@ export function CompanySettings() {
                   variant="outline"
                   onClick={() => navigate("/agents/new?adapterType=process&preset=hermes_agent")}
                 >
-                  Create Hermes Agent
+                  Create Hermes Worker
                   <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Button>
               </div>

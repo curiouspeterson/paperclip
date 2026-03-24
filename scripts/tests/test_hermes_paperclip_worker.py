@@ -13,6 +13,23 @@ SPEC.loader.exec_module(worker)
 
 
 class HermesWorkerTests(unittest.TestCase):
+    def test_resolve_hermes_home_uses_agent_home_when_available(self) -> None:
+        home = worker.resolve_hermes_home("/tmp/agent-home")
+        self.assertEqual(Path("/tmp/agent-home").resolve() / ".hermes", home)
+
+    def test_resolve_hermes_home_falls_back_to_repo_local_runtime_dir(self) -> None:
+        with patch.object(worker, "resolve_repo_root", return_value=Path("/tmp/paperclip")):
+            home = worker.resolve_hermes_home("")
+        self.assertEqual(Path("/tmp/paperclip/.runtime/hermes"), home)
+
+    def test_build_session_name_prefers_issue_identifier(self) -> None:
+        session_name = worker.build_session_name({"id": "agent-1234567890"}, {"identifier": "ROM-44", "id": "issue-1"})
+        self.assertEqual("paperclip::agent-1234::ROM-44", session_name)
+
+    def test_build_session_name_falls_back_to_issue_id(self) -> None:
+        session_name = worker.build_session_name({"id": "agent-1234567890"}, {"id": "issue-1"})
+        self.assertEqual("paperclip::agent-1234::issue-1", session_name)
+
     def test_build_prompt_keeps_subtask_contract_available(self) -> None:
         prompt = worker.build_prompt(
             {"title": "Newsletter Agent", "role": "general", "adapterConfig": {}, "id": "agent-1"},
@@ -239,6 +256,34 @@ class HermesWorkerTests(unittest.TestCase):
         }
 
         self.assertFalse(worker.can_delegate_subtask_assignments(agent, issue))
+
+    def test_build_worker_result_includes_session_metadata(self) -> None:
+        result = worker.build_worker_result(
+            {
+                "id": "agent-1",
+                "companyId": "company-1",
+                "name": "Hermes Worker",
+            },
+            {
+                "id": "issue-1",
+                "identifier": "ROM-44",
+            },
+            "done",
+            [],
+            {
+                "sessionId": "session-1",
+                "sessionName": "paperclip::agent-1::ROM-44",
+            },
+            "zai",
+            "glm-4.7",
+            {"inputTokens": 1, "outputTokens": 2, "cachedInputTokens": 0},
+        )
+        self.assertEqual("session-1", result["_sessionId"])
+        self.assertEqual("paperclip::agent-1::ROM-44", result["_sessionDisplayId"])
+        self.assertEqual(
+            {"sessionId": "session-1", "sessionName": "paperclip::agent-1::ROM-44"},
+            result["_sessionParams"],
+        )
 
 if __name__ == "__main__":
     unittest.main()

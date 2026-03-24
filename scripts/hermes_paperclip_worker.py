@@ -8,6 +8,7 @@ import os
 import re
 import signal
 import shutil
+import sqlite3
 import subprocess
 import sys
 import textwrap
@@ -198,6 +199,145 @@ def resolve_skills_dir() -> str | None:
             return str(candidate)
 
     return None
+
+
+def resolve_hermes_home(agent_home: str | Path | None) -> Path:
+    if agent_home:
+        return Path(agent_home).expanduser().resolve() / ".hermes"
+    return resolve_repo_root() / ".runtime" / "hermes"
+
+
+def ensure_directory(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def read_runtime_session_params() -> dict[str, Any] | None:
+    raw = os.environ.get("PAPERCLIP_RUNTIME_SESSION_PARAMS_JSON", "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        debug("Ignoring invalid PAPERCLIP_RUNTIME_SESSION_PARAMS_JSON")
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def build_session_name(agent: dict[str, Any], issue: dict[str, Any]) -> str:
+    agent_id = str(agent.get("id") or "agent").strip() or "agent"
+    issue_key = str(issue.get("identifier") or issue.get("id") or "task").strip() or "task"
+    safe_issue_key = re.sub(r"[^A-Za-z0-9._:-]+", "-", issue_key).strip("-") or "task"
+    return f"paperclip::{agent_id[:10]}::{safe_issue_key}"
+
+
+def find_session_by_title(hermes_home: Path, session_name: str) -> dict[str, str] | None:
+    db_path = hermes_home / "state.db"
+    if not db_path.is_file():
+        return None
+    try:
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT id, COALESCE(title, '') FROM sessions WHERE title = ? ORDER BY rowid DESC LIMIT 1",
+                (session_name,),
+            ).fetchone()
+    except sqlite3.Error as exc:
+        debug(f"Failed to query Hermes sessions DB: {exc}")
+        return None
+    if not row:
+        return None
+    session_id = str(row[0] or "").strip()
+    title = str(row[1] or "").strip()
+    if not session_id:
+        return None
+    return {"sessionId": session_id, "sessionName": title or session_name}
+
+
+def find_latest_session(hermes_home: Path) -> dict[str, str] | None:
+    db_path = hermes_home / "state.db"
+    if not db_path.is_file():
+        return None
+    try:
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT id, COALESCE(title, '') FROM sessions ORDER BY rowid DESC LIMIT 1"
+            ).fetchone()
+    except sqlite3.Error as exc:
+        debug(f"Failed to query latest Hermes session: {exc}")
+        return None
+    if not row:
+        return None
+    session_id = str(row[0] or "").strip()
+    title = str(row[1] or "").strip()
+    if not session_id:
+        return None
+    return {"sessionId": session_id, "sessionName": title}
+
+
+def rename_session(hermes_bin: str, hermes_home: Path, session_id: str, session_name: str) -> None:
+    env = os.environ.copy()
+    env["HERMES_HOME"] = str(hermes_home)
+    result = subprocess.run(
+        [hermes_bin, "sessions", "rename", session_id, session_name],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    if result.returncode != 0:
+        debug(
+            "Failed to rename Hermes session "
+            f"{session_id} -> {session_name}: {(result.stderr or result.stdout).strip()[:200]}"
+        )
+
+
+def resolve_session_metadata(
+    hermes_bin: str,
+    hermes_home: Path,
+    agent: dict[str, Any],
+    issue: dict[str, Any],
+) -> dict[str, str] | None:
+    session_name = build_session_name(agent, issue)
+    existing = find_session_by_title(hermes_home, session_name)
+    if existing:
+        return existing
+    latest = find_latest_session(hermes_home)
+    if not latest:
+        return None
+    rename_session(hermes_bin, hermes_home, latest["sessionId"], session_name)
+    renamed = find_session_by_title(hermes_home, session_name)
+    return renamed or {"sessionId": latest["sessionId"], "sessionName": session_name}
+
+
+def build_worker_result(
+    agent: dict[str, Any],
+    issue: dict[str, Any],
+    status: str,
+    created_subtasks: list[dict[str, Any]],
+    session_metadata: dict[str, str] | None,
+    provider: str,
+    model: str,
+    usage: dict[str, int],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "ok": True,
+        "agentId": agent["id"],
+        "issueId": issue["id"],
+        "issueIdentifier": issue.get("identifier"),
+        "status": status,
+        "createdSubtasks": [subtask.get("identifier") or subtask.get("id") for subtask in created_subtasks],
+        "_usage": usage,
+        "_provider": provider,
+        "_model": model,
+    }
+    if session_metadata:
+        result["_sessionId"] = session_metadata.get("sessionId")
+        result["_sessionDisplayId"] = session_metadata.get("sessionName")
+        result["_sessionParams"] = {
+            "sessionId": session_metadata.get("sessionId"),
+            "sessionName": session_metadata.get("sessionName"),
+        }
+    return result
 
 
 def default_browser_automation_command(provider: str, repo_root: Path) -> str | None:
@@ -791,19 +931,29 @@ def validate_hermes_response(response: dict[str, Any]) -> None:
             )
 
 
-def run_hermes(prompt: str, skills_dir: str | None = None) -> dict[str, Any]:
+def run_hermes(
+    prompt: str,
+    *,
+    skills_dir: str | None = None,
+    hermes_home: Path | None = None,
+    session_name: str | None = None,
+) -> dict[str, Any]:
     hermes_bin = resolve_hermes_bin()
     repo_root = resolve_repo_root()
     model = os.environ.get("HERMES_MODEL", "").strip()
     provider = os.environ.get("HERMES_PROVIDER", "").strip()
     browser_automation = resolve_browser_automation()
     cmd = [hermes_bin, "chat", "-Q", "--yolo", "-q", prompt]
+    if session_name:
+        cmd.extend(["--continue", session_name])
     if provider:
         cmd.extend(["--provider", provider])
     if model:
         cmd.extend(["-m", model])
     hermes_env = os.environ.copy()
     hermes_env.setdefault("NO_COLOR", "1")
+    if hermes_home:
+        hermes_env["HERMES_HOME"] = str(hermes_home)
     # Pass skills dir explicitly — no mutation of ~/.hermes/skills
     if skills_dir:
         hermes_env["HERMES_SKILLS_DIR"] = skills_dir
@@ -870,17 +1020,30 @@ def run_hermes_with_retry(
     agent: dict[str, Any],
     issue: dict[str, Any],
     prompt: str,
+    *,
     skills_dir: str | None = None,
+    hermes_home: Path | None = None,
+    session_name: str | None = None,
 ) -> dict[str, Any]:
     try:
-        return run_hermes(prompt, skills_dir=skills_dir)
+        return run_hermes(
+            prompt,
+            skills_dir=skills_dir,
+            hermes_home=hermes_home,
+            session_name=session_name,
+        )
     except WorkerError as exc:
         retryable = "timed out" in str(exc).lower() or "parseable json" in str(exc).lower()
         if not retryable:
             raise
         retry_prompt = build_retry_prompt(agent, issue)
         debug(f"Retrying Hermes with compact prompt ({len(retry_prompt)} chars)")
-        return run_hermes(retry_prompt, skills_dir=skills_dir)
+        return run_hermes(
+            retry_prompt,
+            skills_dir=skills_dir,
+            hermes_home=hermes_home,
+            session_name=session_name,
+        )
 
 
 def estimate_token_usage(prompt_chars: int, response_chars: int) -> dict[str, int]:
@@ -1243,6 +1406,15 @@ def main() -> int:
     if not isinstance(comments, list):
         comments = []
 
+    hermes_home = ensure_directory(resolve_hermes_home(os.environ.get("AGENT_HOME", "").strip() or None))
+    runtime_session = read_runtime_session_params() or {}
+    session_name = str(runtime_session.get("sessionName") or "").strip() or build_session_name(agent, issue)
+    existing_session = find_session_by_title(hermes_home, session_name)
+    if existing_session:
+        debug(f"Reusing Hermes session name: {session_name}")
+    else:
+        debug(f"Starting fresh Hermes session for name: {session_name}")
+
     can_assign_tasks = bool(
         isinstance(agent.get("access"), dict) and agent["access"].get("canAssignTasks")
     )
@@ -1250,7 +1422,14 @@ def main() -> int:
 
     prompt = build_prompt(agent, issue, comments, can_assign_tasks=can_assign_tasks)
     debug(f"Built prompt ({len(prompt)} chars)")
-    hermes_output = run_hermes_with_retry(agent, issue, prompt, skills_dir=skills_dir)
+    hermes_output = run_hermes_with_retry(
+        agent,
+        issue,
+        prompt,
+        skills_dir=skills_dir,
+        hermes_home=hermes_home,
+        session_name=session_name if existing_session else None,
+    )
 
     status = normalize_status(hermes_output.get("status"))
     comment_markdown = str(hermes_output.get("comment_markdown") or "").strip()
@@ -1273,23 +1452,20 @@ def main() -> int:
     provider = os.environ.get("HERMES_PROVIDER", "").strip() or "default"
     response_chars = sum(len(str(v)) for v in hermes_output.values())
     usage = estimate_token_usage(len(prompt), response_chars)
+    session_metadata = resolve_session_metadata(hermes_bin, hermes_home, agent, issue)
 
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "agentId": agent["id"],
-                "issueId": issue["id"],
-                "issueIdentifier": issue.get("identifier"),
-                "status": status,
-                "planUpdated": bool(plan_markdown),
-                "createdSubtasks": [subtask.get("identifier") or subtask.get("id") for subtask in created_subtasks],
-                "_usage": usage,
-                "_provider": provider,
-                "_model": model,
-            }
-        )
+    result = build_worker_result(
+        agent,
+        issue,
+        status,
+        created_subtasks,
+        session_metadata,
+        provider,
+        model,
+        usage,
     )
+    result["planUpdated"] = bool(plan_markdown)
+    print(json.dumps(result))
     return 0
 
 

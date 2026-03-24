@@ -80,6 +80,7 @@ import {
   agentConfigurationDoc as hermesAgentConfigurationDoc,
   models as hermesModels,
 } from "hermes-paperclip-adapter";
+import { listHermesSkills, syncHermesSkills } from "./hermes-local/skills.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
@@ -186,6 +187,8 @@ const hermesLocalAdapter: ServerAdapterModule = {
   type: "hermes_local",
   execute: hermesExecute,
   testEnvironment: hermesTestEnvironment,
+  listSkills: listHermesSkills,
+  syncSkills: syncHermesSkills,
   sessionCodec: hermesSessionCodec,
   models: hermesModels,
   supportsLocalAgentJwt: true,
