@@ -368,10 +368,11 @@ function unreadForUserCondition(companyId: string, userId: string) {
   `;
 }
 
-/** Named entities the rich-text editor may emit in issue bodies; unknown names are left unchanged. */
+/** Named entities commonly emitted in saved issue bodies; unknown `&name;` sequences are left unchanged. */
 const WELL_KNOWN_NAMED_HTML_ENTITIES: Readonly<Record<string, string>> = {
   amp: "&",
   apos: "'",
+  copy: "\u00A9",
   gt: ">",
   lt: "<",
   nbsp: "\u00A0",
@@ -391,7 +392,7 @@ function decodeNumericHtmlEntity(digits: string, radix: 16 | 10): string | null 
   }
 }
 
-/** Decodes HTML entities in a raw @mention capture so UI-encoded bodies still match agent names. */
+/** Decodes HTML character references in a raw @mention capture so UI-encoded bodies match agent names. */
 export function normalizeAgentMentionToken(raw: string): string {
   let s = raw.replace(/&#x([0-9a-fA-F]+);/gi, (full, hex: string) => decodeNumericHtmlEntity(hex, 16) ?? full);
   s = s.replace(/&#([0-9]+);/g, (full, dec: string) => decodeNumericHtmlEntity(dec, 10) ?? full);
