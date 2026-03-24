@@ -32,6 +32,11 @@ export type InboxWorkItem =
       kind: "failed_run";
       timestamp: number;
       run: HeartbeatRun;
+    }
+  | {
+      kind: "join_request";
+      timestamp: number;
+      joinRequest: JoinRequest;
     };
 
 export interface InboxBadgeData {
@@ -170,10 +175,12 @@ export function getInboxWorkItems({
   issues,
   approvals,
   failedRuns = [],
+  joinRequests = [],
 }: {
   issues: Issue[];
   approvals: Approval[];
   failedRuns?: HeartbeatRun[];
+  joinRequests?: JoinRequest[];
 }): InboxWorkItem[] {
   return [
     ...issues.map((issue) => ({
@@ -190,6 +197,11 @@ export function getInboxWorkItems({
       kind: "failed_run" as const,
       timestamp: normalizeTimestamp(run.createdAt),
       run,
+    })),
+    ...joinRequests.map((joinRequest) => ({
+      kind: "join_request" as const,
+      timestamp: normalizeTimestamp(joinRequest.createdAt),
+      joinRequest,
     })),
   ].sort((a, b) => {
     const timestampDiff = b.timestamp - a.timestamp;
