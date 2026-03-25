@@ -35,6 +35,7 @@ import {
 import { logger } from "../middleware/logger.js";
 import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { findRunningExecutionForIssue } from "./issues-active-run.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import { isAllowedContentType, MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
 import { detectInlineSecretFields, redactSecretSnippet } from "../redaction.js";
@@ -280,33 +281,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return true;
   }
 
-  async function findRunningExecutionForIssue(
-    issue: { id: string; assigneeAgentId: string | null; executionRunId?: string | null },
-  ) {
-    if (issue.executionRunId) {
-      const run = await heartbeat.getRun(issue.executionRunId);
-      if (run?.status === "running") return run;
-    }
-
-    if (!issue.assigneeAgentId) return null;
-    const activeRun = await heartbeat.getActiveRunForAgent(issue.assigneeAgentId);
-    const activeIssueId =
-      activeRun &&
-        activeRun.contextSnapshot &&
-        typeof activeRun.contextSnapshot === "object" &&
-        typeof (activeRun.contextSnapshot as Record<string, unknown>).issueId === "string"
-        ? ((activeRun.contextSnapshot as Record<string, unknown>).issueId as string)
-        : null;
-    if (activeRun?.status === "running" && activeIssueId === issue.id) return activeRun;
-    return null;
-  }
-
   async function assertNoRunningExecutionDetach(
     issue: { id: string; assigneeAgentId: string | null; executionRunId?: string | null },
     res: Response,
     action: "update" | "release",
   ) {
-    const activeRun = await findRunningExecutionForIssue(issue);
+    const activeRun = await findRunningExecutionForIssue(heartbeat, issue);
     if (!activeRun) return true;
     res.status(409).json({
       error:
@@ -1065,7 +1045,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       existing.status === "in_progress" &&
       existing.assigneeAgentId
     ) {
-      const activeRun = await findRunningExecutionForIssue(existing);
+      const activeRun = await findRunningExecutionForIssue(heartbeat, existing);
       if (activeRun) {
         res.status(409).json({
           error: "Cannot reassign an active issue while its run is still running. Interrupt or release it first.",
@@ -1542,26 +1522,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
         return;
       }
 
-      let runToInterrupt = currentIssue.executionRunId
-        ? await heartbeat.getRun(currentIssue.executionRunId)
-        : null;
-
-      if (
-        (!runToInterrupt || runToInterrupt.status !== "running") &&
-        currentIssue.assigneeAgentId
-      ) {
-        const activeRun = await heartbeat.getActiveRunForAgent(currentIssue.assigneeAgentId);
-        const activeIssueId =
-          activeRun &&
-            activeRun.contextSnapshot &&
-            typeof activeRun.contextSnapshot === "object" &&
-            typeof (activeRun.contextSnapshot as Record<string, unknown>).issueId === "string"
-            ? ((activeRun.contextSnapshot as Record<string, unknown>).issueId as string)
-            : null;
-        if (activeRun && activeRun.status === "running" && activeIssueId === currentIssue.id) {
-          runToInterrupt = activeRun;
-        }
-      }
+      const runToInterrupt = await findRunningExecutionForIssue(heartbeat, currentIssue);
 
       if (runToInterrupt && runToInterrupt.status === "running") {
         const cancelled = await heartbeat.cancelRun(runToInterrupt.id);

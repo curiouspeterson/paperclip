@@ -45,6 +45,7 @@ import {
 } from "../services/index.js";
 import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { findRunningExecutionForIssue } from "./issues-active-run.js";
 import { findServerAdapter, listAdapterModels } from "../adapters/index.js";
 import { replaceHermesExternalSkill } from "../adapters/hermes-local/skills.js";
 import { redactEventPayload } from "../redaction.js";
@@ -2489,19 +2490,7 @@ export function agentRoutes(db: Db) {
     }
     assertCompanyAccess(req, issue.companyId);
 
-    let run = issue.executionRunId ? await heartbeat.getRun(issue.executionRunId) : null;
-    if (run && run.status !== "queued" && run.status !== "running") {
-      run = null;
-    }
-
-    if (!run && issue.assigneeAgentId && issue.status === "in_progress") {
-      const candidateRun = await heartbeat.getActiveRunForAgent(issue.assigneeAgentId);
-      const candidateContext = asRecord(candidateRun?.contextSnapshot);
-      const candidateIssueId = asNonEmptyString(candidateContext?.issueId);
-      if (candidateRun && candidateIssueId === issue.id) {
-        run = candidateRun;
-      }
-    }
+    const run = await findRunningExecutionForIssue(heartbeat, issue);
     if (!run) {
       res.json(null);
       return;
