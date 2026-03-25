@@ -1,5 +1,6 @@
 type ActiveRun = {
   id: string;
+  agentId: string;
   status: string;
   contextSnapshot?: Record<string, unknown> | null;
 };

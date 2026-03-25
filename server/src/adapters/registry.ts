@@ -86,6 +86,11 @@ import {
   buildHermesAppliedRuntimePolicy,
   materializeHermesMcpConfig,
 } from "./hermes-local/mcp.js";
+import {
+  finalizeHermesLocalEnvironmentTestResult,
+  prepareHermesLocalExecutionConfig,
+  withHermesLocalProcessEnv,
+} from "./hermes-local/paperclip.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
@@ -191,7 +196,10 @@ const piLocalAdapter: ServerAdapterModule = {
 const hermesLocalAdapter: ServerAdapterModule = {
   type: "hermes_local",
   execute: async (ctx) => {
-    const config = await materializeHermesMcpConfig(ctx);
+    const materializedConfig = await materializeHermesMcpConfig(ctx);
+    const config = prepareHermesLocalExecutionConfig(materializedConfig, {
+      authToken: ctx.authToken ?? null,
+    });
     const result = await hermesExecute({
       ...ctx,
       config,
@@ -207,10 +215,17 @@ const hermesLocalAdapter: ServerAdapterModule = {
       },
     };
   },
-  testEnvironment: async (ctx) => hermesTestEnvironment({
-    ...ctx,
-    config: await materializeHermesMcpConfig(ctx),
-  }),
+  testEnvironment: async (ctx) => {
+    const config = prepareHermesLocalExecutionConfig(
+      await materializeHermesMcpConfig(ctx),
+      { authToken: null },
+    );
+    const result = await withHermesLocalProcessEnv(config, () => hermesTestEnvironment({
+      ...ctx,
+      config,
+    }));
+    return finalizeHermesLocalEnvironmentTestResult(config, result);
+  },
   listSkills: listHermesSkills,
   syncSkills: syncHermesSkills,
   sessionCodec: hermesSessionCodec,
