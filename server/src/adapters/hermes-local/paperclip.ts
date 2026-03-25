@@ -109,26 +109,57 @@ function resolvePlainEnvValue(value: unknown): string | null {
     : null;
 }
 
-function normalizeHermesModelProvider(config: Record<string, unknown>) {
-  const next = { ...config };
-  const rawModel = asString(config.model);
-  const configuredProvider = asString(config.provider);
-  if (!rawModel) return next;
-
+function inferProviderFromHermesModel(rawModel: string): { provider: string; bareModel: string; source: "prefix" | "legacy_nous_model" } | null {
   const prefixed = rawModel.match(/^([a-z0-9-]+)([:/])(.+)$/i);
   const inferredProvider = prefixed?.[1]?.toLowerCase() ?? null;
   const bareModel = prefixed?.[3]?.trim() ?? null;
 
-  if (!inferredProvider || !bareModel || !VALID_HERMES_PROVIDERS.has(inferredProvider)) {
+  if (inferredProvider && bareModel && VALID_HERMES_PROVIDERS.has(inferredProvider)) {
+    return {
+      provider: inferredProvider,
+      bareModel,
+      source: "prefix",
+    };
+  }
+
+  if (/^Hermes-/i.test(rawModel.trim())) {
+    return {
+      provider: "nous",
+      bareModel: rawModel.trim(),
+      source: "legacy_nous_model",
+    };
+  }
+
+  return null;
+}
+
+function normalizeHermesModelProvider(config: Record<string, unknown>) {
+  const next = { ...config };
+  const rawModel = asString(config.model);
+  const configuredProvider = asString(config.provider)?.toLowerCase() ?? extractProviderFromExtraArgs(config.extraArgs);
+  if (!rawModel) return next;
+
+  const inferred = inferProviderFromHermesModel(rawModel);
+  if (!inferred) {
     return next;
   }
 
-  if (!configuredProvider) {
-    next.provider = inferredProvider;
+  const shouldOverrideProvider =
+    inferred.source === "prefix"
+    || !configuredProvider
+    || (inferred.source === "legacy_nous_model" && configuredProvider === "zai");
+
+  if (shouldOverrideProvider) {
+    next.provider = inferred.provider;
+    next.model = inferred.bareModel;
+    const strippedArgs = stripProviderFromExtraArgs(config.extraArgs);
+    if (strippedArgs) {
+      next.extraArgs = strippedArgs;
+    } else {
+      delete next.extraArgs;
+    }
   }
-  if (!configuredProvider || configuredProvider.toLowerCase() === inferredProvider) {
-    next.model = bareModel;
-  }
+
   return next;
 }
 
@@ -240,6 +271,14 @@ export function prepareHermesLocalExecutionConfig(
   const inferredProvider = resolveConfiguredProvider(next);
   if (!asString(next.provider) && inferredProvider) {
     next.provider = inferredProvider;
+  }
+  if (inferredProvider) {
+    const strippedArgs = stripProviderFromExtraArgs(next.extraArgs);
+    if (strippedArgs) {
+      next.extraArgs = strippedArgs;
+    } else {
+      delete next.extraArgs;
+    }
   }
   let provider = asString(next.provider)?.toLowerCase() ?? inferredProvider ?? null;
   if (

@@ -140,6 +140,33 @@ describe("prepareHermesLocalExecutionConfig", () => {
     });
   });
 
+  it("routes Hermes-branded Nous models away from stale zai provider defaults", () => {
+    const config = prepareHermesLocalExecutionConfig(
+      {
+        provider: "zai",
+        model: "Hermes-4-70B",
+        extraArgs: ["--provider", "zai", "--reasoning-effort", "high"],
+        env: {
+          NOUS_API_KEY: "nous-secret",
+        },
+      },
+      { authToken: null },
+    );
+
+    expect(config).toMatchObject({
+      provider: "custom",
+      model: "Hermes-4-70B",
+      extraArgs: ["--reasoning-effort", "high"],
+      env: {
+        NOUS_API_KEY: "nous-secret",
+        OPENAI_API_KEY: "nous-secret",
+        OPENAI_BASE_URL: "https://inference-api.nousresearch.com/v1",
+        HERMES_INFERENCE_PROVIDER: "custom",
+        TERMINAL_ENV: "local",
+      },
+    });
+  });
+
   it("does not overwrite an explicit OPENAI_BASE_URL for zai providers", () => {
     const config = prepareHermesLocalExecutionConfig(
       {
