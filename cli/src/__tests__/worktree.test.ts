@@ -150,9 +150,9 @@ describe("worktree helpers", () => {
         branchName: "my-worktree",
         targetPath: "/tmp/my-worktree",
         branchExists: true,
-        startPoint: "origin/main",
+        startPoint: "origin/master",
       }),
-    ).toEqual(["worktree", "add", "-b", "my-worktree", "/tmp/my-worktree", "origin/main"]);
+    ).toEqual(["worktree", "add", "-b", "my-worktree", "/tmp/my-worktree", "origin/master"]);
   });
 
   it("rewrites loopback auth URLs to the new port only", () => {

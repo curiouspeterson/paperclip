@@ -871,7 +871,7 @@ Or:
 {
   "workspaceStrategy": {
     "type": "git_worktree",
-    "baseRef": "origin/main",
+    "baseRef": "origin/master",
     "branchTemplate": "{{issue.identifier}}-{{slug}}",
     "worktreeParentDir": ".paperclip/instances/default/worktrees/projects/{{project.id}}",
     "cleanupPolicy": "on_merged",
@@ -889,7 +889,7 @@ Remote adapters may instead use shapes like:
   "workspaceStrategy": {
     "type": "isolated_checkout",
     "provider": "adapter_managed",
-    "baseRef": "origin/main",
+    "baseRef": "origin/master",
     "branchTemplate": "{{issue.identifier}}-{{slug}}"
   }
 }

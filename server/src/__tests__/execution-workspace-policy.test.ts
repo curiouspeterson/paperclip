@@ -63,7 +63,7 @@ describe("execution workspace policy helpers", () => {
         defaultMode: "isolated_workspace",
         workspaceStrategy: {
           type: "git_worktree",
-          baseRef: "origin/main",
+          baseRef: "origin/master",
           provisionCommand: "bash ./scripts/provision-worktree.sh",
         },
         workspaceRuntime: {
@@ -77,7 +77,7 @@ describe("execution workspace policy helpers", () => {
 
     expect(result.workspaceStrategy).toEqual({
       type: "git_worktree",
-      baseRef: "origin/main",
+      baseRef: "origin/master",
       provisionCommand: "bash ./scripts/provision-worktree.sh",
     });
     expect(result.workspaceRuntime).toEqual({

@@ -12,9 +12,12 @@ cross-run state under `state/`.
 
 The executable pipeline implementation now lives in the repo-root [bin/](/Users/adampeterson/GitHub/paperclip/bin) scripts.
 This `solutions/romance-unzipped/pipeline/` tree remains the branded solution surface and documentation anchor, while
-Paperclip's workflow wrappers resolve into the canonical root `bin/` entrypoints to avoid split-brain drift.
+every executable here delegates into the canonical root `bin/` entrypoints to avoid split-brain drift during rebases.
 
 ## Scripts
+
+All executable files in this directory are compatibility wrappers around the root `bin/` implementation.
+Keep behavior changes in [bin/](/Users/adampeterson/GitHub/paperclip/bin); this directory should only carry wrappers plus solution-specific docs and dependency metadata.
 
 ### Main Pipeline
 
