@@ -117,6 +117,35 @@ describe("cli auth routes", () => {
     expect(res.body.canApprove).toBe(false);
   });
 
+  it("marks company-scoped challenges as unapprovable for board users outside the requested company", async () => {
+    mockBoardAuthService.describeCliAuthChallenge.mockResolvedValue({
+      id: "challenge-1",
+      status: "pending",
+      command: "paperclipai company import",
+      clientName: "paperclipai cli",
+      requestedAccess: "board",
+      requestedCompanyId: "company-1",
+      requestedCompanyName: "Alpha",
+      approvedAt: null,
+      cancelledAt: null,
+      expiresAt: "2026-03-23T13:00:00.000Z",
+      approvedByUser: null,
+    });
+
+    const app = await createApp({
+      type: "board",
+      userId: "user-2",
+      source: "session",
+      isInstanceAdmin: false,
+      companyIds: ["company-2"],
+    });
+    const res = await request(app).get("/api/cli-auth/challenges/challenge-1?token=pcp_cli_auth_secret");
+
+    expect(res.status).toBe(200);
+    expect(res.body.requiresSignIn).toBe(false);
+    expect(res.body.canApprove).toBe(false);
+  });
+
   it("approves a CLI auth challenge for a signed-in board user", async () => {
     mockBoardAuthService.approveCliAuthChallenge.mockResolvedValue({
       status: "approved",

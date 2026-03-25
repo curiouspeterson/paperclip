@@ -179,12 +179,10 @@ type ActionFormState = {
 };
 
 function createActionFormState(workflow: PodcastWorkflow): ActionFormState {
-  const repositoryPath =
-    typeof workflow.metadata?.repositoryPath === "string" ? workflow.metadata.repositoryPath : "";
   return {
     sourceMediaPath: workflow.manifest.sourceMediaPath ?? "",
     manifestPath: workflow.manifest.manifestPath ?? "",
-    runtimeRoot: workflow.manifest.runtimeRoot ?? repositoryPath,
+    runtimeRoot: workflow.manifest.runtimeRoot ?? "",
     episodeId: workflow.manifest.episodeId ?? "",
     title: workflow.title ?? "",
     publishDate: "",

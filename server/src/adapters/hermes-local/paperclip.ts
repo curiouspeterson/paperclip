@@ -10,37 +10,30 @@ Your Paperclip identity:
   Company ID: {{companyId}}
   API Base: {{paperclipApiUrl}}
 
-{{#taskId}}
-## Assigned Task
-
-Issue ID: {{taskId}}
-Title: {{taskTitle}}
+Wake context:
+  Issue ID: {{taskId}}
+  Title: {{taskTitle}}
 
 {{taskBody}}
 
-## Workflow
+Workflow:
 
-1. Work on the task using your tools
-2. When done, report the result back to Paperclip using the authenticated issue workflow below
-3. If blocked, report the blocker back to Paperclip using the authenticated issue workflow below
-{{/taskId}}
-
-{{#noTask}}
-## Heartbeat Wake — Check for Work
-
-1. List issues assigned to you:
-   \`curl -s "{{paperclipApiUrl}}/companies/{{companyId}}/issues?assigneeAgentId={{agentId}}&status=todo" | python3 -m json.tool\`
-
-2. If issues found, pick the highest priority one and work on it:
-   - Checkout: \`curl -s -X POST "{{paperclipApiUrl}}/issues/ISSUE_ID/checkout" -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID" -H "Content-Type: application/json" -d '{"agentId":"{{agentId}}"}'\`
-   - Do the work
-   - Complete with a final comment through the authenticated issue workflow below
-
-3. If no issues found, check for any unassigned issues:
-   \`curl -s "{{paperclipApiUrl}}/companies/{{companyId}}/issues?status=backlog" | python3 -m json.tool\`
-
-4. If truly nothing to do, report briefly.
-{{/noTask}}`;
+1. Check the wake context first.
+2. If Issue ID is non-empty, this run is already assigned to that issue.
+   - Work only on that issue.
+   - Do not begin by listing assigned issues or scanning the backlog.
+   - When done, report the result back to Paperclip using the authenticated issue workflow below.
+   - If blocked, report the blocker back to Paperclip using the authenticated issue workflow below.
+3. If Issue ID is empty, this is a heartbeat wake with no assigned issue yet.
+   - List issues assigned to you:
+     \`curl -s "{{paperclipApiUrl}}/companies/{{companyId}}/issues?assigneeAgentId={{agentId}}&status=todo" | python3 -m json.tool\`
+   - If issues are found, pick the highest priority one and work on it:
+     - Checkout: \`curl -s -X POST "{{paperclipApiUrl}}/issues/ISSUE_ID/checkout" -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID" -H "Content-Type: application/json" -d '{"agentId":"{{agentId}}"}'\`
+     - Do the work
+     - Complete with a final comment through the authenticated issue workflow below
+   - If no issues are assigned, check for unassigned backlog work:
+     \`curl -s "{{paperclipApiUrl}}/companies/{{companyId}}/issues?status=backlog" | python3 -m json.tool\`
+4. If truly nothing to do, report briefly.`;
 
 const PAPERCLIP_WORKFLOW_NOTE = renderPaperclipIssueWorkflowNote({
   PAPERCLIP_API_URL: "http://127.0.0.1:3100/api",
@@ -48,7 +41,7 @@ const PAPERCLIP_WORKFLOW_NOTE = renderPaperclipIssueWorkflowNote({
 });
 const PAPERCLIP_STRUCTURED_RESPONSE_NOTE = `Paperclip structured response contract:
 
-If you worked on a specific issue, your final assistant response must be exactly one JSON object and nothing else.
+If Issue ID is non-empty, your final assistant response must be exactly one JSON object and nothing else.
 
 Use this schema:
 \`\`\`json
@@ -67,7 +60,7 @@ Rules:
 - If you updated a plan, put the full markdown in \`plan_markdown\`
 - If no plan changed, set \`plan_markdown\` and \`change_summary\` to empty strings
 - Emit this JSON object even if you already called the Paperclip API yourself
-- If this heartbeat found no work, a short plain-text response is allowed instead`;
+- If Issue ID is empty and this heartbeat found no work, a short plain-text response is allowed instead`;
 const ZAI_CODING_OPENAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
 const NOUS_INFERENCE_OPENAI_BASE_URL = "https://inference-api.nousresearch.com/v1";
 const PAPERCLIP_DEFAULT_TERMINAL_ENV = "local";

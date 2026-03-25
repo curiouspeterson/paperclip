@@ -191,6 +191,11 @@ export {
 } from "./goal.js";
 
 export {
+  approvalPayloadSchemaByType,
+  browserSessionHandoffApprovalPayloadSchema,
+  hireAgentApprovalPayloadSchema,
+  parseApprovalPayload,
+  secretProvisioningRequiredApprovalPayloadSchema,
   createApprovalSchema,
   resolveApprovalSchema,
   requestApprovalRevisionSchema,

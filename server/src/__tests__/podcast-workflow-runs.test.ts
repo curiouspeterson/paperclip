@@ -161,6 +161,51 @@ describe("runPodcastWorkflowAction", () => {
     }
   });
 
+  it("resolves relative script refs from the active repo root", async () => {
+    const workflow = await createTempWorkflow();
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-podcast-repo-"));
+    tempDirs.add(repoRoot);
+    await fs.mkdir(path.join(repoRoot, "bin"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, "bin", "generate_board_review.py"),
+      "#!/usr/bin/env python3\nimport os\nprint(os.getcwd())\n",
+      "utf8",
+    );
+    await fs.chmod(path.join(repoRoot, "bin", "generate_board_review.py"), 0o755);
+
+    const originalRepoRoot = process.env.PAPERCLIP_REPO_ROOT;
+
+    try {
+      process.env.PAPERCLIP_REPO_ROOT = repoRoot;
+      const canonicalRepoRoot = await fs.realpath(repoRoot);
+      const result = await runPodcastWorkflowAction({
+        workflow: {
+          ...workflow,
+          scriptRefs: {
+            ...workflow.scriptRefs,
+            generateBoardReviewPath: "bin/generate_board_review.py",
+          },
+          metadata: {},
+        },
+        request: {
+          action: "generate_board_review",
+          manifestPath: workflow.manifest.manifestPath,
+        },
+        recorder: createRecorderDouble(),
+      });
+      const canonicalOperationCwd = await fs.realpath(result.operation.cwd ?? "");
+      const canonicalStdoutCwd = await fs.realpath(result.operation.stdoutExcerpt?.trim() ?? "");
+
+      expect(result.operation.status).toBe("succeeded");
+      expect(result.operation.command).toContain("bin/generate_board_review.py");
+      expect(canonicalOperationCwd).toBe(canonicalRepoRoot);
+      expect(canonicalStdoutCwd).toBe(canonicalRepoRoot);
+    } finally {
+      if (originalRepoRoot === undefined) delete process.env.PAPERCLIP_REPO_ROOT;
+      else process.env.PAPERCLIP_REPO_ROOT = originalRepoRoot;
+    }
+  });
+
   it("marks successful non-final actions as active", async () => {
     const workflow = await createTempWorkflow();
     const result = await runPodcastWorkflowAction({

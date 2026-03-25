@@ -38,7 +38,7 @@ const podcastWorkflowFields = {
   ownerAgentId: z.string().uuid().optional().nullable(),
   type: z.enum(PODCAST_WORKFLOW_TYPES),
   status: z.enum(PODCAST_WORKFLOW_STATUSES).optional().default("planned"),
-  title: z.string().trim().min(1),
+  title: z.string().trim().min(1).optional(),
   description: z.string().optional().nullable(),
   manifest: podcastWorkflowManifestSchema.optional().default({}),
   stageStatus: z.record(podcastWorkflowStageStateSchema).optional().default({}),

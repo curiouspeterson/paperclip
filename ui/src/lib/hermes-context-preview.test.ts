@@ -15,7 +15,7 @@ describe("buildHermesContextPreview", () => {
 
   it("builds SOUL.md and AGENTS.md from company profile fields", () => {
     const docs = buildHermesContextPreview({
-      companyName: "Romance Unzipped",
+      companyName: "Paper Trail Weekly",
       voiceDescription: "Warm, candid, and insight-heavy.",
       targetAudience: "Romance readers who like sharp emotional analysis.",
       defaultChannel: "Newsletter",
@@ -25,7 +25,7 @@ describe("buildHermesContextPreview", () => {
     });
 
     expect(docs.map((doc) => doc.key)).toEqual(["SOUL.md", "AGENTS.md"]);
-    expect(docs[0]?.content).toContain("Company: Romance Unzipped");
+    expect(docs[0]?.content).toContain("Company: Paper Trail Weekly");
     expect(docs[0]?.content).toContain("## How We Describe Our Voice");
     expect(docs[0]?.content).toContain("1. Sample right");
     expect(docs[1]?.content).toContain("## Audience");
@@ -36,7 +36,7 @@ describe("buildHermesContextPreview", () => {
   it("includes USER.md and MEMORY.md when memory seeding is enabled", () => {
     const docs = buildHermesContextPreview(
       {
-        companyName: "Romance Unzipped",
+        companyName: "Paper Trail Weekly",
         targetAudience: "Readers",
         defaultChannel: "Instagram",
         defaultGoal: "Drive replies",
@@ -60,7 +60,7 @@ describe("buildHermesContextPreview", () => {
   it("builds a copyable bundle and archive file map", () => {
     const docs = buildHermesContextPreview(
       {
-        companyName: "Romance Unzipped",
+        companyName: "Paper Trail Weekly",
         voiceDescription: "Warm and candid.",
       },
       { includeMemoryDocs: true },
@@ -92,7 +92,7 @@ describe("buildHermesContextPreview", () => {
   it("derives effective Hermes context docs from agent config and company defaults", () => {
     const preview = buildEffectiveHermesContextPreview({
       profile: {
-        companyName: "Romance Unzipped",
+        companyName: "Paper Trail Weekly",
         voiceDescription: "Warm and candid.",
         targetAudience: "Readers",
       },
@@ -124,7 +124,7 @@ describe("buildHermesContextPreview", () => {
   it("suppresses docs when the effective agent policy does not use a managed Hermes home", () => {
     const preview = buildEffectiveHermesContextPreview({
       profile: {
-        companyName: "Romance Unzipped",
+        companyName: "Paper Trail Weekly",
         voiceDescription: "Warm and candid.",
       },
       agentConfig: {},
@@ -148,7 +148,7 @@ describe("buildHermesContextPreview", () => {
   it("reports no diff when the agent inherits the company Hermes context policy", () => {
     const diff = buildHermesEffectiveContextDiff({
       profile: {
-        companyName: "Romance Unzipped",
+        companyName: "Paper Trail Weekly",
         voiceDescription: "Warm and candid.",
       },
       agentConfig: {},
@@ -165,7 +165,7 @@ describe("buildHermesContextPreview", () => {
   it("reports a managed-home override when the agent disables managed Hermes context files", () => {
     const diff = buildHermesEffectiveContextDiff({
       profile: {
-        companyName: "Romance Unzipped",
+        companyName: "Paper Trail Weekly",
         voiceDescription: "Warm and candid.",
       },
       agentConfig: {
@@ -189,7 +189,7 @@ describe("buildHermesContextPreview", () => {
   it("reports memory-doc deltas when the agent enables company profile memory seeding", () => {
     const diff = buildHermesEffectiveContextDiff({
       profile: {
-        companyName: "Romance Unzipped",
+        companyName: "Paper Trail Weekly",
         voiceDescription: "Warm and candid.",
         targetAudience: "Readers",
       },

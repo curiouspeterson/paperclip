@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
+import { parseApprovalPayload } from "@paperclipai/shared";
 import { approvalComments, approvals } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 import { redactCurrentUserText } from "../log-redaction.js";
@@ -133,7 +134,12 @@ export function approvalService(db: Db) {
 
         let hireApprovedAgentId: string | null = null;
         if (applied && updated.type === "hire_agent") {
-          const payload = updated.payload as Record<string, unknown>;
+          let payload: ReturnType<typeof parseApprovalPayload<"hire_agent">>;
+          try {
+            payload = parseApprovalPayload("hire_agent", updated.payload);
+          } catch {
+            throw unprocessable("Invalid hire agent approval payload");
+          }
           const payloadAgentId = typeof payload.agentId === "string" ? payload.agentId : null;
           if (payloadAgentId) {
             await txAgents.activatePendingApproval(payloadAgentId);

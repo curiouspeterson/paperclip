@@ -355,7 +355,7 @@ describe("heartbeat orphaned process recovery", () => {
 
     await db.insert(companies).values({
       id: companyId,
-      name: "Romance Unzipped",
+      name: "Paper Trail Weekly",
       issuePrefix,
       requireBoardApprovalForNewAgents: false,
     });
@@ -476,7 +476,7 @@ describe("heartbeat orphaned process recovery", () => {
 
     await db.insert(companies).values({
       id: companyId,
-      name: "Romance Unzipped",
+      name: "Paper Trail Weekly",
       issuePrefix,
       requireBoardApprovalForNewAgents: false,
     });

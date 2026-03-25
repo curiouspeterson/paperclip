@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { renderTemplate } from "@paperclipai/adapter-utils/server-utils";
 import {
   finalizeHermesLocalEnvironmentTestResult,
   normalizeHermesLocalExecutionSummary,
@@ -60,6 +61,25 @@ describe("prepareHermesLocalExecutionConfig", () => {
     expect(String(first.promptTemplate)).toContain("Paperclip structured response contract:");
     expect(String(second.promptTemplate).match(/Paperclip issue workflow note:/g)?.length ?? 0).toBe(1);
     expect(String(second.promptTemplate).match(/Paperclip structured response contract:/g)?.length ?? 0).toBe(1);
+  });
+
+  it("uses only simple template variables so assigned-task prompts do not leak the no-task workflow", () => {
+    const config = prepareHermesLocalExecutionConfig({}, { authToken: "paperclip-token" });
+    const promptTemplate = String(config.promptTemplate ?? "");
+    const rendered = renderTemplate(promptTemplate, {
+      agentName: "VP Technical",
+      agentId: "agent-1",
+      companyId: "company-1",
+      paperclipApiUrl: "http://127.0.0.1:3100/api",
+      taskId: "issue-1",
+      taskTitle: "Bootstrap the runtime",
+      taskBody: "Fix the broken heartbeat path.",
+    });
+
+    expect(promptTemplate).not.toContain("{{#");
+    expect(promptTemplate).not.toContain("{{/");
+    expect(rendered).toContain("Issue ID: issue-1");
+    expect(rendered).toContain("If Issue ID is non-empty, this run is already assigned to that issue.");
   });
 
   it("normalizes provider-prefixed zai models into the provider flag plus bare model name", () => {

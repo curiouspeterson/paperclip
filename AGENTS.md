@@ -56,7 +56,28 @@ rm -rf ~/.paperclip/instances/default/db
 pnpm dev
 ```
 
-## 5. Core Engineering Rules
+## 5. Git Branch Workflow
+
+Paperclip's canonical upstream default branch is `master`, not `main`.
+
+- When this repository is checked out as a fork with an `upstream` remote, treat `upstream/master` as the source of truth.
+- Keep local `master` clean and disposable. Do not commit directly to `master`; do real work on feature branches.
+- Before starting work, prefer updating `master` from upstream, then branching from that clean base.
+- If `master` is only a mirror branch, the safe sync flow is:
+
+```sh
+git fetch upstream
+git switch master
+git reset --hard upstream/master
+git push --force-with-lease origin master
+```
+
+- Rebase feature branches onto `upstream/master` or a freshly synced local `master`.
+- Use `--force-with-lease` when updating rebased feature branches on your fork.
+- Never use `main` as the Paperclip upstream branch name in repo instructions, examples, or automation.
+- Do not hard-reset `master` if it contains unique local commits or is being used as a shared collaboration branch.
+
+## 6. Core Engineering Rules
 
 1. Keep changes company-scoped.
 Every domain entity should be scoped to a company and company boundaries must be enforced in routes/services.
@@ -81,7 +102,7 @@ Prefer additive updates. Keep `doc/SPEC.md` and `doc/SPEC-implementation.md` ali
 5. Keep plan docs dated and centralized.
 New plan documents belong in `doc/plans/` and should use `YYYY-MM-DD-slug.md` filenames.
 
-## 6. Database Change Workflow
+## 7. Database Change Workflow
 
 When changing data model:
 
@@ -103,7 +124,7 @@ Notes:
 - `packages/db/drizzle.config.ts` reads compiled schema from `dist/schema/*.js`
 - `pnpm db:generate` compiles `packages/db` first
 
-## 7. Verification Before Hand-off
+## 8. Verification Before Hand-off
 
 Run this full check before claiming done:
 
@@ -115,7 +136,7 @@ pnpm build
 
 If anything cannot be run, explicitly report what was not run and why.
 
-## 8. API and Auth Expectations
+## 9. API and Auth Expectations
 
 - Base path: `/api`
 - Board access is treated as full-control operator context
@@ -129,13 +150,13 @@ When adding endpoints:
 - write activity log entries for mutations
 - return consistent HTTP errors (`400/401/403/404/409/422/500`)
 
-## 9. UI Expectations
+## 10. UI Expectations
 
 - Keep routes and nav aligned with available API surface
 - Use company selection context for company-scoped pages
 - Surface failures clearly; do not silently ignore API errors
 
-## 10. Definition of Done
+## 11. Definition of Done
 
 A change is done when all are true:
 

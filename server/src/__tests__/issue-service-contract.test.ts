@@ -296,6 +296,62 @@ describe("issue service contracts", () => {
     expect(released?.assigneeUserId).toBeNull();
   });
 
+  it("rejects releasing a done issue through the release path", async () => {
+    const companyId = await seedCompany("Alpha");
+    const issueId = randomUUID();
+    const completedAt = new Date("2026-03-20T12:00:00.000Z");
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Done issue",
+      status: "done",
+      priority: "medium",
+      completedAt,
+    });
+
+    await expect(issueService(db).release(issueId)).rejects.toMatchObject({
+      status: 409,
+      message: "Cannot release issue from terminal status",
+    });
+
+    const persisted = await db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+    expect(persisted?.status).toBe("done");
+    expect(persisted?.completedAt?.toISOString()).toBe(completedAt.toISOString());
+  });
+
+  it("rejects releasing a cancelled issue through the release path", async () => {
+    const companyId = await seedCompany("Alpha");
+    const issueId = randomUUID();
+    const cancelledAt = new Date("2026-03-20T12:00:00.000Z");
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Cancelled issue",
+      status: "cancelled",
+      priority: "medium",
+      cancelledAt,
+    });
+
+    await expect(issueService(db).release(issueId)).rejects.toMatchObject({
+      status: 409,
+      message: "Cannot release issue from terminal status",
+    });
+
+    const persisted = await db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+    expect(persisted?.status).toBe("cancelled");
+    expect(persisted?.cancelledAt?.toISOString()).toBe(cancelledAt.toISOString());
+  });
+
   it("does not traverse parent issues from another company", async () => {
     const companyId = await seedCompany("Alpha");
     const foreignCompanyId = await seedCompany("Beta");

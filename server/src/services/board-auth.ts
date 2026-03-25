@@ -15,6 +15,7 @@ export const BOARD_API_KEY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const CLI_AUTH_CHALLENGE_TTL_MS = 10 * 60 * 1000;
 
 export type CliAuthChallengeStatus = "pending" | "approved" | "cancelled" | "expired";
+type CliAuthApprover = string | { userId: string; companyIds?: string[]; isInstanceAdmin?: boolean };
 
 export function hashBearerToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -249,8 +250,14 @@ export function boardAuthService(db: Db) {
     };
   }
 
-  async function approveCliAuthChallenge(id: string, token: string, userId: string) {
-    const access = await resolveBoardAccess(userId);
+  async function approveCliAuthChallenge(id: string, token: string, approvedBy: CliAuthApprover) {
+    const approver = typeof approvedBy === "string" ? { userId: approvedBy } : approvedBy;
+    const resolvedAccess = await resolveBoardAccess(approver.userId);
+    const access = {
+      ...resolvedAccess,
+      companyIds: approver.companyIds ?? resolvedAccess.companyIds,
+      isInstanceAdmin: approver.isInstanceAdmin ?? resolvedAccess.isInstanceAdmin,
+    };
     return db.transaction(async (tx) => {
       await tx.execute(
         sql`select ${cliAuthChallenges.id} from ${cliAuthChallenges} where ${cliAuthChallenges.id} = ${id} for update`,
@@ -272,13 +279,20 @@ export function boardAuthService(db: Db) {
       if (challenge.requestedAccess === "instance_admin_required" && !access.isInstanceAdmin) {
         throw forbidden("Instance admin required");
       }
+      if (
+        challenge.requestedCompanyId &&
+        !access.isInstanceAdmin &&
+        !access.companyIds.includes(challenge.requestedCompanyId)
+      ) {
+        throw forbidden("User does not have access to the requested company");
+      }
 
       let boardKeyId = challenge.boardApiKeyId;
       if (!boardKeyId) {
         const createdKey = await tx
           .insert(boardApiKeys)
           .values({
-            userId,
+            userId: approver.userId,
             name: challenge.pendingKeyName,
             keyHash: challenge.pendingKeyHash,
             expiresAt: boardApiKeyExpiresAt(),
@@ -292,7 +306,7 @@ export function boardAuthService(db: Db) {
       const updated = await tx
         .update(cliAuthChallenges)
         .set({
-          approvedByUserId: userId,
+          approvedByUserId: approver.userId,
           boardApiKeyId: boardKeyId,
           approvedAt,
           updatedAt: new Date(),

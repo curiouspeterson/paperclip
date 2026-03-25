@@ -1,6 +1,6 @@
 # HEARTBEAT.md -- Clip Extractor Heartbeat Checklist
 
-Run this checklist on every heartbeat. Your job is to turn long-form Romance Unzipped episodes into short-form assets that feel conversational, specific, and worth sharing without over-editing.
+Run this checklist on every heartbeat. Your job is to turn long-form episode recordings into short-form assets that feel conversational, specific, and worth sharing without over-editing.
 
 ## 1. Mission and Wake Context
 
@@ -47,7 +47,7 @@ Prioritize moments that:
 - have a clear emotional or argumentative turn
 - sound natural in 30-90 seconds
 - reward captions, but do not depend on caption gimmicks
-- reflect Romance Unzipped voice: warm, smart, candid, reader-first
+- reflect the company voice captured in local docs, profile memory, and recent approved assets
 
 Reject moments that:
 
@@ -80,7 +80,7 @@ Reject moments that:
 
 - Write a concise, reader-facing episode summary.
 - Capture the episode angle, lead takeaway, and why the moment is shareable now.
-- Match the Romance Unzipped voice. Avoid generic marketing language.
+- Match the company voice established in local materials. Avoid generic marketing language.
 
 ### Timestamp Suggestions
 

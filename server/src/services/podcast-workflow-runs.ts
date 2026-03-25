@@ -7,17 +7,13 @@ import type {
   WorkspaceOperation,
 } from "@paperclipai/shared";
 import type { WorkspaceOperationRecorder } from "./workspace-operations.js";
+import { resolvePodcastWorkflowPythonBin } from "./podcast-workflow-env.js";
+import {
+  resolvePodcastWorkflowCwd,
+  resolvePodcastWorkflowPath,
+} from "./podcast-workflow-defaults.js";
 
 type RunAction = RunPodcastWorkflow["action"];
-
-function resolvePythonBin(): string {
-  return (
-    process.env.PAPERCLIP_PYTHON_BIN?.trim() ||
-    process.env.RU_PYTHON_BIN?.trim() ||
-    process.env.PYTHON_BIN?.trim() ||
-    "python3"
-  );
-}
 
 function requireString(
   value: string | null | undefined,
@@ -33,9 +29,11 @@ function requireScriptPath(
   scriptPath: string | null | undefined,
   action: RunAction,
 ): string {
-  const resolved = requireString(scriptPath, `Workflow is missing a script ref for ${action}`);
-  if (!path.isAbsolute(resolved)) {
-    throw new Error(`Script ref for ${action} must be an absolute path`);
+  const resolved = resolvePodcastWorkflowPath(
+    requireString(scriptPath, `Workflow is missing a script ref for ${action}`),
+  );
+  if (!resolved) {
+    throw new Error(`Workflow is missing a script ref for ${action}`);
   }
   if (!fs.existsSync(resolved)) {
     throw new Error(`Script not found for ${action}: ${resolved}`);
@@ -48,7 +46,9 @@ function resolveManifestPath(
   input: RunPodcastWorkflow,
 ): string {
   return requireString(
-    input.manifestPath ?? workflow.manifest.manifestPath,
+    resolvePodcastWorkflowPath(
+      input.manifestPath ?? workflow.manifest.manifestPath,
+    ),
     "Manifest path is required for this workflow action",
   );
 }
@@ -58,17 +58,11 @@ function resolveRuntimeRoot(
   input: RunPodcastWorkflow,
 ): string {
   return requireString(
-    input.runtimeRoot ?? workflow.manifest.runtimeRoot,
+    resolvePodcastWorkflowPath(
+      input.runtimeRoot ?? workflow.manifest.runtimeRoot,
+    ),
     "Runtime root is required for this workflow action",
   );
-}
-
-function commandForScript(scriptPath: string) {
-  const ext = path.extname(scriptPath).toLowerCase();
-  if (ext === ".py") return { command: resolvePythonBin(), args: [scriptPath] };
-  if (ext === ".mjs") return { command: "node", args: [scriptPath] };
-  if (ext === ".sh") return { command: "bash", args: [scriptPath] };
-  throw new Error(`Unsupported script type: ${scriptPath}`);
 }
 
 function buildActionInvocation(workflow: PodcastWorkflow, input: RunPodcastWorkflow) {
@@ -202,6 +196,13 @@ function buildActionInvocation(workflow: PodcastWorkflow, input: RunPodcastWorkf
       throw new Error(`Unsupported scripted workflow action: ${String(input.action)}`);
   }
 }
+function commandForScript(scriptPath: string) {
+  const ext = path.extname(scriptPath).toLowerCase();
+  if (ext === ".py") return { command: resolvePodcastWorkflowPythonBin(), args: [scriptPath] };
+  if (ext === ".mjs") return { command: "node", args: [scriptPath] };
+  if (ext === ".sh") return { command: "bash", args: [scriptPath] };
+  throw new Error(`Unsupported script type: ${scriptPath}`);
+}
 
 function patchWorkflowAfterRun(
   workflow: PodcastWorkflow,
@@ -300,11 +301,7 @@ export async function runPodcastWorkflowAction(input: {
   recorder: WorkspaceOperationRecorder;
 }) {
   const invocation = buildActionInvocation(input.workflow, input.request);
-  const cwd =
-    (typeof input.workflow.metadata?.repositoryPath === "string" &&
-    input.workflow.metadata.repositoryPath.length > 0
-      ? input.workflow.metadata.repositoryPath
-      : path.dirname(invocation.scriptPath));
+  const cwd = resolvePodcastWorkflowCwd(input.workflow);
 
   const operation = await input.recorder.recordOperation({
     phase: "external_workflow_run",

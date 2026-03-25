@@ -2,7 +2,9 @@ import { Router, type Request, type Response } from "express";
 import type { Db } from "@paperclipai/db";
 import {
   addApprovalCommentSchema,
+  type ApprovalType,
   createApprovalSchema,
+  parseApprovalPayload,
   requestApprovalRevisionSchema,
   resolveApprovalSchema,
   resubmitApprovalSchema,
@@ -341,10 +343,10 @@ export function approvalRoutes(db: Db) {
       ? existing.type === "hire_agent"
         ? await secretsSvc.normalizeHireApprovalPayloadForPersistence(
             existing.companyId,
-            req.body.payload,
+            parseApprovalPayload(existing.type as ApprovalType, req.body.payload),
             { strictMode: strictSecretsMode },
           )
-        : req.body.payload
+        : parseApprovalPayload(existing.type as ApprovalType, req.body.payload)
       : undefined;
     const approval = await svc.resubmit(id, normalizedPayload);
     const actor = getActorInfo(req);

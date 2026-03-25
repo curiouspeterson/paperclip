@@ -47,7 +47,10 @@ function createApproval(status: string): ApprovalRecord {
     companyId: "company-1",
     type: "hire_agent",
     status,
-    payload: { agentId: "agent-1" },
+    payload: {
+      agentId: "11111111-1111-4111-8111-111111111111",
+      name: "Agent One",
+    },
     requestedByAgentId: "requester-1",
   };
 }
@@ -164,7 +167,9 @@ describe("approvalService resolution idempotency", () => {
     const result = await svc.approve("approval-1", "board", "ship it");
 
     expect(result.applied).toBe(true);
-    expect(mockAgentService.activatePendingApproval).toHaveBeenCalledWith("agent-1");
+    expect(mockAgentService.activatePendingApproval).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+    );
     expect(mockNotifyHireApproved).toHaveBeenCalledTimes(1);
   });
 
@@ -178,7 +183,9 @@ describe("approvalService resolution idempotency", () => {
 
     expect(result.applied).toBe(true);
     expect(transaction).toHaveBeenCalledTimes(1);
-    expect(mockAgentService.activatePendingApproval).toHaveBeenCalledWith("agent-1");
+    expect(mockAgentService.activatePendingApproval).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+    );
   });
 
   it("does not emit hire notifications when a transactional approval side effect fails", async () => {
@@ -210,6 +217,25 @@ describe("approvalService resolution idempotency", () => {
     await expect(svc.requestRevision("approval-1", "board", "revise")).rejects.toThrow(
       /Resolve budget override approvals from the budget incident controls/i,
     );
+  });
+
+  it("rejects malformed hire approvals instead of creating default agents", async () => {
+    const invalidApproval = {
+      ...createApproval("pending"),
+      payload: {},
+    };
+    const dbStub = createDbStub(
+      [[invalidApproval]],
+      [{ ...invalidApproval, status: "approved" }],
+    );
+    const svc = approvalService(dbStub.db as any);
+
+    await expect(svc.approve("approval-1", "board", "ship it")).rejects.toThrow(
+      /Invalid hire agent approval payload/i,
+    );
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+    expect(mockAgentService.activatePendingApproval).not.toHaveBeenCalled();
+    expect(mockNotifyHireApproved).not.toHaveBeenCalled();
   });
 
   it("lists approval comments for the approval company", async () => {

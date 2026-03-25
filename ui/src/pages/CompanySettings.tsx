@@ -1219,7 +1219,7 @@ export function CompanySettings() {
                     <div>
                       <div className="text-sm font-medium">Default newsletter settings</div>
                       <p className="text-xs text-muted-foreground">
-                        Persist the audience, template, and sender values Romance Unzipped should use by default.
+                        Persist the audience, template, and sender values this company should use by default.
                       </p>
                     </div>
                     <Button

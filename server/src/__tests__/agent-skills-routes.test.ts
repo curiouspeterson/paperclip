@@ -366,7 +366,7 @@ describe("agent skill routes", () => {
         command: "python3",
         args: ["scripts/hermes_paperclip_worker.py"],
         browserAutomationProvider: "playwright",
-        browserSessionProfile: "romance-unzipped",
+        browserSessionProfile: "company-session-profile",
         browserHeadless: true,
         env: {
           HERMES_PROVIDER: { type: "plain", value: "zai" },
@@ -401,7 +401,7 @@ describe("agent skill routes", () => {
             ZAI_API_KEY: { type: "secret_ref", secretId: "secret-1", version: "latest" },
           }),
           browserAutomationProvider: "playwright",
-          browserSessionProfile: "romance-unzipped",
+          browserSessionProfile: "company-session-profile",
           browserHeadless: true,
         }),
       }),

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { podcastWorkflows } from "@paperclipai/db";
 import type { PodcastWorkflow, PodcastWorkflowStageState, PodcastWorkflowStatus } from "@paperclipai/shared";
+import { resolvePodcastWorkflowPath } from "./podcast-workflow-defaults.js";
 
 const PROCESSED_STAGE_KEYS = [
   "transcript",
@@ -62,7 +63,11 @@ function deriveWorkflowStatus(stageStatus: Record<string, PodcastWorkflowStageSt
 }
 
 function listEpisodeManifestPaths(runtimeRoot: string): string[] {
-  const episodesDir = path.resolve(runtimeRoot, "episodes");
+  const resolvedRuntimeRoot = resolvePodcastWorkflowPath(runtimeRoot);
+  if (!resolvedRuntimeRoot) {
+    return [];
+  }
+  const episodesDir = path.resolve(resolvedRuntimeRoot, "episodes");
   if (!fs.existsSync(episodesDir) || !fs.statSync(episodesDir).isDirectory()) {
     return [];
   }

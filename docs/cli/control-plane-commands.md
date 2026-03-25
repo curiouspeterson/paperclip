@@ -56,6 +56,8 @@ pnpm paperclipai company import \
   --include company,agents
 ```
 
+In `authenticated` deployments, `company import` may prompt for board authentication. The CLI opens a browser approval page, exchanges the approved challenge for a board API token, and reuses that stored credential on later board-scoped commands until you log out or revoke it.
+
 ## Agent Commands
 
 ```sh

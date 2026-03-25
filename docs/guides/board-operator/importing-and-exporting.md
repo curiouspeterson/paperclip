@@ -140,6 +140,8 @@ The preview shows:
 - **Env inputs** — Environment variables that may need values after import
 - **Warnings** — Potential issues like missing skills or unresolved references
 
+In `authenticated` deployments, the CLI may require board approval before it can apply an import. When that happens, it opens a browser approval page, waits for the `/api/cli-auth/challenges/:id` flow to be approved, then stores the returned board API token for later board-scoped commands.
+
 Imported agents always land with timer heartbeats disabled. Assignment/on-demand wake behavior from the package is preserved, but scheduled runs stay off until a board operator re-enables them.
 
 ### Common Workflows

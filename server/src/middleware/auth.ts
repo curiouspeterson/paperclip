@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import type { Request, RequestHandler } from "express";
 import { and, eq, isNull } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { agentApiKeys, agents, companyMemberships, instanceUserRoles } from "@paperclipai/db";
+import {
+  agentApiKeys,
+  agents,
+  boardApiKeys,
+  companyMemberships,
+  instanceUserRoles,
+} from "@paperclipai/db";
 import { verifyLocalAgentJwt } from "../agent-auth-jwt.js";
 import type { DeploymentMode } from "@paperclipai/shared";
 import type { BetterAuthSessionResult } from "../auth/better-auth.js";
@@ -15,6 +21,31 @@ function hashToken(token: string) {
 interface ActorMiddlewareOptions {
   deploymentMode: DeploymentMode;
   resolveSession?: (req: Request) => Promise<BetterAuthSessionResult | null>;
+}
+
+async function resolveBoardActorAccess(db: Db, userId: string) {
+  const [roleRow, memberships] = await Promise.all([
+    db
+      .select({ id: instanceUserRoles.id })
+      .from(instanceUserRoles)
+      .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
+      .then((rows) => rows[0] ?? null),
+    db
+      .select({ companyId: companyMemberships.companyId })
+      .from(companyMemberships)
+      .where(
+        and(
+          eq(companyMemberships.principalType, "user"),
+          eq(companyMemberships.principalId, userId),
+          eq(companyMemberships.status, "active"),
+        ),
+      ),
+  ]);
+
+  return {
+    companyIds: memberships.map((row) => row.companyId),
+    isInstanceAdmin: Boolean(roleRow),
+  };
 }
 
 export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHandler {
@@ -40,28 +71,12 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
         }
         if (session?.user?.id) {
           const userId = session.user.id;
-          const [roleRow, memberships] = await Promise.all([
-            db
-              .select({ id: instanceUserRoles.id })
-              .from(instanceUserRoles)
-              .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
-              .then((rows) => rows[0] ?? null),
-            db
-              .select({ companyId: companyMemberships.companyId })
-              .from(companyMemberships)
-              .where(
-                and(
-                  eq(companyMemberships.principalType, "user"),
-                  eq(companyMemberships.principalId, userId),
-                  eq(companyMemberships.status, "active"),
-                ),
-              ),
-          ]);
+          const access = await resolveBoardActorAccess(db, userId);
           req.actor = {
             type: "board",
             userId,
-            companyIds: memberships.map((row) => row.companyId),
-            isInstanceAdmin: Boolean(roleRow),
+            companyIds: access.companyIds,
+            isInstanceAdmin: access.isInstanceAdmin,
             runId: runIdHeader ?? undefined,
             source: "session",
           };
@@ -81,6 +96,33 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
     }
 
     const tokenHash = hashToken(token);
+    const now = new Date();
+    const boardKey = await db
+      .select()
+      .from(boardApiKeys)
+      .where(and(eq(boardApiKeys.keyHash, tokenHash), isNull(boardApiKeys.revokedAt)))
+      .then((rows) => rows.find((row) => !row.expiresAt || row.expiresAt.getTime() > now.getTime()) ?? null);
+
+    if (boardKey) {
+      await db
+        .update(boardApiKeys)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(boardApiKeys.id, boardKey.id));
+
+      const access = await resolveBoardActorAccess(db, boardKey.userId);
+      req.actor = {
+        type: "board",
+        userId: boardKey.userId,
+        companyIds: access.companyIds,
+        isInstanceAdmin: access.isInstanceAdmin,
+        keyId: boardKey.id,
+        runId: runIdHeader || undefined,
+        source: "board_key",
+      };
+      next();
+      return;
+    }
+
     const key = await db
       .select()
       .from(agentApiKeys)

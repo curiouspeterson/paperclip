@@ -23,6 +23,36 @@ GitHub Actions owns `pnpm-lock.yaml`.
 - Pull request CI validates dependency resolution when manifests change.
 - Pushes to `master` regenerate `pnpm-lock.yaml` with `pnpm install --lockfile-only --no-frozen-lockfile`, commit it back if needed, and then run verification with `--frozen-lockfile`.
 
+## Fork Sync And Branch Hygiene
+
+For `paperclipai/paperclip`, the canonical upstream default branch is `master`.
+
+- Treat `upstream/master` as the source of truth.
+- Keep your fork's `master` clean and disposable.
+- Do not commit directly to `master`; create short-lived feature branches for real work.
+- Rebase feature branches onto `upstream/master` or a freshly synced local `master`.
+- Use `--force-with-lease` when pushing rebased branches back to your fork.
+
+If your fork's `master` is only a mirror of the upstream project, the recommended sync flow is:
+
+```sh
+git fetch upstream
+git switch master
+git reset --hard upstream/master
+git push --force-with-lease origin master
+```
+
+Then create or refresh your work branch from that clean base:
+
+```sh
+git switch -c fix/issue-lock-cleanup
+# or, if the branch already exists:
+git switch fix/issue-lock-cleanup
+git rebase master
+```
+
+Do not hard-reset `master` if it contains unique local commits or is being used as a shared collaboration branch.
+
 ## Start Dev
 
 From repo root:
@@ -210,7 +240,7 @@ paperclipai worktree init --force
 
 | Option | Description |
 |---|---|
-| `--start-point <ref>` | Remote ref to base the new branch on (e.g. `origin/main`) |
+| `--start-point <ref>` | Remote ref to base the new branch on (e.g. `origin/master`) |
 | `--instance <id>` | Explicit isolated instance id |
 | `--home <path>` | Home root for worktree instances (default: `~/.paperclip-worktrees`) |
 | `--from-config <path>` | Source config.json to seed from |
@@ -226,7 +256,7 @@ Examples:
 
 ```sh
 pnpm paperclipai worktree:make paperclip-pr-432
-pnpm paperclipai worktree:make my-feature --start-point origin/main
+pnpm paperclipai worktree:make my-feature --start-point origin/master
 pnpm paperclipai worktree:make experiment --no-seed
 ```
 

@@ -40,9 +40,9 @@ describe("mailchimpService", () => {
       .mockResolvedValueOnce(jsonResponse({ health_status: "Everything's Chimpy!" }))
       .mockResolvedValueOnce(
         jsonResponse({
-          account_name: "Romance Unzipped",
-          username: "romanceunzipped@gmail.com",
-          email: "romanceunzipped@gmail.com",
+          account_name: "Paper Trail Weekly",
+          username: "editor@example.com",
+          email: "editor@example.com",
           role: "owner",
           pricing_plan_type: "forever_free",
         }),
@@ -56,8 +56,8 @@ describe("mailchimpService", () => {
               name: "Writer",
               permission_reminder: "You opted in on the website.",
               campaign_defaults: {
-                from_name: "Annie",
-                from_email: "romanceunzipped@gmail.com",
+                from_name: "Editor",
+                from_email: "editor@example.com",
               },
               stats: {
                 member_count: 203,
@@ -77,10 +77,10 @@ describe("mailchimpService", () => {
               send_time: null,
               settings: {
                 title: "Welcome Newsletter",
-                subject_line: "Welcome to Romance Unzipped",
+                subject_line: "Welcome to Paper Trail Weekly",
                 preview_text: "Fresh romance recs",
-                from_name: "Annie",
-                reply_to: "romanceunzipped@gmail.com",
+                from_name: "Editor",
+                reply_to: "editor@example.com",
               },
               recipients: {
                 list_id: "e37373151b",
@@ -101,7 +101,7 @@ describe("mailchimpService", () => {
       id: "e37373151b",
       name: "Writer",
       memberCount: 203,
-      fromEmail: "romanceunzipped@gmail.com",
+      fromEmail: "editor@example.com",
     });
     expect(overview.campaigns[0]).toMatchObject({
       id: "c54ee44f11",
@@ -125,9 +125,9 @@ describe("mailchimpService", () => {
           settings: {
             title: "Episode Drop",
             subject_line: "New episode live",
-            preview_text: "This week on Romance Unzipped",
-            from_name: "Annie",
-            reply_to: "romanceunzipped@gmail.com",
+            preview_text: "This week on Paper Trail Weekly",
+            from_name: "Editor",
+            reply_to: "editor@example.com",
           },
           recipients: {
             list_id: "e37373151b",
@@ -142,9 +142,9 @@ describe("mailchimpService", () => {
       templateId: "10731120",
       title: "Episode Drop",
       subjectLine: "New episode live",
-      previewText: "This week on Romance Unzipped",
-      fromName: "Annie",
-      replyTo: "romanceunzipped@gmail.com",
+      previewText: "This week on Paper Trail Weekly",
+      fromName: "Editor",
+      replyTo: "editor@example.com",
       html: `
         <div mc:edit="preheader_text">Preview override</div>
         <h2 mc:edit="episode_title">Episode override</h2>
@@ -200,8 +200,8 @@ describe("mailchimpService", () => {
             title: "HTML Only",
             subject_line: "HTML Only",
             preview_text: "HTML preview",
-            from_name: "Annie",
-            reply_to: "romanceunzipped@gmail.com",
+            from_name: "Editor",
+            reply_to: "editor@example.com",
           },
           recipients: {
             list_id: "e37373151b",
@@ -217,8 +217,8 @@ describe("mailchimpService", () => {
       title: "HTML Only",
       subjectLine: "HTML Only",
       previewText: "HTML preview",
-      fromName: "Annie",
-      replyTo: "romanceunzipped@gmail.com",
+      fromName: "Editor",
+      replyTo: "editor@example.com",
       html: "<h1>No template sections here</h1>",
       plainText: "HTML Only",
     });

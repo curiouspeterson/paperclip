@@ -7,6 +7,7 @@ import type {
   RunPodcastWorkflow,
 } from "@paperclipai/shared";
 import type { StorageService } from "../storage/types.js";
+import { resolvePodcastWorkflowPath } from "./podcast-workflow-defaults.js";
 import { documentService } from "./documents.js";
 import { issueService } from "./issues.js";
 import { logActivity } from "./activity-log.js";
@@ -93,15 +94,16 @@ function requireManifestPath(
   workflow: PodcastWorkflow,
   request: RunPodcastWorkflow,
 ): string {
-  const manifestPath = request.manifestPath ?? workflow.manifest.manifestPath;
+  const manifestPath = resolvePodcastWorkflowPath(
+    request.manifestPath ?? workflow.manifest.manifestPath,
+  );
   if (!manifestPath || !manifestPath.trim()) {
     throw new Error("Manifest path is required for sync_to_paperclip");
   }
-  const resolved = path.resolve(manifestPath);
-  if (!fs.existsSync(resolved)) {
-    throw new Error(`Manifest file not found: ${resolved}`);
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error(`Manifest file not found: ${manifestPath}`);
   }
-  return resolved;
+  return manifestPath;
 }
 
 function requireReadyStatuses(manifest: Record<string, unknown>) {

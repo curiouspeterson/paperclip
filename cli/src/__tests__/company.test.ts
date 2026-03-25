@@ -12,6 +12,36 @@ import {
   resolveCompanyImportApiPath,
 } from "../commands/client/company.js";
 
+type CompanyManifest = NonNullable<CompanyPortabilityPreviewResult["manifest"]["company"]>;
+
+function createCompanyManifest(overrides?: Partial<CompanyManifest>): CompanyManifest {
+  return {
+    path: "COMPANY.md",
+    name: "Source Co",
+    description: null,
+    brandColor: null,
+    logoPath: null,
+    requireBoardApprovalForNewAgents: false,
+    agentDefaultAdapterType: null,
+    agentDefaultProvider: null,
+    agentDefaultModel: null,
+    agentDefaultHeartbeatIntervalSec: null,
+    agentDefaultWakeOnDemand: null,
+    agentDefaultCooldownSec: null,
+    agentDefaultMaxConcurrentRuns: null,
+    agentDefaultMaxTurnsPerRun: null,
+    agentDefaultBrowserAutomationProvider: null,
+    agentDefaultHermesManagedHome: null,
+    agentDefaultHermesSeedCompanyProfileMemory: null,
+    agentDefaultHermesToolsets: null,
+    agentDefaultHermesAllowedMcpServers: null,
+    agentDefaultHermesMcpServers: null,
+    agentDefaultDangerouslySkipPermissions: null,
+    agentDefaultDangerouslyBypassSandbox: null,
+    ...overrides,
+  };
+}
+
 describe("resolveCompanyImportApiPath", () => {
   it("uses company-scoped preview route for existing-company dry runs", () => {
     expect(
@@ -156,14 +186,7 @@ describe("renderCompanyImportPreview", () => {
           issues: true,
           skills: true,
         },
-        company: {
-          path: "COMPANY.md",
-          name: "Source Co",
-          description: null,
-          brandColor: null,
-          logoPath: null,
-          requireBoardApprovalForNewAgents: false,
-        },
+        company: createCompanyManifest(),
         sidebar: {
           agents: ["ceo"],
           projects: ["alpha"],
@@ -364,14 +387,9 @@ describe("import selection catalog", () => {
           issues: true,
           skills: true,
         },
-        company: {
-          path: "COMPANY.md",
-          name: "Source Co",
-          description: null,
-          brandColor: null,
+        company: createCompanyManifest({
           logoPath: "images/company-logo.png",
-          requireBoardApprovalForNewAgents: false,
-        },
+        }),
         sidebar: {
           agents: ["ceo"],
           projects: ["alpha"],

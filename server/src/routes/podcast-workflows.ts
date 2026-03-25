@@ -13,6 +13,10 @@ import {
   podcastWorkflowService,
   workspaceOperationService,
 } from "../services/index.js";
+import {
+  buildPodcastWorkflowSeed,
+  resolvePodcastWorkflowCwd,
+} from "../services/podcast-workflow-defaults.js";
 import { runPodcastWorkflowAction } from "../services/podcast-workflow-runs.js";
 import { syncPodcastWorkflowToPaperclip } from "../services/podcast-workflow-sync.js";
 import type { StorageService } from "../storage/types.js";
@@ -56,8 +60,29 @@ export function podcastWorkflowRoutes(db: Db, storage: StorageService) {
     async (req, res) => {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
+      const defaults = buildPodcastWorkflowSeed(req.body.type);
       const workflow = await svc.create(companyId, {
+        ...defaults,
         ...req.body,
+        title: req.body.title ?? defaults.title,
+        description: req.body.description ?? defaults.description,
+        status: req.body.status ?? defaults.status,
+        manifest: {
+          ...defaults.manifest,
+          ...(req.body.manifest ?? {}),
+        },
+        stageStatus: {
+          ...defaults.stageStatus,
+          ...(req.body.stageStatus ?? {}),
+        },
+        scriptRefs: {
+          ...defaults.scriptRefs,
+          ...(req.body.scriptRefs ?? {}),
+        },
+        metadata: {
+          ...defaults.metadata,
+          ...(req.body.metadata ?? {}),
+        },
         lastSyncedAt:
           typeof req.body.lastSyncedAt === "string"
             ? new Date(req.body.lastSyncedAt)
@@ -138,14 +163,11 @@ export function podcastWorkflowRoutes(db: Db, storage: StorageService) {
       try {
         const action = req.body.action;
         const result =
-          action === "sync_to_paperclip"
+              action === "sync_to_paperclip"
             ? await recorder.recordOperation({
                 phase: "external_workflow_run",
                 command: "paperclip-native podcast sync",
-                cwd:
-                  typeof workflow.metadata?.repositoryPath === "string"
-                    ? workflow.metadata.repositoryPath
-                    : null,
+                cwd: resolvePodcastWorkflowCwd(workflow),
                 metadata: {
                   kind: "podcast_workflow_sync",
                   workflowId: workflow.id,

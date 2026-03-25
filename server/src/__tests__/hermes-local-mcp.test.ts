@@ -148,7 +148,7 @@ describe("Hermes MCP materialization", () => {
       },
       context: {
         paperclipCompanyProfile: {
-          companyName: "Romance Unzipped",
+          companyName: "Paper Trail Weekly",
           voiceDescription: "Warm, smart, specific, and never generic.",
           targetAudience: "Romance readers who want sharp emotional analysis.",
           defaultChannel: "Newsletter",
@@ -186,7 +186,7 @@ describe("Hermes MCP materialization", () => {
       },
       context: {
         paperclipCompanyProfile: {
-          companyName: "Romance Unzipped",
+          companyName: "Paper Trail Weekly",
           voiceDescription: "Warm and specific.",
         },
       },
@@ -203,7 +203,7 @@ describe("Hermes MCP materialization", () => {
     });
 
     expect(buildHermesAppliedRuntimePolicy(config, {
-      companyName: "Romance Unzipped",
+      companyName: "Paper Trail Weekly",
       voiceDescription: "Warm and specific.",
       targetAudience: null,
       defaultChannel: null,

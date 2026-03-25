@@ -5,7 +5,6 @@ import { Mic, Plus, Radio, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type {
   PodcastWorkflow,
-  PodcastWorkflowScriptRefs,
   PodcastWorkflowType,
 } from "@paperclipai/shared";
 import { podcastWorkflowsApi } from "../api/podcast-workflows";
@@ -14,83 +13,6 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
-
-const PAPERCLIP_REPO_ROOT = "/Users/adampeterson/GitHub/paperclip";
-const PAPERCLIP_BIN = `${PAPERCLIP_REPO_ROOT}/bin`;
-const PAPERCLIP_RUNTIME = `${PAPERCLIP_REPO_ROOT}/.runtime/ru-podcast`;
-
-function buildScriptRefs(): PodcastWorkflowScriptRefs {
-  return {
-    initializeManifestPath: `${PAPERCLIP_BIN}/initialize_episode_manifest.py`,
-    runLatestYouTubePipelinePath: `${PAPERCLIP_BIN}/run_latest_youtube_pipeline.py`,
-    generateApprovalPacketPath: `${PAPERCLIP_BIN}/generate_approval_packet.py`,
-    generateSocialDraftsPath: `${PAPERCLIP_BIN}/generate_social_drafts.py`,
-    generateBoardReviewPath: `${PAPERCLIP_BIN}/generate_board_review.py`,
-    generateConnectorRunbooksPath: `${PAPERCLIP_BIN}/generate_connector_runbooks.py`,
-    syncBatchToPaperclipPath: `${PAPERCLIP_BIN}/sync_batch_to_paperclip.mjs`,
-    publishEpisodeToHomepagePath: `${PAPERCLIP_BIN}/publish_episode_to_homepage.py`,
-    updateStaticHomepagePath: `${PAPERCLIP_BIN}/update_static_homepage.py`,
-  };
-}
-
-function buildSeedWorkflow(type: PodcastWorkflowType): Record<string, unknown> {
-  const titles: Record<PodcastWorkflowType, string> = {
-    recording_session: "Recording Session Workflow",
-    episode: "Episode Lifecycle Workflow",
-    guest_booking: "Guest Booking Workflow",
-  };
-  const descriptions: Record<PodcastWorkflowType, string> = {
-    recording_session:
-      "Paperclip-native intake and recording workflow derived from the episode manifest pipeline.",
-    episode:
-      "Episode tracking and content pipeline workflow using the Romance Unzipped manifest, stage, and review scripts.",
-    guest_booking:
-      "Guest coordination workflow with approval, review, and publication handoff hooks.",
-  };
-  const stageStatus: Record<PodcastWorkflowType, Record<string, "missing" | "pending">> = {
-    recording_session: {
-      intake: "pending",
-      manifest: "missing",
-      transcript: "missing",
-      review: "missing",
-    },
-    episode: {
-      manifest: "missing",
-      transcript: "missing",
-      approval_packet: "missing",
-      social_drafts: "missing",
-      board_review: "missing",
-      homepage_publish: "missing",
-    },
-    guest_booking: {
-      outreach: "pending",
-      scheduling: "missing",
-      prep_packet: "missing",
-      post_recording_followup: "missing",
-    },
-  };
-  return {
-    type,
-    status: "planned",
-    title: titles[type],
-    description: descriptions[type],
-    manifest: {
-      episodeId: null,
-      manifestPath: null,
-      runtimeRoot: PAPERCLIP_RUNTIME,
-      sourceMediaPath: null,
-      publicUrl: null,
-      channelUrl: "https://www.youtube.com/@RomanceUnzipped/videos",
-    },
-    stageStatus: stageStatus[type],
-    scriptRefs: buildScriptRefs(),
-    metadata: {
-      repositoryPath: PAPERCLIP_REPO_ROOT,
-      binDirectoryPath: PAPERCLIP_BIN,
-      origin: "romanceunzipped-first-iteration",
-    },
-  };
-}
 
 function WorkflowTypeIcon({ type }: { type: PodcastWorkflowType }) {
   if (type === "recording_session") return <Mic className="h-4 w-4" />;
@@ -193,7 +115,7 @@ export function PodcastWorkflows() {
 
   const createWorkflow = useMutation({
     mutationFn: (type: PodcastWorkflowType) =>
-      podcastWorkflowsApi.create(selectedCompanyId!, buildSeedWorkflow(type)),
+      podcastWorkflowsApi.create(selectedCompanyId!, { type }),
     onSuccess: () => {
       if (!selectedCompanyId) return;
       queryClient.invalidateQueries({
@@ -228,9 +150,8 @@ export function PodcastWorkflows() {
           <div className="space-y-2">
             <h1 className="text-lg font-semibold">Podcast Ops</h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Paperclip-native podcast workflows derived from the Romance Unzipped manifest pipeline in
-              <span className="font-mono"> {PAPERCLIP_BIN}</span>.
-              Workflows store the manifest contract, stage status, and runtime script references so the control plane stays authoritative.
+              Repo-owned podcast workflows with server-managed defaults for runtime roots and script entrypoints.
+              The control plane stores workflow state, while execution resolves against the active checkout at run time.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

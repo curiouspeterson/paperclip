@@ -44,6 +44,18 @@ describe("buildHeartbeatRunIssueComment", () => {
     expect(comment).toContain("Run failed before the agent posted its structured update.");
     expect(comment).toContain("Error: Connection refused");
   });
+
+  it("describes Hermes tool-only exits without claiming the agent skipped a structured update", () => {
+    const comment = buildHeartbeatRunIssueComment({
+      status: "succeeded",
+      resultJson: {
+        message: "Hermes returned tool-call transcript output without a final assistant completion.",
+      },
+    });
+
+    expect(comment).toContain("Run completed, but Hermes exited after tool calls without a final assistant completion.");
+    expect(comment).not.toContain("posted its structured update");
+  });
 });
 
 describe("buildPersistedHeartbeatResultJson", () => {

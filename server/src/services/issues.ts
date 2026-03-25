@@ -1911,6 +1911,12 @@ export function issueService(db: Db) {
         .then((rows) => rows[0] ?? null);
 
       if (!existing) return null;
+      if (existing.status === "done" || existing.status === "cancelled") {
+        throw conflict("Cannot release issue from terminal status", {
+          issueId: existing.id,
+          status: existing.status,
+        });
+      }
       if (actorAgentId && existing.assigneeAgentId && existing.assigneeAgentId !== actorAgentId) {
         throw conflict("Only assignee can release issue");
       }

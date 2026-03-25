@@ -69,6 +69,12 @@ const INVITE_TOKEN_SUFFIX_LENGTH = 8;
 const INVITE_TOKEN_MAX_RETRIES = 5;
 const COMPANY_INVITE_TTL_MS = 10 * 60 * 1000;
 
+function hasRequestedCliCompanyAccess(req: Request, requestedCompanyId?: string | null) {
+  if (!requestedCompanyId) return true;
+  if (isLocalImplicit(req) || req.actor.isInstanceAdmin) return true;
+  return (req.actor.companyIds ?? []).includes(requestedCompanyId);
+}
+
 function createInviteToken() {
   const bytes = randomBytes(INVITE_TOKEN_SUFFIX_LENGTH);
   let suffix = "";
@@ -1244,6 +1250,7 @@ export function accessRoutes(
       Boolean(req.actor.userId);
     const canApprove =
       isSignedInBoardUser &&
+      hasRequestedCliCompanyAccess(req, challenge.requestedCompanyId) &&
       (challenge.requestedAccess !== "instance_admin_required" ||
         isLocalImplicit(req) ||
         Boolean(req.actor.isInstanceAdmin));
@@ -1272,7 +1279,11 @@ export function accessRoutes(
       const approved = await boardAuth.approveCliAuthChallenge(
         id,
         req.body.token,
-        userId,
+        {
+          userId,
+          companyIds: req.actor.companyIds,
+          isInstanceAdmin: req.actor.isInstanceAdmin,
+        },
       );
 
       if (approved.status === "approved") {

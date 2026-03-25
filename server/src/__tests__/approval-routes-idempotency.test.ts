@@ -71,6 +71,17 @@ describe("approval routes idempotent retries", () => {
     vi.resetAllMocks();
     mockHeartbeatService.wakeup.mockResolvedValue({ id: "wake-1" });
     mockIssueApprovalService.listIssuesForApproval.mockResolvedValue([{ id: "issue-1" }]);
+    mockSecretService.normalizeHireApprovalPayloadForPersistence.mockImplementation(
+      async (_companyId: string, payload: Record<string, unknown>) => payload,
+    );
+    mockApprovalService.create.mockResolvedValue({
+      id: "approval-created",
+      companyId: "company-1",
+      type: "hire_agent",
+      status: "pending",
+      payload: {},
+      requestedByAgentId: null,
+    });
     mockApprovalService.getById.mockResolvedValue({
       id: "approval-1",
       companyId: "company-1",
@@ -304,6 +315,20 @@ describe("approval routes idempotent retries", () => {
       });
 
     expect(res.status).toBe(422);
+    expect(mockApprovalService.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed hire approvals before persistence", async () => {
+    const res = await request(createApp())
+      .post("/api/companies/company-1/approvals")
+      .send({
+        type: "hire_agent",
+        payload: {},
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Validation error");
+    expect(mockSecretService.normalizeHireApprovalPayloadForPersistence).not.toHaveBeenCalled();
     expect(mockApprovalService.create).not.toHaveBeenCalled();
   });
 });

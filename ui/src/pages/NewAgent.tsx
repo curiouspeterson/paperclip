@@ -87,7 +87,7 @@ export function NewAgent() {
   const [title, setTitle] = useState("");
   const [capabilities, setCapabilities] = useState("");
   const [role, setRole] = useState("general");
-  const [reportsTo, setReportsTo] = useState("");
+  const [reportsTo, setReportsTo] = useState<string | null>(null);
   const [configValues, setConfigValues] = useState<CreateConfigValues>(() =>
     createValuesForAdapterType(resolveCompanyDefaultAgentAdapterType(selectedCompany) as CreateConfigValues["adapterType"], selectedCompany),
   );
@@ -250,7 +250,6 @@ export function NewAgent() {
     });
   }
 
-  const currentReportsTo = (agents ?? []).find((a) => a.id === reportsTo);
   const availableSkills = (companySkills ?? []).filter((skill) => !skill.key.startsWith("paperclipai/paperclip/"));
 
   function toggleSkill(key: string, checked: boolean) {
