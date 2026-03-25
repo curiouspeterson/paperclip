@@ -215,6 +215,29 @@ describe("issue service contracts", () => {
     ).rejects.toMatchObject({ status: 422 });
   });
 
+  it.each([
+    { from: "backlog", to: "done" },
+    { from: "blocked", to: "done" },
+  ])("rejects invalid issue transitions from $from to $to", async ({ from, to }) => {
+    const companyId = await seedCompany("Alpha");
+    const { issue } = await issueService(db).create(companyId, {
+      title: "Transition issue",
+      status: from,
+      priority: "medium",
+    } as any);
+
+    await expect(
+      issueService(db).update(issue.id, { status: to } as any),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "Invalid issue status transition",
+      details: {
+        from,
+        to,
+      },
+    });
+  });
+
   it("clears execution locks on release", async () => {
     const companyId = await seedCompany("Alpha");
     const agentId = await seedAgent(companyId);
@@ -251,6 +274,26 @@ describe("issue service contracts", () => {
     expect(released?.executionRunId).toBeNull();
     expect(released?.executionLockedAt).toBeNull();
     expect(released?.executionAgentNameKey).toBeNull();
+  });
+
+  it("clears both assignee fields on release", async () => {
+    const companyId = await seedCompany("Alpha");
+    const issueId = randomUUID();
+    const userId = "user-1";
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Release me",
+      status: "todo",
+      priority: "medium",
+      assigneeUserId: userId,
+    });
+
+    const released = await issueService(db).release(issueId);
+    expect(released).not.toBeNull();
+    expect(released?.assigneeAgentId).toBeNull();
+    expect(released?.assigneeUserId).toBeNull();
   });
 
   it("does not traverse parent issues from another company", async () => {

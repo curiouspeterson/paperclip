@@ -328,6 +328,38 @@ describe("issue contract routes", () => {
     expect(mockIssueService.update).not.toHaveBeenCalled();
   });
 
+  it("rejects board status changes that would detach an active issue run", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+      executionRunId: RUN_ID,
+    }));
+    mockHeartbeatService.getRun.mockResolvedValue({
+      id: RUN_ID,
+      status: "running",
+      agentId: AGENT_ONE_ID,
+      contextSnapshot: { issueId: "11111111-1111-4111-8111-111111111111" },
+    });
+
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "board-user",
+        companyIds: [COMPANY_ID],
+        source: "session",
+        isInstanceAdmin: false,
+      }),
+    )
+      .patch("/api/issues/11111111-1111-4111-8111-111111111111")
+      .send({ status: "done" });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      error: "Cannot change the status of an active issue while its run is still running. Interrupt it first.",
+    });
+    expect(mockIssueService.update).not.toHaveBeenCalled();
+  });
+
   it("does not pass delegationKey through issue patch requests", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       status: "todo",
@@ -358,6 +390,38 @@ describe("issue contract routes", () => {
       "11111111-1111-4111-8111-111111111111",
       { title: "Updated title" },
     );
+  });
+
+  it("rejects board release while the issue run is still running", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+      executionRunId: RUN_ID,
+    }));
+    mockHeartbeatService.getRun.mockResolvedValue({
+      id: RUN_ID,
+      status: "running",
+      agentId: AGENT_ONE_ID,
+      contextSnapshot: { issueId: "11111111-1111-4111-8111-111111111111" },
+    });
+
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "board-user",
+        companyIds: [COMPANY_ID],
+        source: "session",
+        isInstanceAdmin: false,
+      }),
+    )
+      .post("/api/issues/11111111-1111-4111-8111-111111111111/release")
+      .send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      error: "Cannot release an active issue while its run is still running. Interrupt it first.",
+    });
+    expect(mockIssueService.release).not.toHaveBeenCalled();
   });
 
   it("allows an agent to create an assigned child issue under their own parent issue", async () => {

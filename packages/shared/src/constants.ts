@@ -120,6 +120,16 @@ export const ISSUE_STATUSES = [
 ] as const;
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
 
+export const ISSUE_STATUS_TRANSITIONS = {
+  backlog: ["todo", "cancelled"],
+  todo: ["in_progress", "blocked", "cancelled"],
+  in_progress: ["in_review", "blocked", "done", "cancelled"],
+  in_review: ["in_progress", "done", "cancelled"],
+  blocked: ["todo", "in_progress", "cancelled"],
+  done: ["todo"],
+  cancelled: ["todo"],
+} as const satisfies Record<IssueStatus, readonly IssueStatus[]>;
+
 export const ISSUE_CHECKOUT_EXPECTED_STATUSES = [
   "todo",
   "backlog",

@@ -37,6 +37,7 @@ type HostIssueRecord = {
   title: string;
   status: string;
   priority?: string | null;
+  assigneeAgentId?: string | null;
   createdAt?: string;
 };
 type HostHeartbeatRunRecord = {
@@ -832,13 +833,28 @@ function KitchenSinkIssueCrudDemo({ context }: { context: PluginPageProps["conte
     const draft = drafts[issueId];
     if (!draft) return;
     try {
-      await hostFetchJson(`/api/issues/${issueId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          title: draft.title.trim(),
-          status: draft.status,
-        }),
-      });
+      if (draft.status === "in_progress") {
+        const issue = issues.find((entry) => entry.id === issueId);
+        const assigneeAgentId = issue?.assigneeAgentId ?? null;
+        if (!assigneeAgentId) {
+          throw new Error("Issue must have an assignee before checkout");
+        }
+        await hostFetchJson(`/api/issues/${issueId}/checkout`, {
+          method: "POST",
+          body: JSON.stringify({
+            agentId: assigneeAgentId,
+            expectedStatuses: ["todo", "backlog", "blocked", "in_review"],
+          }),
+        });
+      } else {
+        await hostFetchJson(`/api/issues/${issueId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            title: draft.title.trim(),
+            status: draft.status,
+          }),
+        });
+      }
       toast({ title: "Issue updated", body: draft.title.trim(), tone: "success" });
       await loadIssues();
     } catch (nextError) {

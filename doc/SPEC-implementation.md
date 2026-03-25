@@ -401,7 +401,8 @@ Allowed transitions:
 - `in_progress -> in_review | blocked | done | cancelled`
 - `in_review -> in_progress | done | cancelled`
 - `blocked -> todo | in_progress | cancelled`
-- terminal: `done`, `cancelled`
+- closed states: `done`, `cancelled`
+- reopen path: closed issues may return to `todo` via the explicit reopen flow
 
 Side effects:
 

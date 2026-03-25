@@ -248,7 +248,7 @@ export function CompanySettings() {
       pushToast({
         title: "Agent defaults not saved",
         body: error instanceof Error ? error.message : "Failed to save agent defaults.",
-        tone: "destructive",
+        tone: "error",
       });
     },
   });

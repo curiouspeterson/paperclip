@@ -341,5 +341,103 @@ class HermesWorkerTests(unittest.TestCase):
                 self.assertIn("Working Audience", (hermes_home / "USER.md").read_text())
                 self.assertIn("Seeded Company Memory", (hermes_home / "MEMORY.md").read_text())
 
+    def test_main_posts_blocking_issue_comment_when_hermes_provider_run_fails(self) -> None:
+        agent = {
+            "id": "agent-1",
+            "name": "CEO",
+            "title": "Chief Executive Officer",
+            "companyId": "company-1",
+            "access": {"canAssignTasks": False},
+        }
+        issue = {
+            "id": "issue-1",
+            "identifier": "ROM-592",
+            "companyId": "company-1",
+            "title": "Run pipeline on episode 26 from YouTube channel",
+            "status": "todo",
+            "assigneeAgentId": "agent-1",
+        }
+        api_calls: list[tuple[str, str, object | None]] = []
+
+        def fake_api_request(method: str, path: str, payload=None, include_run_id: bool = False, tolerate_404: bool = False):
+            api_calls.append((method, path, payload))
+            if method == "GET" and path == "/agents/me":
+                return agent
+            if method == "GET" and path.startswith("/companies/company-1/issues?"):
+                return [issue]
+            if method == "GET" and path == "/issues/issue-1":
+                return issue
+            if method == "POST" and path == "/issues/issue-1/checkout":
+                return {"ok": True}
+            if method == "GET" and path == "/issues/issue-1/comments":
+                return []
+            if method == "PATCH" and path == "/issues/issue-1":
+                return {**issue, **(payload or {})}
+            raise AssertionError(f"Unexpected API call: {method} {path}")
+
+        with patch.dict(
+            os.environ,
+            {
+                "PAPERCLIP_API_KEY": "test-key",
+                "PAPERCLIP_RUN_ID": "run-1",
+                "PAPERCLIP_COMPANY_ID": "company-1",
+                "HERMES_PROVIDER": "zai",
+                "HERMES_MODEL": "glm-4.7",
+            },
+            clear=False,
+        ):
+            with (
+                patch.object(worker, "resolve_hermes_bin", return_value="/tmp/hermes"),
+                patch.object(worker, "check_hermes_version", return_value="Hermes Agent v0.4.0"),
+                patch.object(worker, "resolve_skills_dir", return_value=None),
+                patch.object(worker, "resolve_browser_automation", return_value=None),
+                patch.object(worker, "api_request", side_effect=fake_api_request),
+                patch.object(worker, "resolve_hermes_home", return_value=Path("/tmp/.hermes")),
+                patch.object(worker, "ensure_directory", return_value=Path("/tmp/.hermes")),
+                patch.object(worker, "seed_hermes_home_context", return_value=[]),
+                patch.object(worker, "read_runtime_session_params", return_value=None),
+                patch.object(worker, "find_session_by_title", return_value=None),
+                patch.object(worker, "build_prompt", return_value="prompt"),
+                patch.object(
+                    worker,
+                    "run_hermes_with_retry",
+                    side_effect=worker.WorkerError(
+                        "Hermes failed with exit code 1: "
+                        "openai.RateLimitError: Error code: 429 - "
+                        "{'error': {'code': '1113', 'message': 'Insufficient balance or no resource package. "
+                        "Please recharge.'}}"
+                    ),
+                ),
+            ):
+                with self.assertRaisesRegex(worker.WorkerError, "Insufficient balance or no resource package"):
+                    worker.main()
+
+        patch_calls = [call for call in api_calls if call[0] == "PATCH" and call[1] == "/issues/issue-1"]
+        self.assertEqual(1, len(patch_calls))
+        patch_payload = patch_calls[0][2]
+        assert isinstance(patch_payload, dict)
+        self.assertEqual("blocked", patch_payload["status"])
+        self.assertIn("Run failed before the agent could post its structured update.", patch_payload["comment"])
+        self.assertIn("Provider: zai", patch_payload["comment"])
+        self.assertIn("Model: glm-4.7", patch_payload["comment"])
+        self.assertIn("Insufficient balance or no resource package. Please recharge.", patch_payload["comment"])
+
+    def test_normalize_hermes_response_salvages_issue_shaped_payload(self) -> None:
+        normalized = worker.normalize_hermes_response(
+            {
+                "status": "done",
+                "title": "26. Berries + Greed by Lily Mayne, a Cozy Monster Romance",
+                "description": "Pipeline completed and assets are ready.",
+                "priority": "medium",
+                "assigneeAgentId": "agent-1",
+            }
+        )
+
+        self.assertEqual("done", normalized["status"])
+        self.assertEqual("", normalized["plan_markdown"])
+        self.assertEqual("", normalized["change_summary"])
+        self.assertIn("26. Berries + Greed by Lily Mayne, a Cozy Monster Romance", normalized["comment_markdown"])
+        self.assertIn("Pipeline completed and assets are ready.", normalized["comment_markdown"])
+
 if __name__ == "__main__":
     unittest.main()

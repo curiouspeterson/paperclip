@@ -20,7 +20,12 @@ import {
   projectWorkspaces,
   projects,
 } from "@paperclipai/db";
-import { extractProjectMentionIds, ISSUE_CHECKOUT_EXPECTED_STATUSES } from "@paperclipai/shared";
+import {
+  extractProjectMentionIds,
+  ISSUE_CHECKOUT_EXPECTED_STATUSES,
+  ISSUE_STATUSES,
+  ISSUE_STATUS_TRANSITIONS,
+} from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
   defaultIssueExecutionWorkspaceSettingsForProject,
@@ -32,7 +37,6 @@ import { redactCurrentUserText } from "../log-redaction.js";
 import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallback.js";
 import { getDefaultCompanyGoal } from "./goals.js";
 
-const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const OPEN_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked"] as const;
 const ISSUE_CHECKOUT_ALLOWED_STATUS_SET = new Set<string>(ISSUE_CHECKOUT_EXPECTED_STATUSES);
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
@@ -124,13 +128,24 @@ function isOpenDelegatedChild(input: {
 }
 
 function assertTransition(from: string, to: string) {
-  if (!ALL_ISSUE_STATUSES.includes(to)) {
+  if (!ISSUE_STATUSES.includes(from as (typeof ISSUE_STATUSES)[number])) {
+    throw conflict(`Unknown issue status: ${from}`);
+  }
+  if (!ISSUE_STATUSES.includes(to as (typeof ISSUE_STATUSES)[number])) {
     throw conflict(`Unknown issue status: ${to}`);
   }
+  if (from === to) return;
   if (to === "in_progress") {
     throw unprocessable("Use checkout to set issue status to in_progress");
   }
-  if (from === to) return;
+  const allowedStatuses = ISSUE_STATUS_TRANSITIONS[from as keyof typeof ISSUE_STATUS_TRANSITIONS] as readonly string[];
+  if (!allowedStatuses.includes(to)) {
+    throw conflict("Invalid issue status transition", {
+      from,
+      to,
+      allowedStatuses,
+    });
+  }
 }
 
 function applyStatusSideEffects(
@@ -1827,6 +1842,7 @@ export function issueService(db: Db) {
         .set({
           status: "todo",
           assigneeAgentId: null,
+          assigneeUserId: null,
           ...(isDelegatedChildExecutionBlockerDetails(existing.blockerDetails as Record<string, unknown> | null | undefined)
             ? { blockerDetails: null }
             : {}),

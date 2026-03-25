@@ -301,6 +301,22 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return null;
   }
 
+  async function assertNoRunningExecutionDetach(
+    issue: { id: string; assigneeAgentId: string | null; executionRunId?: string | null },
+    res: Response,
+    action: "update" | "release",
+  ) {
+    const activeRun = await findRunningExecutionForIssue(issue);
+    if (!activeRun) return true;
+    res.status(409).json({
+      error:
+        action === "update"
+          ? "Cannot change the status of an active issue while its run is still running. Interrupt it first."
+          : "Cannot release an active issue while its run is still running. Interrupt it first.",
+    });
+    return false;
+  }
+
   async function normalizeIssueIdentifier(rawId: string): Promise<string> {
     if (/^[A-Z]+-\d+$/i.test(rawId)) {
       const issue = await svc.getByIdentifier(rawId);
@@ -1057,6 +1073,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
         return;
       }
     }
+    if (
+      req.actor.type === "board" &&
+      req.body.status !== undefined &&
+      req.body.status !== "in_progress" &&
+      existing.status === "in_progress"
+    ) {
+      if (!(await assertNoRunningExecutionDetach(existing, res, "update"))) return;
+    }
     if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
 
     const actor = getActorInfo(req);
@@ -1383,6 +1407,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, existing.companyId);
+    if (!(await assertNoRunningExecutionDetach(existing, res, "release"))) return;
     if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
     const actorRunId = requireAgentRunId(req, res);
     if (req.actor.type === "agent" && !actorRunId) return;

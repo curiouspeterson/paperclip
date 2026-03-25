@@ -1086,6 +1086,31 @@ def extract_json_object(raw: str) -> dict[str, Any]:
     return value
 
 
+def normalize_hermes_response(response: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(response)
+    if REQUIRED_RESPONSE_KEYS.issubset(normalized.keys()):
+        return normalized
+
+    has_issue_shape = (
+        "status" in normalized
+        and "comment_markdown" not in normalized
+        and (
+            str(normalized.get("title") or "").strip()
+            or str(normalized.get("description") or "").strip()
+        )
+    )
+    if not has_issue_shape:
+        return normalized
+
+    title = str(normalized.get("title") or "").strip()
+    description = str(normalized.get("description") or "").strip()
+    comment_lines = [line for line in (title, description) if line]
+    normalized["comment_markdown"] = "\n\n".join(comment_lines)
+    normalized.setdefault("plan_markdown", "")
+    normalized.setdefault("change_summary", "")
+    return normalized
+
+
 def validate_hermes_response(response: dict[str, Any]) -> None:
     """Fail hard if the response is missing required fields or has an invalid status."""
     missing = REQUIRED_RESPONSE_KEYS - response.keys()
@@ -1190,7 +1215,7 @@ def run_hermes(
             f"Hermes failed with exit code {proc.returncode}: {full_output[:4000]}"
         )
     debug(f"Hermes completed with {len(stdout)} stdout chars")
-    response = extract_json_object(stdout)
+    response = normalize_hermes_response(extract_json_object(stdout))
     validate_hermes_response(response)
     return response
 
@@ -1321,6 +1346,35 @@ def patch_issue(issue_id: str, status: str, comment_markdown: str) -> None:
     if comment_markdown.strip():
         payload["comment"] = comment_markdown.strip()
     api_request("PATCH", f"/issues/{issue_id}", payload=payload, include_run_id=True)
+
+
+def summarize_worker_failure(error: Exception) -> str:
+    message = str(error).strip()
+    provider_message = re.search(r"'message': '([^']+)'", message)
+    if provider_message:
+        return provider_message.group(1).strip()
+
+    lines = [line.strip() for line in message.splitlines() if line.strip()]
+    if not lines:
+        return "Unknown worker failure"
+    return lines[0][:500]
+
+
+def post_failure_issue_update(issue_id: str, error: Exception) -> None:
+    provider = os.environ.get("HERMES_PROVIDER", "").strip() or "default"
+    model = os.environ.get("HERMES_MODEL", "").strip() or "default"
+    reason = summarize_worker_failure(error)
+    comment = (
+        "Run failed before the agent could post its structured update.\n\n"
+        f"Provider: {provider}\n"
+        f"Model: {model}\n"
+        f"Error: {reason}"
+    )
+    try:
+        patch_issue(issue_id, "blocked", comment)
+        debug("Posted fallback failure comment to issue")
+    except WorkerError as patch_error:
+        debug(f"Failed to post fallback failure comment: {patch_error}")
 
 
 def normalize_subtask_payload(
@@ -1581,52 +1635,56 @@ def main() -> int:
         print(json.dumps({"ok": True, "idle": True, "message": f"Issue {issue.get('identifier') or issue['id']} locked by another run"}))
         return 0
     debug("Issue checkout confirmed")
-    comments = api_request("GET", f"/issues/{issue['id']}/comments")
-    if not isinstance(comments, list):
-        comments = []
+    try:
+        comments = api_request("GET", f"/issues/{issue['id']}/comments")
+        if not isinstance(comments, list):
+            comments = []
 
-    hermes_home = ensure_directory(resolve_hermes_home(os.environ.get("AGENT_HOME", "").strip() or None))
-    seeded_context_files = seed_hermes_home_context(hermes_home)
-    runtime_session = read_runtime_session_params() or {}
-    session_name = str(runtime_session.get("sessionName") or "").strip() or build_session_name(agent, issue)
-    existing_session = find_session_by_title(hermes_home, session_name)
-    if existing_session:
-        debug(f"Reusing Hermes session name: {session_name}")
-    else:
-        debug(f"Starting fresh Hermes session for name: {session_name}")
+        hermes_home = ensure_directory(resolve_hermes_home(os.environ.get("AGENT_HOME", "").strip() or None))
+        seeded_context_files = seed_hermes_home_context(hermes_home)
+        runtime_session = read_runtime_session_params() or {}
+        session_name = str(runtime_session.get("sessionName") or "").strip() or build_session_name(agent, issue)
+        existing_session = find_session_by_title(hermes_home, session_name)
+        if existing_session:
+            debug(f"Reusing Hermes session name: {session_name}")
+        else:
+            debug(f"Starting fresh Hermes session for name: {session_name}")
 
-    can_assign_tasks = bool(
-        isinstance(agent.get("access"), dict) and agent["access"].get("canAssignTasks")
-    )
-    allow_subtask_assignments = can_delegate_subtask_assignments(agent, issue)
+        can_assign_tasks = bool(
+            isinstance(agent.get("access"), dict) and agent["access"].get("canAssignTasks")
+        )
+        allow_subtask_assignments = can_delegate_subtask_assignments(agent, issue)
 
-    prompt = build_prompt(agent, issue, comments, can_assign_tasks=can_assign_tasks)
-    debug(f"Built prompt ({len(prompt)} chars)")
-    hermes_output = run_hermes_with_retry(
-        agent,
-        issue,
-        prompt,
-        skills_dir=skills_dir,
-        hermes_home=hermes_home,
-        session_name=session_name if existing_session else None,
-    )
+        prompt = build_prompt(agent, issue, comments, can_assign_tasks=can_assign_tasks)
+        debug(f"Built prompt ({len(prompt)} chars)")
+        hermes_output = run_hermes_with_retry(
+            agent,
+            issue,
+            prompt,
+            skills_dir=skills_dir,
+            hermes_home=hermes_home,
+            session_name=session_name if existing_session else None,
+        )
 
-    status = normalize_status(hermes_output.get("status"))
-    comment_markdown = str(hermes_output.get("comment_markdown") or "").strip()
-    plan_markdown = str(hermes_output.get("plan_markdown") or "").strip()
-    change_summary = str(hermes_output.get("change_summary") or "").strip()
-    created_subtasks = create_subtasks(
-        issue,
-        hermes_output.get("subtasks"),
-        allow_assignments=allow_subtask_assignments,
-    )
-    if created_subtasks:
-        comment_markdown = append_subtask_summary(comment_markdown, created_subtasks)
+        status = normalize_status(hermes_output.get("status"))
+        comment_markdown = str(hermes_output.get("comment_markdown") or "").strip()
+        plan_markdown = str(hermes_output.get("plan_markdown") or "").strip()
+        change_summary = str(hermes_output.get("change_summary") or "").strip()
+        created_subtasks = create_subtasks(
+            issue,
+            hermes_output.get("subtasks"),
+            allow_assignments=allow_subtask_assignments,
+        )
+        if created_subtasks:
+            comment_markdown = append_subtask_summary(comment_markdown, created_subtasks)
 
-    upsert_plan_document(str(issue["id"]), plan_markdown, change_summary)
-    debug(f"Plan update applied={bool(plan_markdown)}")
-    patch_issue(str(issue["id"]), status, comment_markdown)
-    debug(f"Issue patched with status={status}")
+        upsert_plan_document(str(issue["id"]), plan_markdown, change_summary)
+        debug(f"Plan update applied={bool(plan_markdown)}")
+        patch_issue(str(issue["id"]), status, comment_markdown)
+        debug(f"Issue patched with status={status}")
+    except WorkerError as exc:
+        post_failure_issue_update(str(issue["id"]), exc)
+        raise
 
     model = os.environ.get("HERMES_MODEL", "").strip() or "default"
     provider = os.environ.get("HERMES_PROVIDER", "").strip() or "default"
