@@ -28,6 +28,7 @@ const mockLogActivity = vi.hoisted(() => vi.fn());
 vi.mock("../services/index.js", () => ({
   accessService: () => mockAccessService,
   agentService: () => mockAgentService,
+  boardAuthService: () => ({}),
   deduplicateAgentName: vi.fn(),
   logActivity: mockLogActivity,
   notifyHireApproved: vi.fn(),

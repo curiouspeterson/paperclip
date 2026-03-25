@@ -20,10 +20,12 @@ import {
 } from "@paperclipai/db";
 import {
   acceptInviteSchema,
+  createCliAuthChallengeSchema,
   claimJoinRequestApiKeySchema,
   createCompanyInviteSchema,
   createOpenClawInvitePromptSchema,
   listJoinRequestsQuerySchema,
+  resolveCliAuthChallengeSchema,
   updateMemberPermissionsSchema,
   updateUserCompanyAccessSchema,
   PERMISSION_KEYS
@@ -41,6 +43,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  boardAuthService,
   deduplicateAgentName,
   logActivity,
   notifyHireApproved
@@ -99,6 +102,10 @@ function requestBaseUrl(req: Request) {
     req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.header("host");
   if (!host) return "";
   return `${proto}://${host}`;
+}
+
+function buildCliAuthApprovalPath(challengeId: string, token: string) {
+  return `/cli-auth/${challengeId}?token=${encodeURIComponent(token)}`;
 }
 
 function toJoinRequestResponse(row: typeof joinRequests.$inferSelect) {
@@ -1142,6 +1149,7 @@ export function accessRoutes(
 ) {
   const router = Router();
   const access = accessService(db);
+  const boardAuth = boardAuthService(db);
   const agents = agentService(db);
 
   async function assertInstanceAdmin(req: Request) {

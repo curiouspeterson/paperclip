@@ -312,8 +312,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
     projectId: string | null;
     goalId: string | null;
   }) {
-    const projectPromise = issue.projectId ? projectsSvc.getById(issue.projectId) : Promise.resolve(null);
-    const directGoalPromise = issue.goalId ? goalsSvc.getById(issue.goalId) : Promise.resolve(null);
+    const projectPromise = issue.projectId
+      ? projectsSvc.getByIdForCompany(issue.companyId, issue.projectId)
+      : Promise.resolve(null);
+    const directGoalPromise = issue.goalId
+      ? goalsSvc.getByIdForCompany(issue.companyId, issue.goalId)
+      : Promise.resolve(null);
     const [project, directGoal] = await Promise.all([projectPromise, directGoalPromise]);
 
     if (directGoal) {
@@ -322,7 +326,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     const projectGoalId = project?.goalId ?? project?.goalIds[0] ?? null;
     if (projectGoalId) {
-      const projectGoal = await goalsSvc.getById(projectGoalId);
+      const projectGoal = await goalsSvc.getByIdForCompany(issue.companyId, projectGoalId);
       return { project, goal: projectGoal };
     }
 

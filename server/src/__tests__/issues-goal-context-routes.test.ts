@@ -14,11 +14,13 @@ const mockIssueService = vi.hoisted(() => ({
 
 const mockProjectService = vi.hoisted(() => ({
   getById: vi.fn(),
+  getByIdForCompany: vi.fn(),
   listByIds: vi.fn(),
 }));
 
 const mockGoalService = vi.hoisted(() => ({
   getById: vi.fn(),
+  getByIdForCompany: vi.fn(),
   getDefaultCompanyGoal: vi.fn(),
 }));
 
@@ -29,6 +31,9 @@ vi.mock("../services/index.js", () => ({
   }),
   agentService: () => ({
     getById: vi.fn(),
+  }),
+  budgetService: () => ({
+    getBudgetSnapshot: vi.fn(async () => null),
   }),
   documentService: () => ({
     getIssueDocumentPayload: vi.fn(async () => ({})),
@@ -115,7 +120,7 @@ describe("issue goal context routes", () => {
       latestCommentAt: null,
     });
     mockIssueService.getComment.mockResolvedValue(null);
-    mockProjectService.getById.mockResolvedValue({
+    const projectRecord = {
       id: legacyProjectLinkedIssue.projectId,
       companyId: "company-1",
       urlKey: "onboarding",
@@ -147,11 +152,19 @@ describe("issue goal context routes", () => {
       archivedAt: null,
       createdAt: new Date("2026-03-20T00:00:00Z"),
       updatedAt: new Date("2026-03-20T00:00:00Z"),
-    });
+    };
+    mockProjectService.getById.mockResolvedValue(projectRecord);
+    mockProjectService.getByIdForCompany.mockResolvedValue(projectRecord);
     mockProjectService.listByIds.mockResolvedValue([]);
-    mockGoalService.getById.mockImplementation(async (id: string) =>
-      id === projectGoal.id ? projectGoal : null,
-    );
+    const goalLookup = async (
+      first: string,
+      second?: string,
+    ) => {
+      const id = second ?? first;
+      return id === projectGoal.id ? projectGoal : null;
+    };
+    mockGoalService.getById.mockImplementation(goalLookup);
+    mockGoalService.getByIdForCompany.mockImplementation(goalLookup);
     mockGoalService.getDefaultCompanyGoal.mockResolvedValue(null);
   });
 
