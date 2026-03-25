@@ -300,6 +300,38 @@ describe("PATCH /api/companies/:companyId/branding", () => {
     );
   });
 
+  it("rejects status updates on the generic company patch route", async () => {
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "local_implicit",
+    });
+
+    const res = await request(app)
+      .patch("/api/companies/company-1")
+      .send({ status: "paused" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Validation error");
+    expect(mockCompanyService.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects budget updates on the generic company patch route", async () => {
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "local_implicit",
+    });
+
+    const res = await request(app)
+      .patch("/api/companies/company-1")
+      .send({ budgetMonthlyCents: 2500 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Validation error");
+    expect(mockCompanyService.update).not.toHaveBeenCalled();
+  });
+
   it("rejects non-branding fields in the request body", async () => {
     const app = createApp({
       type: "board",

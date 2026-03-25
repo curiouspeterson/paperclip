@@ -11,6 +11,7 @@ import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
 import { mailchimpApi } from "../api/mailchimp";
 import { queryKeys } from "../lib/queryKeys";
+import { parseCompanyHermesMcpServersInput } from "../lib/company-hermes-mcp";
 import { Button } from "@/components/ui/button";
 import { Settings, Check, Download, Upload, Bot, ArrowRight, Pause, Play } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
@@ -210,8 +211,10 @@ export function CompanySettings() {
   });
 
   const agentDefaultsMutation = useMutation({
-    mutationFn: () =>
-      companiesApi.update(selectedCompanyId!, {
+    mutationFn: () => {
+      const parsedHermesMcpServers = parseCompanyHermesMcpServersInput(agentDefaultHermesMcpServers);
+
+      return companiesApi.update(selectedCompanyId!, {
         agentDefaultAdapterType: AGENT_ADAPTER_TYPES.includes(
           agentDefaultAdapterType as (typeof AGENT_ADAPTER_TYPES)[number],
         )
@@ -229,17 +232,23 @@ export function CompanySettings() {
         agentDefaultHermesSeedCompanyProfileMemory,
         agentDefaultHermesToolsets: agentDefaultHermesToolsets.trim() || null,
         agentDefaultHermesAllowedMcpServers: agentDefaultHermesAllowedMcpServers.trim() || null,
-        agentDefaultHermesMcpServers: agentDefaultHermesMcpServers.trim()
-          ? JSON.parse(agentDefaultHermesMcpServers)
-          : null,
+        agentDefaultHermesMcpServers: parsedHermesMcpServers,
         agentDefaultDangerouslySkipPermissions,
         agentDefaultDangerouslyBypassSandbox,
-      }),
+      });
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
       pushToast({
         title: "Agent defaults saved",
         body: "New agents will inherit the updated company defaults.",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Agent defaults not saved",
+        body: error instanceof Error ? error.message : "Failed to save agent defaults.",
+        tone: "destructive",
       });
     },
   });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AGENT_ADAPTER_TYPES, COMPANY_STATUSES } from "../constants.js";
+import { AGENT_ADAPTER_TYPES } from "../constants.js";
 
 const logoAssetIdSchema = z.string().uuid().nullable().optional();
 const brandColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional();
@@ -27,11 +27,9 @@ export const createCompanySchema = z.object({
 
 export type CreateCompany = z.infer<typeof createCompanySchema>;
 
-export const updateCompanySchema = createCompanySchema
-  .partial()
-  .extend({
-    status: z.enum(COMPANY_STATUSES).optional(),
-    spentMonthlyCents: z.number().int().nonnegative().optional(),
+export const updateCompanySchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional().nullable(),
     requireBoardApprovalForNewAgents: z.boolean().optional(),
     brandColor: brandColorSchema,
     voiceDescription: companyProfileTextSchema,
@@ -61,7 +59,8 @@ export const updateCompanySchema = createCompanySchema
     agentDefaultDangerouslySkipPermissions: agentDefaultBooleanSchema,
     agentDefaultDangerouslyBypassSandbox: agentDefaultBooleanSchema,
     logoAssetId: logoAssetIdSchema,
-  });
+  })
+  .strict();
 
 export type UpdateCompany = z.infer<typeof updateCompanySchema>;
 

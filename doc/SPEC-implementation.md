@@ -474,7 +474,8 @@ All endpoints are under `/api` and return JSON.
 ## 10.3 Agents
 
 - `GET /companies/:companyId/agents`
-- `POST /companies/:companyId/agents`
+- `POST /companies/:companyId/agents` (direct board create, bypasses hire approval flow)
+- `POST /companies/:companyId/agent-hires` (approval-aware hire/create path used by agents and board workflows)
 - `GET /agents/:agentId`
 - `PATCH /agents/:agentId`
 - `POST /agents/:agentId/pause`
@@ -482,6 +483,12 @@ All endpoints are under `/api` and return JSON.
 - `POST /agents/:agentId/terminate`
 - `POST /agents/:agentId/keys` (create API key)
 - `POST /agents/:agentId/heartbeat/invoke`
+
+Company pause/resume and budget lifecycle remain dedicated flows:
+
+- `POST /companies/:companyId/pause`
+- `POST /companies/:companyId/resume`
+- `POST /companies/:companyId/budgets/policies`
 
 ## 10.4 Tasks (Issues)
 

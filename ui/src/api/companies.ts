@@ -32,7 +32,7 @@ export const companiesApi = {
     data: Partial<
       Pick<
         Company,
-        "name" | "description" | "status" | "budgetMonthlyCents" | "requireBoardApprovalForNewAgents" | "brandColor" | "mailchimpDefaultListId" | "mailchimpDefaultTemplateId" | "mailchimpDefaultFromName" | "mailchimpDefaultReplyTo" | "logoAssetId"
+        "name" | "description" | "requireBoardApprovalForNewAgents" | "brandColor" | "mailchimpDefaultListId" | "mailchimpDefaultTemplateId" | "mailchimpDefaultFromName" | "mailchimpDefaultReplyTo" | "logoAssetId"
         | "voiceDescription" | "targetAudience" | "defaultChannel" | "defaultGoal" | "voiceExamplesRight" | "voiceExamplesWrong"
         | "agentDefaultAdapterType" | "agentDefaultProvider" | "agentDefaultModel"
         | "agentDefaultHeartbeatIntervalSec" | "agentDefaultWakeOnDemand" | "agentDefaultCooldownSec"

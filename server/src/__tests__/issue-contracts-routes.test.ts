@@ -12,6 +12,7 @@ const mockIssueService = vi.hoisted(() => ({
   release: vi.fn(),
   assertCheckoutOwner: vi.fn(),
   getAncestors: vi.fn(),
+  findMentionedAgents: vi.fn(),
   findMentionedProjectIds: vi.fn(),
   getCommentCursor: vi.fn(),
   addComment: vi.fn(),
@@ -133,7 +134,7 @@ function makeIssueComment(overrides?: Partial<Record<string, unknown>>) {
 
 describe("issue contract routes", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockIssueService.create.mockResolvedValue({ issue: makeIssue(), created: true });
     mockIssueService.assertCheckoutOwner.mockResolvedValue({
       id: "11111111-1111-4111-8111-111111111111",
@@ -142,6 +143,7 @@ describe("issue contract routes", () => {
       checkoutRunId: RUN_ID,
       adoptedFromRunId: null,
     });
+    mockIssueService.findMentionedAgents.mockResolvedValue([]);
     mockIssueService.findMentionedProjectIds.mockResolvedValue([]);
     mockIssueService.getCommentCursor.mockResolvedValue(null);
     mockIssueService.getAncestors.mockResolvedValue([]);
