@@ -29,6 +29,13 @@ import {
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import type { CompanySecret, EnvBinding } from "@paperclipai/shared";
+import { buildHermesLocalPresetValues } from "../lib/hermes-preset";
+import {
+  applyCompanyAgentDefaults,
+  applyCompanyHeartbeatDefaults,
+  type CompanyAgentDefaults,
+  resolveCompanyDefaultAgentAdapterType,
+} from "../lib/company-agent-defaults";
 
 const SUPPORTED_ADVANCED_ADAPTER_TYPES = new Set<CreateConfigValues["adapterType"]>([
   "claude_local",
@@ -42,29 +49,9 @@ const SUPPORTED_ADVANCED_ADAPTER_TYPES = new Set<CreateConfigValues["adapterType
   "openclaw_gateway",
 ]);
 
-const HERMES_WORKER_SCRIPT = "/Users/adampeterson/GitHub/paperclip/scripts/hermes_paperclip_worker.py";
-const HERMES_PRESET_PROMPT_TEMPLATE =
-  "You are agent {{ agent.name }}.\n\nFollow the current task instructions. Keep outputs concise, concrete, and blocker-oriented.";
-const HERMES_PRESET_SECRET_BINDINGS: Record<string, string> = {
-  ZAI_API_KEY: "zai_api_key",
-};
-
-function buildHermesPresetEnvBindings(secrets: CompanySecret[]): Record<string, EnvBinding> {
-  const env: Record<string, EnvBinding> = {
-    HERMES_MODEL: { type: "plain", value: "glm-4.7" },
-    HERMES_PROVIDER: { type: "plain", value: "zai" },
-  };
-  const secretByName = new Map(secrets.map((secret) => [secret.name.toLowerCase(), secret]));
-  for (const [envKey, secretName] of Object.entries(HERMES_PRESET_SECRET_BINDINGS)) {
-    const secret = secretByName.get(secretName.toLowerCase());
-    if (!secret) continue;
-    env[envKey] = { type: "secret_ref", secretId: secret.id, version: "latest" };
-  }
-  return env;
-}
-
 function createValuesForAdapterType(
   adapterType: CreateConfigValues["adapterType"],
+  company?: CompanyAgentDefaults | null,
 ): CreateConfigValues {
   const { adapterType: _discard, ...defaults } = defaultCreateValues;
   const nextValues: CreateConfigValues = { ...defaults, adapterType };
@@ -84,11 +71,11 @@ function createValuesForAdapterType(
   } else if (adapterType === "opencode_local") {
     nextValues.model = "";
   }
-  return nextValues;
+  return applyCompanyAgentDefaults(nextValues, company ?? null);
 }
 
 export function NewAgent() {
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompany, selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -101,7 +88,9 @@ export function NewAgent() {
   const [capabilities, setCapabilities] = useState("");
   const [role, setRole] = useState("general");
   const [reportsTo, setReportsTo] = useState("");
-  const [configValues, setConfigValues] = useState<CreateConfigValues>(defaultCreateValues);
+  const [configValues, setConfigValues] = useState<CreateConfigValues>(() =>
+    createValuesForAdapterType(resolveCompanyDefaultAgentAdapterType(selectedCompany) as CreateConfigValues["adapterType"], selectedCompany),
+  );
   const [selectedSkillKeys, setSelectedSkillKeys] = useState<string[]>([]);
   const [roleOpen, setRoleOpen] = useState(false);
   const [reportsToOpen, setReportsToOpen] = useState(false);
@@ -165,46 +154,31 @@ export function NewAgent() {
 
   useEffect(() => {
     const isHermesPreset =
-      presetAdapterType === "process" &&
-      presetTemplate === "hermes_agent";
+      presetAdapterType === "hermes_local" &&
+      presetTemplate === "paperclip_defaults";
     if (!isHermesPreset || companySecretsLoading || hermesPresetAppliedRef.current) return;
     hermesPresetAppliedRef.current = true;
 
-    setConfigValues({
-      ...createValuesForAdapterType("process"),
-      cwd: "",
-      command: "python3",
-      args: HERMES_WORKER_SCRIPT,
-      browserAutomationProvider: "",
-      browserAutomationCommand: "",
-      browserSessionProfile: "",
-      browserHeadless: false,
-      promptTemplate: HERMES_PRESET_PROMPT_TEMPLATE,
-      model: "",
-      thinkingEffort: "",
-      extraArgs: "",
-      envBindings: buildHermesPresetEnvBindings(companySecrets ?? []),
-      heartbeatEnabled: true,
-      intervalSec: 300,
-    });
+    setConfigValues(buildHermesLocalPresetValues(companySecrets ?? [], selectedCompany));
   }, [
     companySecrets,
     companySecretsLoading,
     presetAdapterType,
     presetTemplate,
+    selectedCompany,
   ]);
 
   useEffect(() => {
-    const requested = presetAdapterType;
+    const requested = presetAdapterType ?? resolveCompanyDefaultAgentAdapterType(selectedCompany);
     if (!requested) return;
     if (!SUPPORTED_ADVANCED_ADAPTER_TYPES.has(requested as CreateConfigValues["adapterType"])) {
       return;
     }
     setConfigValues((prev) => {
       if (prev.adapterType === requested) return prev;
-      return createValuesForAdapterType(requested as CreateConfigValues["adapterType"]);
+      return createValuesForAdapterType(requested as CreateConfigValues["adapterType"], selectedCompany);
     });
-  }, [presetAdapterType]);
+  }, [presetAdapterType, selectedCompany]);
 
   const createAgent = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
@@ -265,13 +239,13 @@ export function NewAgent() {
       adapterType: configValues.adapterType,
       adapterConfig: buildAdapterConfig(),
       runtimeConfig: {
-        heartbeat: {
+        heartbeat: applyCompanyHeartbeatDefaults({
           enabled: configValues.heartbeatEnabled,
           intervalSec: configValues.intervalSec,
           wakeOnDemand: true,
           cooldownSec: 10,
           maxConcurrentRuns: 1,
-        },
+        }, selectedCompany),
       },
       budgetMonthlyCents: 0,
     });

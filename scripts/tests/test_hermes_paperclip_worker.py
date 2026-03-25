@@ -1,5 +1,7 @@
 import importlib.util
+import json
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -284,6 +286,60 @@ class HermesWorkerTests(unittest.TestCase):
             {"sessionId": "session-1", "sessionName": "paperclip::agent-1::ROM-44"},
             result["_sessionParams"],
         )
+
+    def test_seed_hermes_home_context_writes_company_profile_files(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "PAPERCLIP_COMPANY_PROFILE_JSON": json.dumps(
+                    {
+                        "companyName": "Romance Unzipped",
+                        "voiceDescription": "Warm, witty, emotionally direct.",
+                        "targetAudience": "Romance readers who want sharp commentary.",
+                        "defaultChannel": "newsletter",
+                        "defaultGoal": "Make the next read irresistible.",
+                        "voiceExamplesRight": ["Smart, intimate, and specific."],
+                        "voiceExamplesWrong": ["Flat promo copy."],
+                    }
+                )
+            },
+            clear=False,
+        ):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                hermes_home = Path(tmpdir) / ".hermes"
+                worker.seed_hermes_home_context(hermes_home)
+                self.assertTrue((hermes_home / "SOUL.md").is_file())
+                self.assertTrue((hermes_home / "AGENTS.md").is_file())
+                self.assertIn("How We Describe Our Voice", (hermes_home / "SOUL.md").read_text())
+                self.assertIn("Examples That Feel Exactly Right", (hermes_home / "SOUL.md").read_text())
+                self.assertIn("Company Prompt Packet", (hermes_home / "AGENTS.md").read_text())
+
+    def test_seed_hermes_home_context_writes_memory_files_when_enabled(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "PAPERCLIP_COMPANY_PROFILE_JSON": json.dumps(
+                    {
+                        "companyName": "Romance Unzipped",
+                        "voiceDescription": "Warm, witty, emotionally direct.",
+                        "targetAudience": "Romance readers who want sharp commentary.",
+                        "defaultChannel": "newsletter",
+                        "defaultGoal": "Make the next read irresistible.",
+                        "voiceExamplesRight": ["Smart, intimate, and specific."],
+                        "voiceExamplesWrong": ["Flat promo copy."],
+                    }
+                ),
+                "PAPERCLIP_SEED_COMPANY_PROFILE_MEMORY": "1",
+            },
+            clear=False,
+        ):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                hermes_home = Path(tmpdir) / ".hermes"
+                worker.seed_hermes_home_context(hermes_home)
+                self.assertTrue((hermes_home / "USER.md").is_file())
+                self.assertTrue((hermes_home / "MEMORY.md").is_file())
+                self.assertIn("Working Audience", (hermes_home / "USER.md").read_text())
+                self.assertIn("Seeded Company Memory", (hermes_home / "MEMORY.md").read_text())
 
 if __name__ == "__main__":
     unittest.main()

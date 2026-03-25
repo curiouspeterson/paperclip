@@ -31,6 +31,22 @@ export interface CompanyPortabilityCompanyManifestEntry {
   brandColor: string | null;
   logoPath: string | null;
   requireBoardApprovalForNewAgents: boolean;
+  agentDefaultAdapterType: string | null;
+  agentDefaultProvider: string | null;
+  agentDefaultModel: string | null;
+  agentDefaultHeartbeatIntervalSec: number | null;
+  agentDefaultWakeOnDemand: boolean | null;
+  agentDefaultCooldownSec: number | null;
+  agentDefaultMaxConcurrentRuns: number | null;
+  agentDefaultMaxTurnsPerRun: number | null;
+  agentDefaultBrowserAutomationProvider: string | null;
+  agentDefaultHermesManagedHome: boolean | null;
+  agentDefaultHermesSeedCompanyProfileMemory: boolean | null;
+  agentDefaultHermesToolsets: string | null;
+  agentDefaultHermesAllowedMcpServers: string | null;
+  agentDefaultHermesMcpServers: Record<string, unknown> | null;
+  agentDefaultDangerouslySkipPermissions: boolean | null;
+  agentDefaultDangerouslyBypassSandbox: boolean | null;
 }
 
 export interface CompanyPortabilityProjectManifestEntry {

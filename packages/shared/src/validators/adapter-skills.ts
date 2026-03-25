@@ -37,6 +37,8 @@ export const agentSkillEntrySchema = z.object({
   sourcePath: z.string().nullable().optional(),
   targetPath: z.string().nullable().optional(),
   detail: z.string().nullable().optional(),
+  externalConflictKind: z.enum(["imported_source", "external_unknown"]).optional(),
+  externalConflictPath: z.string().nullable().optional(),
 });
 
 export const agentSkillSnapshotSchema = z.object({
@@ -52,4 +54,10 @@ export const agentSkillSyncSchema = z.object({
   desiredSkills: z.array(z.string().min(1)),
 });
 
+export const agentSkillReplaceExternalSchema = z.object({
+  desiredSkillKey: z.string().min(1),
+  runtimeName: z.string().min(1),
+});
+
 export type AgentSkillSync = z.infer<typeof agentSkillSyncSchema>;
+export type AgentSkillReplaceExternal = z.infer<typeof agentSkillReplaceExternalSchema>;

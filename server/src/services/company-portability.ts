@@ -1664,6 +1664,51 @@ function buildManifestFromPackageFiles(
         typeof paperclipCompany.requireBoardApprovalForNewAgents === "boolean"
           ? paperclipCompany.requireBoardApprovalForNewAgents
           : readCompanyApprovalDefault(companyFrontmatter),
+      agentDefaultAdapterType: asString(paperclipCompany.agentDefaultAdapterType),
+      agentDefaultProvider: asString(paperclipCompany.agentDefaultProvider),
+      agentDefaultModel: asString(paperclipCompany.agentDefaultModel),
+      agentDefaultHeartbeatIntervalSec:
+        typeof paperclipCompany.agentDefaultHeartbeatIntervalSec === "number"
+          ? paperclipCompany.agentDefaultHeartbeatIntervalSec
+          : null,
+      agentDefaultWakeOnDemand:
+        typeof paperclipCompany.agentDefaultWakeOnDemand === "boolean"
+          ? paperclipCompany.agentDefaultWakeOnDemand
+          : null,
+      agentDefaultCooldownSec:
+        typeof paperclipCompany.agentDefaultCooldownSec === "number"
+          ? paperclipCompany.agentDefaultCooldownSec
+          : null,
+      agentDefaultMaxConcurrentRuns:
+        typeof paperclipCompany.agentDefaultMaxConcurrentRuns === "number"
+          ? paperclipCompany.agentDefaultMaxConcurrentRuns
+          : null,
+      agentDefaultMaxTurnsPerRun:
+        typeof paperclipCompany.agentDefaultMaxTurnsPerRun === "number"
+          ? paperclipCompany.agentDefaultMaxTurnsPerRun
+          : null,
+      agentDefaultBrowserAutomationProvider: asString(paperclipCompany.agentDefaultBrowserAutomationProvider),
+      agentDefaultHermesManagedHome:
+        typeof paperclipCompany.agentDefaultHermesManagedHome === "boolean"
+          ? paperclipCompany.agentDefaultHermesManagedHome
+          : null,
+      agentDefaultHermesSeedCompanyProfileMemory:
+        typeof paperclipCompany.agentDefaultHermesSeedCompanyProfileMemory === "boolean"
+          ? paperclipCompany.agentDefaultHermesSeedCompanyProfileMemory
+          : null,
+      agentDefaultHermesToolsets: asString(paperclipCompany.agentDefaultHermesToolsets),
+      agentDefaultHermesAllowedMcpServers: asString(paperclipCompany.agentDefaultHermesAllowedMcpServers),
+      agentDefaultHermesMcpServers: isPlainRecord(paperclipCompany.agentDefaultHermesMcpServers)
+        ? paperclipCompany.agentDefaultHermesMcpServers
+        : null,
+      agentDefaultDangerouslySkipPermissions:
+        typeof paperclipCompany.agentDefaultDangerouslySkipPermissions === "boolean"
+          ? paperclipCompany.agentDefaultDangerouslySkipPermissions
+          : null,
+      agentDefaultDangerouslyBypassSandbox:
+        typeof paperclipCompany.agentDefaultDangerouslyBypassSandbox === "boolean"
+          ? paperclipCompany.agentDefaultDangerouslyBypassSandbox
+          : null,
     },
     agents: [],
     skills: [],
@@ -2429,6 +2474,22 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           brandColor: company.brandColor ?? null,
           logoPath: companyLogoPath,
           requireBoardApprovalForNewAgents: company.requireBoardApprovalForNewAgents ? undefined : false,
+          agentDefaultAdapterType: company.agentDefaultAdapterType ?? null,
+          agentDefaultProvider: company.agentDefaultProvider ?? null,
+          agentDefaultModel: company.agentDefaultModel ?? null,
+          agentDefaultHeartbeatIntervalSec: company.agentDefaultHeartbeatIntervalSec ?? null,
+          agentDefaultWakeOnDemand: company.agentDefaultWakeOnDemand ?? null,
+          agentDefaultCooldownSec: company.agentDefaultCooldownSec ?? null,
+          agentDefaultMaxConcurrentRuns: company.agentDefaultMaxConcurrentRuns ?? null,
+          agentDefaultMaxTurnsPerRun: company.agentDefaultMaxTurnsPerRun ?? null,
+          agentDefaultBrowserAutomationProvider: company.agentDefaultBrowserAutomationProvider ?? null,
+          agentDefaultHermesManagedHome: company.agentDefaultHermesManagedHome ?? null,
+          agentDefaultHermesSeedCompanyProfileMemory: company.agentDefaultHermesSeedCompanyProfileMemory ?? null,
+          agentDefaultHermesToolsets: company.agentDefaultHermesToolsets ?? null,
+          agentDefaultHermesAllowedMcpServers: company.agentDefaultHermesAllowedMcpServers ?? null,
+          agentDefaultHermesMcpServers: company.agentDefaultHermesMcpServers ?? null,
+          agentDefaultDangerouslySkipPermissions: company.agentDefaultDangerouslySkipPermissions ?? null,
+          agentDefaultDangerouslyBypassSandbox: company.agentDefaultDangerouslyBypassSandbox ?? null,
         }),
         agents: Object.keys(paperclipAgents).length > 0 ? paperclipAgents : undefined,
         projects: Object.keys(paperclipProjects).length > 0 ? paperclipProjects : undefined,
@@ -2919,6 +2980,38 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
         requireBoardApprovalForNewAgents: include.company
           ? (sourceManifest.company?.requireBoardApprovalForNewAgents ?? true)
           : true,
+        agentDefaultAdapterType: include.company ? (sourceManifest.company?.agentDefaultAdapterType ?? null) : null,
+        agentDefaultProvider: include.company ? (sourceManifest.company?.agentDefaultProvider ?? null) : null,
+        agentDefaultModel: include.company ? (sourceManifest.company?.agentDefaultModel ?? null) : null,
+        agentDefaultHeartbeatIntervalSec: include.company
+          ? (sourceManifest.company?.agentDefaultHeartbeatIntervalSec ?? null)
+          : null,
+        agentDefaultWakeOnDemand: include.company ? (sourceManifest.company?.agentDefaultWakeOnDemand ?? null) : null,
+        agentDefaultCooldownSec: include.company ? (sourceManifest.company?.agentDefaultCooldownSec ?? null) : null,
+        agentDefaultMaxConcurrentRuns: include.company
+          ? (sourceManifest.company?.agentDefaultMaxConcurrentRuns ?? null)
+          : null,
+        agentDefaultMaxTurnsPerRun: include.company ? (sourceManifest.company?.agentDefaultMaxTurnsPerRun ?? null) : null,
+        agentDefaultBrowserAutomationProvider: include.company
+          ? (sourceManifest.company?.agentDefaultBrowserAutomationProvider ?? null)
+          : null,
+        agentDefaultHermesManagedHome: include.company
+          ? (sourceManifest.company?.agentDefaultHermesManagedHome ?? null)
+          : null,
+        agentDefaultHermesSeedCompanyProfileMemory: include.company
+          ? (sourceManifest.company?.agentDefaultHermesSeedCompanyProfileMemory ?? null)
+          : null,
+        agentDefaultHermesToolsets: include.company ? (sourceManifest.company?.agentDefaultHermesToolsets ?? null) : null,
+        agentDefaultHermesAllowedMcpServers: include.company
+          ? (sourceManifest.company?.agentDefaultHermesAllowedMcpServers ?? null)
+          : null,
+        agentDefaultHermesMcpServers: include.company ? (sourceManifest.company?.agentDefaultHermesMcpServers ?? null) : null,
+        agentDefaultDangerouslySkipPermissions: include.company
+          ? (sourceManifest.company?.agentDefaultDangerouslySkipPermissions ?? null)
+          : null,
+        agentDefaultDangerouslyBypassSandbox: include.company
+          ? (sourceManifest.company?.agentDefaultDangerouslyBypassSandbox ?? null)
+          : null,
       });
       if (mode === "agent_safe" && options?.sourceCompanyId) {
         await access.copyActiveUserMemberships(options.sourceCompanyId, created.id);
@@ -2936,6 +3029,22 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
           description: sourceManifest.company.description,
           brandColor: sourceManifest.company.brandColor,
           requireBoardApprovalForNewAgents: sourceManifest.company.requireBoardApprovalForNewAgents,
+          agentDefaultAdapterType: sourceManifest.company.agentDefaultAdapterType,
+          agentDefaultProvider: sourceManifest.company.agentDefaultProvider,
+          agentDefaultModel: sourceManifest.company.agentDefaultModel,
+          agentDefaultHeartbeatIntervalSec: sourceManifest.company.agentDefaultHeartbeatIntervalSec,
+          agentDefaultWakeOnDemand: sourceManifest.company.agentDefaultWakeOnDemand,
+          agentDefaultCooldownSec: sourceManifest.company.agentDefaultCooldownSec,
+          agentDefaultMaxConcurrentRuns: sourceManifest.company.agentDefaultMaxConcurrentRuns,
+          agentDefaultMaxTurnsPerRun: sourceManifest.company.agentDefaultMaxTurnsPerRun,
+          agentDefaultBrowserAutomationProvider: sourceManifest.company.agentDefaultBrowserAutomationProvider,
+          agentDefaultHermesManagedHome: sourceManifest.company.agentDefaultHermesManagedHome,
+          agentDefaultHermesSeedCompanyProfileMemory: sourceManifest.company.agentDefaultHermesSeedCompanyProfileMemory,
+          agentDefaultHermesToolsets: sourceManifest.company.agentDefaultHermesToolsets,
+          agentDefaultHermesAllowedMcpServers: sourceManifest.company.agentDefaultHermesAllowedMcpServers,
+          agentDefaultHermesMcpServers: sourceManifest.company.agentDefaultHermesMcpServers,
+          agentDefaultDangerouslySkipPermissions: sourceManifest.company.agentDefaultDangerouslySkipPermissions,
+          agentDefaultDangerouslyBypassSandbox: sourceManifest.company.agentDefaultDangerouslyBypassSandbox,
         });
         targetCompany = updated ?? targetCompany;
         companyAction = "updated";

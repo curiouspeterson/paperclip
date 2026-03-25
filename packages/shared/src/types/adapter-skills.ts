@@ -29,6 +29,8 @@ export interface AgentSkillEntry {
   sourcePath?: string | null;
   targetPath?: string | null;
   detail?: string | null;
+  externalConflictKind?: "imported_source" | "external_unknown";
+  externalConflictPath?: string | null;
 }
 
 export interface AgentSkillSnapshot {
@@ -42,4 +44,9 @@ export interface AgentSkillSnapshot {
 
 export interface AgentSkillSyncRequest {
   desiredSkills: string[];
+}
+
+export interface AgentSkillReplaceExternalRequest {
+  desiredSkillKey: string;
+  runtimeName: string;
 }

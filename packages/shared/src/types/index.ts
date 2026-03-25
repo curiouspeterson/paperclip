@@ -36,6 +36,7 @@ export type {
   AgentSkillEntry,
   AgentSkillSnapshot,
   AgentSkillSyncRequest,
+  AgentSkillReplaceExternalRequest,
 } from "./adapter-skills.js";
 export type {
   Agent,

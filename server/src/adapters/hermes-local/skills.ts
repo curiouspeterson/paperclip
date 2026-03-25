@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,33 +9,33 @@ import {
   resolvePaperclipDesiredSkillNames,
 } from "@paperclipai/adapter-utils/server-utils";
 import type { AdapterSkillContext, AdapterSkillSnapshot } from "../types.js";
+import { resolveHermesHomeForConfig } from "./mcp.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const PAPERCLIP_SKILL_ROOT_CANDIDATES = [
+  path.resolve(__moduleDir, "../../../../skills"),
+];
 
-function asString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+function resolveHermesSkillsHome(ctx: Pick<AdapterSkillContext, "agentId" | "config">): string {
+  return path.join(resolveHermesHomeForConfig(ctx.agentId, ctx.config), "skills");
 }
 
-function resolveHermesHome(config: Record<string, unknown>): string {
-  const env =
-    typeof config.env === "object" && config.env !== null && !Array.isArray(config.env)
-      ? (config.env as Record<string, unknown>)
-      : {};
-  const configuredHermesHome = asString(env.HERMES_HOME);
-  if (configuredHermesHome) return path.resolve(configuredHermesHome);
-  const configuredHome = asString(env.HOME);
-  const home = configuredHome ? path.resolve(configuredHome) : os.homedir();
-  return path.join(home, ".hermes");
+function resolveHermesSkillsLocationLabel(config: Record<string, unknown>) {
+  return config.paperclipManagedHermesHome || config.mcpServers
+    ? "Paperclip-managed Hermes home"
+    : "~/.hermes/skills";
 }
 
-function resolveHermesSkillsHome(config: Record<string, unknown>): string {
-  return path.join(resolveHermesHome(config), "skills");
-}
-
-async function buildHermesSkillSnapshot(config: Record<string, unknown>): Promise<AdapterSkillSnapshot> {
-  const availableEntries = await readPaperclipRuntimeSkillEntries(config, __moduleDir);
-  const desiredSkills = resolvePaperclipDesiredSkillNames(config, availableEntries);
-  const skillsHome = resolveHermesSkillsHome(config);
+async function buildHermesSkillSnapshot(
+  ctx: Pick<AdapterSkillContext, "agentId" | "config">,
+): Promise<AdapterSkillSnapshot> {
+  const availableEntries = await readPaperclipRuntimeSkillEntries(
+    ctx.config,
+    __moduleDir,
+    PAPERCLIP_SKILL_ROOT_CANDIDATES,
+  );
+  const desiredSkills = resolvePaperclipDesiredSkillNames(ctx.config, availableEntries);
+  const skillsHome = resolveHermesSkillsHome(ctx);
   const installed = await readInstalledSkillTargets(skillsHome);
   return buildPersistentSkillSnapshot({
     adapterType: "hermes_local",
@@ -44,7 +43,7 @@ async function buildHermesSkillSnapshot(config: Record<string, unknown>): Promis
     desiredSkills,
     installed,
     skillsHome,
-    locationLabel: "~/.hermes/skills",
+    locationLabel: resolveHermesSkillsLocationLabel(ctx.config),
     installedDetail: "Installed in the Hermes skills home.",
     missingDetail: "Configured but not currently linked into the Hermes skills home.",
     externalConflictDetail: "Skill name is occupied by an external Hermes installation.",
@@ -52,20 +51,30 @@ async function buildHermesSkillSnapshot(config: Record<string, unknown>): Promis
   });
 }
 
+type ReplaceHermesExternalSkillInput = {
+  desiredSkillKey: string;
+  runtimeName: string;
+  expectedExternalSourcePath: string;
+};
+
 export async function listHermesSkills(ctx: AdapterSkillContext): Promise<AdapterSkillSnapshot> {
-  return buildHermesSkillSnapshot(ctx.config);
+  return buildHermesSkillSnapshot(ctx);
 }
 
 export async function syncHermesSkills(
   ctx: AdapterSkillContext,
   desiredSkills: string[],
 ): Promise<AdapterSkillSnapshot> {
-  const availableEntries = await readPaperclipRuntimeSkillEntries(ctx.config, __moduleDir);
+  const availableEntries = await readPaperclipRuntimeSkillEntries(
+    ctx.config,
+    __moduleDir,
+    PAPERCLIP_SKILL_ROOT_CANDIDATES,
+  );
   const desiredSet = new Set([
     ...desiredSkills,
     ...availableEntries.filter((entry) => entry.required).map((entry) => entry.key),
   ]);
-  const skillsHome = resolveHermesSkillsHome(ctx.config);
+  const skillsHome = resolveHermesSkillsHome(ctx);
   await fs.mkdir(skillsHome, { recursive: true });
   const installed = await readInstalledSkillTargets(skillsHome);
   const availableByRuntimeName = new Map(availableEntries.map((entry) => [entry.runtimeName, entry]));
@@ -84,5 +93,37 @@ export async function syncHermesSkills(
     await fs.unlink(path.join(skillsHome, name)).catch(() => {});
   }
 
-  return buildHermesSkillSnapshot(ctx.config);
+  return buildHermesSkillSnapshot(ctx);
+}
+
+export async function replaceHermesExternalSkill(
+  ctx: AdapterSkillContext,
+  input: ReplaceHermesExternalSkillInput,
+): Promise<AdapterSkillSnapshot> {
+  const availableEntries = await readPaperclipRuntimeSkillEntries(
+    ctx.config,
+    __moduleDir,
+    PAPERCLIP_SKILL_ROOT_CANDIDATES,
+  );
+  const available = availableEntries.find(
+    (entry) => entry.key === input.desiredSkillKey && entry.runtimeName === input.runtimeName,
+  );
+  if (!available) {
+    throw new Error(`Managed Hermes skill ${input.desiredSkillKey} (${input.runtimeName}) is not available.`);
+  }
+  const skillsHome = resolveHermesSkillsHome(ctx);
+  await fs.mkdir(skillsHome, { recursive: true });
+  const installed = await readInstalledSkillTargets(skillsHome);
+  const installedEntry = installed.get(input.runtimeName) ?? null;
+  const normalizedExpected = path.resolve(input.expectedExternalSourcePath);
+  const normalizedInstalled = installedEntry?.targetPath ? path.resolve(installedEntry.targetPath) : null;
+  if (!installedEntry || normalizedInstalled !== normalizedExpected) {
+    throw new Error(`Hermes runtime copy for ${input.runtimeName} no longer matches the expected external skill.`);
+  }
+
+  const target = path.join(skillsHome, input.runtimeName);
+  await fs.rm(target, { recursive: true, force: true });
+  await ensurePaperclipSkillSymlink(available.source, target);
+
+  return buildHermesSkillSnapshot(ctx);
 }

@@ -64,6 +64,32 @@ function createCompany() {
     spentMonthlyCents: 0,
     requireBoardApprovalForNewAgents: false,
     brandColor: "#123456",
+    voiceDescription: null,
+    targetAudience: null,
+    defaultChannel: null,
+    defaultGoal: null,
+    voiceExamplesRight: [],
+    voiceExamplesWrong: [],
+    mailchimpDefaultListId: null,
+    mailchimpDefaultTemplateId: null,
+    mailchimpDefaultFromName: null,
+    mailchimpDefaultReplyTo: null,
+    agentDefaultAdapterType: null,
+    agentDefaultProvider: null,
+    agentDefaultModel: null,
+    agentDefaultHeartbeatIntervalSec: null,
+    agentDefaultWakeOnDemand: null,
+    agentDefaultCooldownSec: null,
+    agentDefaultMaxConcurrentRuns: null,
+    agentDefaultMaxTurnsPerRun: null,
+    agentDefaultBrowserAutomationProvider: null,
+    agentDefaultHermesManagedHome: null,
+    agentDefaultHermesSeedCompanyProfileMemory: null,
+    agentDefaultHermesToolsets: null,
+    agentDefaultHermesAllowedMcpServers: null,
+    agentDefaultHermesMcpServers: null,
+    agentDefaultDangerouslySkipPermissions: null,
+    agentDefaultDangerouslyBypassSandbox: null,
     logoAssetId: "11111111-1111-4111-8111-111111111111",
     logoUrl: "/api/assets/11111111-1111-4111-8111-111111111111/content",
     createdAt: now,
@@ -183,6 +209,95 @@ describe("PATCH /api/companies/:companyId/branding", () => {
     expect(res.status).toBe(200);
     expect(res.body.brandColor).toBeNull();
     expect(res.body.logoAssetId).toBeNull();
+  });
+
+  it("allows board callers to update company agent defaults", async () => {
+    const company = {
+      ...createCompany(),
+      agentDefaultAdapterType: "hermes_local",
+      agentDefaultProvider: "zai",
+      agentDefaultModel: "glm-4.7",
+      agentDefaultHeartbeatIntervalSec: 300,
+      agentDefaultWakeOnDemand: true,
+      agentDefaultCooldownSec: 10,
+      agentDefaultMaxConcurrentRuns: 1,
+      agentDefaultMaxTurnsPerRun: 300,
+      agentDefaultBrowserAutomationProvider: "playwright",
+      agentDefaultHermesManagedHome: true,
+      agentDefaultHermesSeedCompanyProfileMemory: true,
+      agentDefaultHermesToolsets: "full,edit",
+      agentDefaultHermesAllowedMcpServers: "github,filesystem",
+      agentDefaultHermesMcpServers: {
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
+      },
+      agentDefaultDangerouslySkipPermissions: true,
+      agentDefaultDangerouslyBypassSandbox: false,
+    };
+    mockCompanyService.update.mockResolvedValue(company);
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "local_implicit",
+    });
+
+    const res = await request(app)
+      .patch("/api/companies/company-1")
+      .send({
+        agentDefaultAdapterType: "hermes_local",
+        agentDefaultProvider: "zai",
+        agentDefaultModel: "glm-4.7",
+        agentDefaultHeartbeatIntervalSec: 300,
+        agentDefaultWakeOnDemand: true,
+        agentDefaultCooldownSec: 10,
+        agentDefaultMaxConcurrentRuns: 1,
+        agentDefaultMaxTurnsPerRun: 300,
+        agentDefaultBrowserAutomationProvider: "playwright",
+        agentDefaultHermesManagedHome: true,
+        agentDefaultHermesSeedCompanyProfileMemory: true,
+        agentDefaultHermesToolsets: "full,edit",
+        agentDefaultHermesAllowedMcpServers: "github,filesystem",
+        agentDefaultHermesMcpServers: {
+          github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
+        },
+        agentDefaultDangerouslySkipPermissions: true,
+        agentDefaultDangerouslyBypassSandbox: false,
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockCompanyService.update).toHaveBeenCalledWith("company-1", {
+      agentDefaultAdapterType: "hermes_local",
+      agentDefaultProvider: "zai",
+      agentDefaultModel: "glm-4.7",
+      agentDefaultHeartbeatIntervalSec: 300,
+      agentDefaultWakeOnDemand: true,
+      agentDefaultCooldownSec: 10,
+      agentDefaultMaxConcurrentRuns: 1,
+      agentDefaultMaxTurnsPerRun: 300,
+      agentDefaultBrowserAutomationProvider: "playwright",
+      agentDefaultHermesManagedHome: true,
+      agentDefaultHermesSeedCompanyProfileMemory: true,
+      agentDefaultHermesToolsets: "full,edit",
+      agentDefaultHermesAllowedMcpServers: "github,filesystem",
+      agentDefaultHermesMcpServers: {
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
+      },
+      agentDefaultDangerouslySkipPermissions: true,
+      agentDefaultDangerouslyBypassSandbox: false,
+    });
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        companyId: "company-1",
+        actorType: "user",
+        actorId: "user-1",
+        action: "company.updated",
+        details: expect.objectContaining({
+          agentDefaultAdapterType: "hermes_local",
+          agentDefaultProvider: "zai",
+          agentDefaultModel: "glm-4.7",
+        }),
+      }),
+    );
   });
 
   it("rejects non-branding fields in the request body", async () => {

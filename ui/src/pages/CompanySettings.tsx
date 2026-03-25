@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { MailchimpMarketingOverview } from "@paperclipai/shared";
+import { AGENT_ADAPTER_TYPES, type MailchimpMarketingOverview } from "@paperclipai/shared";
 import { useNavigate } from "@/lib/router";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -20,6 +20,7 @@ import {
   ToggleField,
   HintIcon
 } from "../components/agent-config-primitives";
+import { adapterLabels } from "../components/agent-config-primitives";
 
 type AgentSnippetInput = {
   onboardingTextUrl: string;
@@ -52,6 +53,44 @@ export function CompanySettings() {
     setDescription(selectedCompany.description ?? "");
     setBrandColor(selectedCompany.brandColor ?? "");
     setLogoUrl(selectedCompany.logoUrl ?? "");
+    setAgentDefaultAdapterType(selectedCompany.agentDefaultAdapterType ?? "");
+    setAgentDefaultProvider(selectedCompany.agentDefaultProvider ?? "");
+    setAgentDefaultModel(selectedCompany.agentDefaultModel ?? "");
+    setAgentDefaultHeartbeatIntervalSec(
+      selectedCompany.agentDefaultHeartbeatIntervalSec != null
+        ? String(selectedCompany.agentDefaultHeartbeatIntervalSec)
+        : "",
+    );
+    setAgentDefaultWakeOnDemand(selectedCompany.agentDefaultWakeOnDemand ?? true);
+    setAgentDefaultCooldownSec(
+      selectedCompany.agentDefaultCooldownSec != null
+        ? String(selectedCompany.agentDefaultCooldownSec)
+        : "",
+    );
+    setAgentDefaultMaxConcurrentRuns(
+      selectedCompany.agentDefaultMaxConcurrentRuns != null
+        ? String(selectedCompany.agentDefaultMaxConcurrentRuns)
+        : "",
+    );
+    setAgentDefaultMaxTurnsPerRun(
+      selectedCompany.agentDefaultMaxTurnsPerRun != null
+        ? String(selectedCompany.agentDefaultMaxTurnsPerRun)
+        : "",
+    );
+    setAgentDefaultBrowserAutomationProvider(selectedCompany.agentDefaultBrowserAutomationProvider ?? "");
+    setAgentDefaultHermesManagedHome(selectedCompany.agentDefaultHermesManagedHome ?? false);
+    setAgentDefaultHermesSeedCompanyProfileMemory(
+      selectedCompany.agentDefaultHermesSeedCompanyProfileMemory ?? false,
+    );
+    setAgentDefaultHermesToolsets(selectedCompany.agentDefaultHermesToolsets ?? "");
+    setAgentDefaultHermesAllowedMcpServers(selectedCompany.agentDefaultHermesAllowedMcpServers ?? "");
+    setAgentDefaultHermesMcpServers(
+      selectedCompany.agentDefaultHermesMcpServers
+        ? JSON.stringify(selectedCompany.agentDefaultHermesMcpServers, null, 2)
+        : "",
+    );
+    setAgentDefaultDangerouslySkipPermissions(selectedCompany.agentDefaultDangerouslySkipPermissions ?? false);
+    setAgentDefaultDangerouslyBypassSandbox(selectedCompany.agentDefaultDangerouslyBypassSandbox ?? false);
   }, [selectedCompany]);
 
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -67,6 +106,22 @@ export function CompanySettings() {
   const [mailchimpReplyTo, setMailchimpReplyTo] = useState("");
   const [mailchimpHtml, setMailchimpHtml] = useState("");
   const [mailchimpPlainText, setMailchimpPlainText] = useState("");
+  const [agentDefaultAdapterType, setAgentDefaultAdapterType] = useState("");
+  const [agentDefaultProvider, setAgentDefaultProvider] = useState("");
+  const [agentDefaultModel, setAgentDefaultModel] = useState("");
+  const [agentDefaultHeartbeatIntervalSec, setAgentDefaultHeartbeatIntervalSec] = useState("");
+  const [agentDefaultWakeOnDemand, setAgentDefaultWakeOnDemand] = useState(true);
+  const [agentDefaultCooldownSec, setAgentDefaultCooldownSec] = useState("");
+  const [agentDefaultMaxConcurrentRuns, setAgentDefaultMaxConcurrentRuns] = useState("");
+  const [agentDefaultMaxTurnsPerRun, setAgentDefaultMaxTurnsPerRun] = useState("");
+  const [agentDefaultBrowserAutomationProvider, setAgentDefaultBrowserAutomationProvider] = useState("");
+  const [agentDefaultHermesManagedHome, setAgentDefaultHermesManagedHome] = useState(false);
+  const [agentDefaultHermesSeedCompanyProfileMemory, setAgentDefaultHermesSeedCompanyProfileMemory] = useState(false);
+  const [agentDefaultHermesToolsets, setAgentDefaultHermesToolsets] = useState("");
+  const [agentDefaultHermesAllowedMcpServers, setAgentDefaultHermesAllowedMcpServers] = useState("");
+  const [agentDefaultHermesMcpServers, setAgentDefaultHermesMcpServers] = useState("");
+  const [agentDefaultDangerouslySkipPermissions, setAgentDefaultDangerouslySkipPermissions] = useState(false);
+  const [agentDefaultDangerouslyBypassSandbox, setAgentDefaultDangerouslyBypassSandbox] = useState(false);
 
   const generalDirty =
     !!selectedCompany &&
@@ -80,6 +135,41 @@ export function CompanySettings() {
       mailchimpTemplateId !== (selectedCompany.mailchimpDefaultTemplateId ?? "") ||
       mailchimpFromName !== (selectedCompany.mailchimpDefaultFromName ?? "") ||
       mailchimpReplyTo !== (selectedCompany.mailchimpDefaultReplyTo ?? ""));
+
+  const agentDefaultsDirty =
+    !!selectedCompany &&
+    (agentDefaultAdapterType !== (selectedCompany.agentDefaultAdapterType ?? "") ||
+      agentDefaultProvider !== (selectedCompany.agentDefaultProvider ?? "") ||
+      agentDefaultModel !== (selectedCompany.agentDefaultModel ?? "") ||
+      agentDefaultHeartbeatIntervalSec !==
+        (selectedCompany.agentDefaultHeartbeatIntervalSec != null
+          ? String(selectedCompany.agentDefaultHeartbeatIntervalSec)
+          : "") ||
+      agentDefaultWakeOnDemand !== (selectedCompany.agentDefaultWakeOnDemand ?? true) ||
+      agentDefaultCooldownSec !==
+        (selectedCompany.agentDefaultCooldownSec != null
+          ? String(selectedCompany.agentDefaultCooldownSec)
+          : "") ||
+      agentDefaultMaxConcurrentRuns !==
+        (selectedCompany.agentDefaultMaxConcurrentRuns != null
+          ? String(selectedCompany.agentDefaultMaxConcurrentRuns)
+          : "") ||
+      agentDefaultMaxTurnsPerRun !==
+        (selectedCompany.agentDefaultMaxTurnsPerRun != null
+          ? String(selectedCompany.agentDefaultMaxTurnsPerRun)
+          : "") ||
+      agentDefaultBrowserAutomationProvider !== (selectedCompany.agentDefaultBrowserAutomationProvider ?? "") ||
+      agentDefaultHermesManagedHome !== (selectedCompany.agentDefaultHermesManagedHome ?? false) ||
+      agentDefaultHermesSeedCompanyProfileMemory !==
+        (selectedCompany.agentDefaultHermesSeedCompanyProfileMemory ?? false) ||
+      agentDefaultHermesToolsets !== (selectedCompany.agentDefaultHermesToolsets ?? "") ||
+      agentDefaultHermesAllowedMcpServers !== (selectedCompany.agentDefaultHermesAllowedMcpServers ?? "") ||
+      agentDefaultHermesMcpServers !==
+        (selectedCompany.agentDefaultHermesMcpServers
+          ? JSON.stringify(selectedCompany.agentDefaultHermesMcpServers, null, 2)
+          : "") ||
+      agentDefaultDangerouslySkipPermissions !== (selectedCompany.agentDefaultDangerouslySkipPermissions ?? false) ||
+      agentDefaultDangerouslyBypassSandbox !== (selectedCompany.agentDefaultDangerouslyBypassSandbox ?? false));
 
   const generalMutation = useMutation({
     mutationFn: (data: {
@@ -115,6 +205,41 @@ export function CompanySettings() {
       pushToast({
         title: "Mailchimp defaults saved",
         body: "Company-level Mailchimp newsletter defaults were updated.",
+      });
+    },
+  });
+
+  const agentDefaultsMutation = useMutation({
+    mutationFn: () =>
+      companiesApi.update(selectedCompanyId!, {
+        agentDefaultAdapterType: AGENT_ADAPTER_TYPES.includes(
+          agentDefaultAdapterType as (typeof AGENT_ADAPTER_TYPES)[number],
+        )
+          ? (agentDefaultAdapterType as (typeof AGENT_ADAPTER_TYPES)[number])
+          : null,
+        agentDefaultProvider: agentDefaultProvider.trim() || null,
+        agentDefaultModel: agentDefaultModel.trim() || null,
+        agentDefaultHeartbeatIntervalSec: agentDefaultHeartbeatIntervalSec ? Number(agentDefaultHeartbeatIntervalSec) : null,
+        agentDefaultWakeOnDemand: agentDefaultWakeOnDemand,
+        agentDefaultCooldownSec: agentDefaultCooldownSec ? Number(agentDefaultCooldownSec) : null,
+        agentDefaultMaxConcurrentRuns: agentDefaultMaxConcurrentRuns ? Number(agentDefaultMaxConcurrentRuns) : null,
+        agentDefaultMaxTurnsPerRun: agentDefaultMaxTurnsPerRun ? Number(agentDefaultMaxTurnsPerRun) : null,
+        agentDefaultBrowserAutomationProvider: agentDefaultBrowserAutomationProvider.trim() || null,
+        agentDefaultHermesManagedHome,
+        agentDefaultHermesSeedCompanyProfileMemory,
+        agentDefaultHermesToolsets: agentDefaultHermesToolsets.trim() || null,
+        agentDefaultHermesAllowedMcpServers: agentDefaultHermesAllowedMcpServers.trim() || null,
+        agentDefaultHermesMcpServers: agentDefaultHermesMcpServers.trim()
+          ? JSON.parse(agentDefaultHermesMcpServers)
+          : null,
+        agentDefaultDangerouslySkipPermissions,
+        agentDefaultDangerouslyBypassSandbox,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      pushToast({
+        title: "Agent defaults saved",
+        body: "New agents will inherit the updated company defaults.",
       });
     },
   });
@@ -549,6 +674,205 @@ export function CompanySettings() {
         </div>
       </div>
 
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Agent defaults
+        </div>
+        <div className="space-y-3 rounded-md border border-border px-4 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">Default agent runtime policy</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                New agents and Hermes preset creation inherit these values. Existing agents are unchanged.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => agentDefaultsMutation.mutate()}
+              disabled={!agentDefaultsDirty || agentDefaultsMutation.isPending}
+            >
+              {agentDefaultsMutation.isPending ? "Saving..." : "Save defaults"}
+            </Button>
+          </div>
+          <Field
+            label="Default adapter"
+            hint="Used when opening New Agent without an explicit preset. Hermes-specific presets still stay on Hermes."
+          >
+            <select
+              className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+              value={agentDefaultAdapterType}
+              onChange={(e) => setAgentDefaultAdapterType(e.target.value)}
+            >
+              <option value="">Paperclip default</option>
+              {AGENT_ADAPTER_TYPES.map((adapterType) => (
+                <option key={adapterType} value={adapterType}>
+                  {adapterLabels[adapterType] ?? adapterType}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field
+              label="Provider"
+              hint="Adapter-specific provider hint. Hermes uses this to build its --provider flag."
+            >
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                value={agentDefaultProvider}
+                onChange={(e) => setAgentDefaultProvider(e.target.value)}
+                placeholder="zai"
+              />
+            </Field>
+            <Field label="Model" hint="Default model override for newly created agents.">
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                value={agentDefaultModel}
+                onChange={(e) => setAgentDefaultModel(e.target.value)}
+                placeholder="glm-4.7"
+              />
+            </Field>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Heartbeat interval (sec)" hint="Default timer interval for new agents.">
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                type="number"
+                min={1}
+                value={agentDefaultHeartbeatIntervalSec}
+                onChange={(e) => setAgentDefaultHeartbeatIntervalSec(e.target.value)}
+                placeholder="300"
+              />
+            </Field>
+            <Field label="Cooldown (sec)" hint="Minimum gap between consecutive runs.">
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                type="number"
+                min={0}
+                value={agentDefaultCooldownSec}
+                onChange={(e) => setAgentDefaultCooldownSec(e.target.value)}
+                placeholder="10"
+              />
+            </Field>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Max concurrent runs" hint="Default scheduler concurrency for new agents.">
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                type="number"
+                min={1}
+                value={agentDefaultMaxConcurrentRuns}
+                onChange={(e) => setAgentDefaultMaxConcurrentRuns(e.target.value)}
+                placeholder="1"
+              />
+            </Field>
+            <Field label="Max turns per run" hint="Default agentic turn limit per heartbeat run.">
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                type="number"
+                min={1}
+                value={agentDefaultMaxTurnsPerRun}
+                onChange={(e) => setAgentDefaultMaxTurnsPerRun(e.target.value)}
+                placeholder="300"
+              />
+            </Field>
+          </div>
+          <Field
+            label="Browser automation provider"
+            hint="Optional default browser runtime exposed to new process or Hermes workers."
+          >
+            <input
+              className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+              value={agentDefaultBrowserAutomationProvider}
+              onChange={(e) => setAgentDefaultBrowserAutomationProvider(e.target.value)}
+              placeholder="playwright"
+            />
+          </Field>
+          <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+            <ToggleField
+              label="Use Paperclip-managed Hermes home by default"
+              hint="New Hermes agents get an isolated HERMES_HOME so sessions, local memory, skills, and SOUL.md stay scoped to the agent instead of the shared global install."
+              checked={agentDefaultHermesManagedHome}
+              onChange={setAgentDefaultHermesManagedHome}
+            />
+          </div>
+          <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+            <ToggleField
+              label="Seed company profile into Hermes memory by default"
+              hint="New Hermes agents will materialize USER.md and MEMORY.md from the Company Profile whenever they use a Paperclip-managed Hermes home."
+              checked={agentDefaultHermesSeedCompanyProfileMemory}
+              onChange={(checked) => {
+                setAgentDefaultHermesSeedCompanyProfileMemory(checked);
+                if (checked) setAgentDefaultHermesManagedHome(true);
+              }}
+            />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field
+              label="Hermes toolsets"
+              hint="Comma-separated toolsets applied to new Hermes agents, for example full,edit."
+            >
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                value={agentDefaultHermesToolsets}
+                onChange={(e) => setAgentDefaultHermesToolsets(e.target.value)}
+                placeholder="full,edit"
+              />
+            </Field>
+            <Field
+              label="Allowed MCP servers"
+              hint="Comma-separated allowlist for managed Hermes MCP servers."
+            >
+              <input
+                className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+                value={agentDefaultHermesAllowedMcpServers}
+                onChange={(e) => setAgentDefaultHermesAllowedMcpServers(e.target.value)}
+                placeholder="github,filesystem"
+              />
+            </Field>
+          </div>
+          <Field
+            label="Hermes managed MCP servers (JSON)"
+            hint="Optional JSON object of managed MCP server definitions inherited by new Hermes agents."
+          >
+            <textarea
+              className="min-h-[180px] w-full rounded-md border border-border bg-transparent px-2.5 py-2 text-sm outline-none"
+              value={agentDefaultHermesMcpServers}
+              onChange={(e) => setAgentDefaultHermesMcpServers(e.target.value)}
+              placeholder={'{\n  "github": {\n    "command": "npx",\n    "args": ["-y", "@modelcontextprotocol/server-github"]\n  }\n}'}
+              spellCheck={false}
+            />
+          </Field>
+          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+            <ToggleField
+              label="Wake on demand by default"
+              hint="Allow assignments, UI actions, and automations to wake newly created agents."
+              checked={agentDefaultWakeOnDemand}
+              onChange={setAgentDefaultWakeOnDemand}
+            />
+            <ToggleField
+              label="Skip permissions by default"
+              hint="Primarily affects Claude-style local agents for unattended operation."
+              checked={agentDefaultDangerouslySkipPermissions}
+              onChange={setAgentDefaultDangerouslySkipPermissions}
+            />
+            <ToggleField
+              label="Bypass sandbox by default"
+              hint="Primarily affects Codex-style local agents that need unrestricted filesystem and network access."
+              checked={agentDefaultDangerouslyBypassSandbox}
+              onChange={setAgentDefaultDangerouslyBypassSandbox}
+            />
+          </div>
+          {agentDefaultsMutation.isError && (
+            <p className="text-xs text-destructive">
+              {agentDefaultsMutation.error instanceof Error
+                ? agentDefaultsMutation.error.message
+                : "Failed to save agent defaults"}
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* Company control */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -646,18 +970,18 @@ export function CompanySettings() {
             <div className="rounded-md border border-border bg-muted/20 p-3">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Bot className="h-4 w-4 text-muted-foreground" />
-                Hermes Worker
+                Hermes Agent
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Create a Paperclip-managed Hermes worker with the local preset defaults prefilled.
+                Create a native Hermes local agent with Paperclip defaults and secret bindings prefilled.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => navigate("/agents/new?adapterType=process&preset=hermes_agent")}
+                  onClick={() => navigate("/agents/new?adapterType=hermes_local&preset=paperclip_defaults")}
                 >
-                  Create Hermes Worker
+                  Create Hermes Agent
                   <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Button>
               </div>

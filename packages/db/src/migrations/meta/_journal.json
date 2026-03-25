@@ -351,6 +351,34 @@
       "when": 1774321665434,
       "tag": "0049_aberrant_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1774332948790,
+      "tag": "0050_aspiring_mister_sinister",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1774336914368,
+      "tag": "0051_watery_toxin",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1774338049089,
+      "tag": "0052_yummy_pixie",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1774338416298,
+      "tag": "0053_absurd_human_robot",
+      "breakpoints": true
     }
   ]
 }

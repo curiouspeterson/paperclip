@@ -1,4 +1,4 @@
-import type { CompanyStatus, PauseReason } from "../constants.js";
+import type { AgentAdapterType, CompanyStatus, PauseReason } from "../constants.js";
 
 export interface Company {
   id: string;
@@ -23,6 +23,22 @@ export interface Company {
   mailchimpDefaultTemplateId: string | null;
   mailchimpDefaultFromName: string | null;
   mailchimpDefaultReplyTo: string | null;
+  agentDefaultAdapterType: AgentAdapterType | null;
+  agentDefaultProvider: string | null;
+  agentDefaultModel: string | null;
+  agentDefaultHeartbeatIntervalSec: number | null;
+  agentDefaultWakeOnDemand: boolean | null;
+  agentDefaultCooldownSec: number | null;
+  agentDefaultMaxConcurrentRuns: number | null;
+  agentDefaultMaxTurnsPerRun: number | null;
+  agentDefaultBrowserAutomationProvider: string | null;
+  agentDefaultHermesManagedHome: boolean | null;
+  agentDefaultHermesSeedCompanyProfileMemory: boolean | null;
+  agentDefaultHermesToolsets: string | null;
+  agentDefaultHermesAllowedMcpServers: string | null;
+  agentDefaultHermesMcpServers: Record<string, unknown> | null;
+  agentDefaultDangerouslySkipPermissions: boolean | null;
+  agentDefaultDangerouslyBypassSandbox: boolean | null;
   logoAssetId: string | null;
   logoUrl: string | null;
   createdAt: Date;

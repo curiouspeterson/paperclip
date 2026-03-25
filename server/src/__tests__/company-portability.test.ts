@@ -109,6 +109,24 @@ describe("company portability", () => {
       logoAssetId: null,
       logoUrl: null,
       requireBoardApprovalForNewAgents: true,
+      agentDefaultAdapterType: "hermes_local",
+      agentDefaultProvider: "zai",
+      agentDefaultModel: "glm-4.7",
+      agentDefaultHeartbeatIntervalSec: 1800,
+      agentDefaultWakeOnDemand: true,
+      agentDefaultCooldownSec: 30,
+      agentDefaultMaxConcurrentRuns: 2,
+      agentDefaultMaxTurnsPerRun: 24,
+      agentDefaultBrowserAutomationProvider: "playwright",
+      agentDefaultHermesManagedHome: true,
+      agentDefaultHermesSeedCompanyProfileMemory: true,
+      agentDefaultHermesToolsets: "full,edit",
+      agentDefaultHermesAllowedMcpServers: "github,filesystem",
+      agentDefaultHermesMcpServers: {
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
+      },
+      agentDefaultDangerouslySkipPermissions: false,
+      agentDefaultDangerouslyBypassSandbox: false,
     });
     agentSvc.list.mockResolvedValue([
       {
@@ -329,7 +347,7 @@ describe("company portability", () => {
     expect(extension).toContain('schema: "paperclip/v1"');
     expect(extension).not.toContain("promptTemplate");
     expect(extension).not.toContain("instructionsFilePath");
-    expect(extension).not.toContain("command:");
+    expect(extension).not.toContain("command: \"/Users/dotta/.local/bin/claude\"");
     expect(extension).not.toContain("secretId");
     expect(extension).not.toContain('type: "secret_ref"');
     expect(extension).toContain("inputs:");
@@ -339,6 +357,20 @@ describe("company portability", () => {
     expect(extension).not.toContain("paperclipSkillSync");
     expect(extension).not.toContain("PATH:");
     expect(extension).not.toContain("requireBoardApprovalForNewAgents: true");
+    expect(extension).toContain('agentDefaultAdapterType: "hermes_local"');
+    expect(extension).toContain('agentDefaultProvider: "zai"');
+    expect(extension).toContain('agentDefaultModel: "glm-4.7"');
+    expect(extension).toContain("agentDefaultHeartbeatIntervalSec: 1800");
+    expect(extension).toContain("agentDefaultWakeOnDemand: true");
+    expect(extension).toContain("agentDefaultCooldownSec: 30");
+    expect(extension).toContain("agentDefaultMaxConcurrentRuns: 2");
+    expect(extension).toContain("agentDefaultMaxTurnsPerRun: 24");
+    expect(extension).toContain('agentDefaultBrowserAutomationProvider: "playwright"');
+    expect(extension).toContain("agentDefaultHermesManagedHome: true");
+    expect(extension).toContain("agentDefaultHermesSeedCompanyProfileMemory: true");
+    expect(extension).toContain('agentDefaultHermesToolsets: "full,edit"');
+    expect(extension).toContain('agentDefaultHermesAllowedMcpServers: "github,filesystem"');
+    expect(extension).toContain('agentDefaultHermesMcpServers:');
     expect(extension).not.toContain("budgetMonthlyCents: 0");
     expect(exported.warnings).toContain("Agent claudecoder command /Users/dotta/.local/bin/claude was omitted from export because it is system-dependent.");
     expect(exported.warnings).toContain("Agent claudecoder PATH override was omitted from export because it is system-dependent.");
@@ -667,6 +699,32 @@ describe("company portability", () => {
             "You write code.",
             "",
           ].join("\n"),
+          ".paperclip.yaml": [
+            'schema: "paperclip/v1"',
+            "company:",
+            '  agentDefaultAdapterType: "hermes_local"',
+            '  agentDefaultProvider: "zai"',
+            '  agentDefaultModel: "glm-4.7"',
+            "  agentDefaultHeartbeatIntervalSec: 1800",
+            "  agentDefaultWakeOnDemand: true",
+            "  agentDefaultCooldownSec: 30",
+            "  agentDefaultMaxConcurrentRuns: 2",
+            "  agentDefaultMaxTurnsPerRun: 24",
+            '  agentDefaultBrowserAutomationProvider: "playwright"',
+            "  agentDefaultHermesManagedHome: true",
+            "  agentDefaultHermesSeedCompanyProfileMemory: true",
+            '  agentDefaultHermesToolsets: "full,edit"',
+            '  agentDefaultHermesAllowedMcpServers: "github,filesystem"',
+            "  agentDefaultHermesMcpServers:",
+            "    github:",
+            '      command: "npx"',
+            "      args:",
+            '        - "-y"',
+            '        - "@modelcontextprotocol/server-github"',
+            "  agentDefaultDangerouslySkipPermissions: false",
+            "  agentDefaultDangerouslyBypassSandbox: false",
+            "",
+          ].join("\n"),
         },
       },
       include: {
@@ -851,6 +909,26 @@ describe("company portability", () => {
     expect(companySkillSvc.importPackageFiles).toHaveBeenCalledWith("company-imported", textOnlyFiles, {
       onConflict: "replace",
     });
+    expect(companySvc.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentDefaultAdapterType: "hermes_local",
+      agentDefaultProvider: "zai",
+      agentDefaultModel: "glm-4.7",
+      agentDefaultHeartbeatIntervalSec: 1800,
+      agentDefaultWakeOnDemand: true,
+      agentDefaultCooldownSec: 30,
+      agentDefaultMaxConcurrentRuns: 2,
+      agentDefaultMaxTurnsPerRun: 24,
+      agentDefaultBrowserAutomationProvider: "playwright",
+      agentDefaultHermesManagedHome: true,
+      agentDefaultHermesSeedCompanyProfileMemory: true,
+      agentDefaultHermesToolsets: "full,edit",
+      agentDefaultHermesAllowedMcpServers: "github,filesystem",
+      agentDefaultHermesMcpServers: {
+        github: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
+      },
+      agentDefaultDangerouslySkipPermissions: false,
+      agentDefaultDangerouslyBypassSandbox: false,
+    }));
     expect(agentSvc.create).toHaveBeenCalledWith("company-imported", expect.objectContaining({
       adapterConfig: expect.objectContaining({
         paperclipSkillSync: {

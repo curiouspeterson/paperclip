@@ -34,6 +34,14 @@ export const companiesApi = {
         Company,
         "name" | "description" | "status" | "budgetMonthlyCents" | "requireBoardApprovalForNewAgents" | "brandColor" | "mailchimpDefaultListId" | "mailchimpDefaultTemplateId" | "mailchimpDefaultFromName" | "mailchimpDefaultReplyTo" | "logoAssetId"
         | "voiceDescription" | "targetAudience" | "defaultChannel" | "defaultGoal" | "voiceExamplesRight" | "voiceExamplesWrong"
+        | "agentDefaultAdapterType" | "agentDefaultProvider" | "agentDefaultModel"
+        | "agentDefaultHeartbeatIntervalSec" | "agentDefaultWakeOnDemand" | "agentDefaultCooldownSec"
+        | "agentDefaultMaxConcurrentRuns" | "agentDefaultMaxTurnsPerRun"
+        | "agentDefaultBrowserAutomationProvider"
+        | "agentDefaultHermesManagedHome"
+        | "agentDefaultHermesSeedCompanyProfileMemory"
+        | "agentDefaultHermesToolsets" | "agentDefaultHermesAllowedMcpServers" | "agentDefaultHermesMcpServers"
+        | "agentDefaultDangerouslySkipPermissions" | "agentDefaultDangerouslyBypassSandbox"
       >
     >,
   ) => api.patch<Company>(`/companies/${companyId}`, data),

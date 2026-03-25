@@ -25,6 +25,7 @@ import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { costService } from "./costs.js";
+import { companyService } from "./companies.js";
 import { companySkillService } from "./company-skills.js";
 import { budgetService, type BudgetEnforcementScope } from "./budgets.js";
 import { secretService } from "./secrets.js";
@@ -86,6 +87,27 @@ function deriveRepoNameFromRepoUrl(repoUrl: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function buildHermesCompanyProfileContext(company: {
+  name: string;
+  voiceDescription: string | null;
+  targetAudience: string | null;
+  defaultChannel: string | null;
+  defaultGoal: string | null;
+  voiceExamplesRight: string[];
+  voiceExamplesWrong: string[];
+} | null) {
+  if (!company) return null;
+  return {
+    companyName: company.name,
+    voiceDescription: company.voiceDescription,
+    targetAudience: company.targetAudience,
+    defaultChannel: company.defaultChannel,
+    defaultGoal: company.defaultGoal,
+    voiceExamplesRight: company.voiceExamplesRight,
+    voiceExamplesWrong: company.voiceExamplesWrong,
+  };
 }
 
 async function ensureManagedProjectWorkspace(input: {
@@ -727,6 +749,7 @@ export function heartbeatService(db: Db) {
 
   const runLogStore = getRunLogStore();
   const secretsSvc = secretService(db);
+  const companiesSvc = companyService(db);
   const companySkills = companySkillService(db);
   const issuesSvc = issueService(db);
   const executionWorkspacesSvc = executionWorkspaceService(db);
@@ -1801,12 +1824,20 @@ export function heartbeatService(db: Db) {
     const provider = result.provider ?? "unknown";
     const biller = resolveLedgerBiller(result);
     const ledgerScope = await resolveLedgerScopeForRun(db, agent.companyId, run);
+    const hermesAppliedRuntimePolicy =
+      agent.adapterType === "hermes_local"
+        ? parseObject(result.resultJson)?._paperclipHermesAppliedRuntimePolicy
+        : null;
 
     await db
       .update(agentRuntimeState)
       .set({
         adapterType: agent.adapterType,
         sessionId: session.legacySessionId,
+        stateJson:
+          agent.adapterType === "hermes_local" && hermesAppliedRuntimePolicy && typeof hermesAppliedRuntimePolicy === "object"
+            ? { hermesAppliedRuntimePolicy: hermesAppliedRuntimePolicy as Record<string, unknown> }
+            : {},
         lastRunId: run.id,
         lastRunStatus: run.status,
         lastError: result.errorMessage ?? null,
@@ -2416,6 +2447,12 @@ export function heartbeatService(db: Db) {
       const authToken = adapter.supportsLocalAgentJwt
         ? createLocalAgentJwt(agent.id, agent.companyId, agent.adapterType, run.id)
         : null;
+      if (agent.adapterType === "hermes_local") {
+        const companyProfile = buildHermesCompanyProfileContext(await companiesSvc.getById(agent.companyId));
+        if (companyProfile) {
+          context.paperclipCompanyProfile = companyProfile;
+        }
+      }
       if (adapter.supportsLocalAgentJwt && !authToken) {
         logger.warn(
           {

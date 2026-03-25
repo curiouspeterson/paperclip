@@ -100,6 +100,15 @@ function extractUsageFromStdout(parsed: Record<string, unknown>): {
   return result;
 }
 
+function extractHiddenResultJson(parsed: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const hermesAppliedRuntimePolicy = parseObject(parsed._paperclipHermesAppliedRuntimePolicy);
+  if (hermesAppliedRuntimePolicy) {
+    result._paperclipHermesAppliedRuntimePolicy = hermesAppliedRuntimePolicy;
+  }
+  return result;
+}
+
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
   const { runId, agent, runtime, config, context, onLog, onMeta, authToken } = ctx;
   const command = asString(config.command, "");
@@ -160,6 +169,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (runtimeSessionParams) {
     env.PAPERCLIP_RUNTIME_SESSION_PARAMS_JSON = JSON.stringify(runtimeSessionParams);
   }
+  const companyProfileContext = parseObject(context.paperclipCompanyProfile);
+  if (companyProfileContext) {
+    env.PAPERCLIP_COMPANY_PROFILE_JSON = JSON.stringify(companyProfileContext);
+    env.PAPERCLIP_SEED_COMPANY_PROFILE_MEMORY = "1";
+  }
   for (const [k, v] of Object.entries(envConfig)) {
     if (typeof v === "string") env[k] = v;
   }
@@ -201,6 +215,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // Parse stdout JSON to extract usage/cost telemetry from process workers
   const stdoutParsed = proc.stdout ? parseStdoutJson(proc.stdout) : null;
   const extracted = stdoutParsed ? extractUsageFromStdout(stdoutParsed) : {};
+  const hiddenResultJson = stdoutParsed ? extractHiddenResultJson(stdoutParsed) : {};
 
   if ((proc.exitCode ?? 0) !== 0) {
     return {
@@ -212,6 +227,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       resultJson: {
         stdout: proc.stdout,
         stderr: proc.stderr,
+        ...hiddenResultJson,
       },
     };
   }
@@ -225,6 +241,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     resultJson: {
       stdout: proc.stdout,
       stderr: proc.stderr,
+      ...hiddenResultJson,
     },
   };
 }

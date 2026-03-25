@@ -43,6 +43,7 @@ const mockAgentInstructionsService = vi.hoisted(() => ({
 const mockCompanySkillService = vi.hoisted(() => ({
   listRuntimeSkillEntries: vi.fn(),
   resolveRequestedSkillKeys: vi.fn(),
+  getByKey: vi.fn(),
 }));
 
 const mockSecretService = vi.hoisted(() => ({
@@ -56,6 +57,8 @@ const mockAdapter = vi.hoisted(() => ({
   listSkills: vi.fn(),
   syncSkills: vi.fn(),
 }));
+
+const mockReplaceHermesExternalSkill = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/index.js", () => ({
   agentService: () => mockAgentService,
@@ -76,6 +79,10 @@ vi.mock("../services/index.js", () => ({
 vi.mock("../adapters/index.js", () => ({
   findServerAdapter: vi.fn(() => mockAdapter),
   listAdapterModels: vi.fn(),
+}));
+
+vi.mock("../adapters/hermes-local/skills.js", () => ({
+  replaceHermesExternalSkill: mockReplaceHermesExternalSkill,
 }));
 
 function createDb(requireBoardApprovalForNewAgents = false) {
@@ -154,6 +161,26 @@ describe("agent skill routes", () => {
             : value,
         ),
     );
+    mockCompanySkillService.getByKey.mockResolvedValue({
+      id: "skill-1",
+      companyId: "company-1",
+      key: "company/company-1/story-weaver",
+      slug: "story-weaver",
+      name: "Story Weaver",
+      description: null,
+      markdown: "# Story Weaver",
+      sourceType: "local_path",
+      sourceLocator: "/tmp/paperclip/managed/story-weaver",
+      sourceRef: null,
+      trustLevel: "markdown_only",
+      compatibility: "compatible",
+      fileInventory: [],
+      metadata: {
+        importedFromSourceLocator: "/tmp/.hermes/skills/story-weaver",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
     mockAdapter.listSkills.mockResolvedValue({
       adapterType: "claude_local",
       supported: true,
@@ -167,6 +194,14 @@ describe("agent skill routes", () => {
       supported: true,
       mode: "ephemeral",
       desiredSkills: ["paperclipai/paperclip/paperclip"],
+      entries: [],
+      warnings: [],
+    });
+    mockReplaceHermesExternalSkill.mockResolvedValue({
+      adapterType: "hermes_local",
+      supported: true,
+      mode: "persistent",
+      desiredSkills: ["paperclipai/paperclip/paperclip", "company/company-1/story-weaver"],
       entries: [],
       warnings: [],
     });
@@ -285,6 +320,121 @@ describe("agent skill routes", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("replaces an adopted Hermes external skill with the managed copy", async () => {
+    mockAgentService.getById.mockResolvedValue(makeAgent("hermes_local"));
+    mockAgentService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+      ...makeAgent("hermes_local"),
+      adapterType: "hermes_local",
+      adapterConfig: patch.adapterConfig ?? {},
+    }));
+
+    const res = await request(createApp())
+      .post("/api/agents/11111111-1111-4111-8111-111111111111/skills/replace-external?companyId=company-1")
+      .send({
+        desiredSkillKey: "company/company-1/story-weaver",
+        runtimeName: "story-weaver",
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(mockCompanySkillService.getByKey).toHaveBeenCalledWith("company-1", "company/company-1/story-weaver");
+    expect(mockReplaceHermesExternalSkill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adapterType: "hermes_local",
+        config: expect.objectContaining({
+          paperclipRuntimeSkills: expect.any(Array),
+          paperclipSkillSync: {
+            desiredSkills: ["paperclipai/paperclip/paperclip", "company/company-1/story-weaver"],
+          },
+        }),
+      }),
+      {
+        desiredSkillKey: "company/company-1/story-weaver",
+        runtimeName: "story-weaver",
+        expectedExternalSourcePath: "/tmp/.hermes/skills/story-weaver",
+      },
+    );
+  });
+
+  it("migrates a legacy Hermes worker process agent to hermes_local", async () => {
+    mockAgentService.getById.mockResolvedValue({
+      ...makeAgent("process"),
+      name: "Hermes Worker",
+      adapterType: "process",
+      adapterConfig: {
+        command: "python3",
+        args: ["scripts/hermes_paperclip_worker.py"],
+        browserAutomationProvider: "playwright",
+        browserSessionProfile: "romance-unzipped",
+        browserHeadless: true,
+        env: {
+          HERMES_PROVIDER: { type: "plain", value: "zai" },
+          HERMES_MODEL: { type: "plain", value: "glm-4.7" },
+          HERMES_BIN: { type: "plain", value: "/usr/local/bin/hermes" },
+          ZAI_API_KEY: { type: "secret_ref", secretId: "secret-1", version: "latest" },
+        },
+      },
+    });
+    mockAgentService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+      ...makeAgent("hermes_local"),
+      adapterType: String(patch.adapterType ?? "hermes_local"),
+      adapterConfig: patch.adapterConfig ?? {},
+    }));
+
+    const res = await request(createApp())
+      .post("/api/agents/11111111-1111-4111-8111-111111111111/migrate-hermes-worker?companyId=company-1")
+      .send({});
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(mockAgentService.update).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      expect.objectContaining({
+        adapterType: "hermes_local",
+        adapterConfig: expect.objectContaining({
+          model: "glm-4.7",
+          provider: "zai",
+          hermesCommand: "/usr/local/bin/hermes",
+          paperclipManagedHermesHome: true,
+          paperclipSeedCompanyProfileMemory: true,
+          env: expect.objectContaining({
+            ZAI_API_KEY: { type: "secret_ref", secretId: "secret-1", version: "latest" },
+          }),
+          browserAutomationProvider: "playwright",
+          browserSessionProfile: "romance-unzipped",
+          browserHeadless: true,
+        }),
+      }),
+      expect.objectContaining({
+        recordRevision: expect.objectContaining({
+          source: "migrate_hermes_worker",
+        }),
+      }),
+    );
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "agent.hermes_worker_migrated",
+      }),
+    );
+  });
+
+  it("rejects migration for non-Hermes process agents", async () => {
+    mockAgentService.getById.mockResolvedValue({
+      ...makeAgent("process"),
+      adapterType: "process",
+      adapterConfig: {
+        command: "python3",
+        args: ["scripts/not-hermes.py"],
+      },
+    });
+
+    const res = await request(createApp())
+      .post("/api/agents/11111111-1111-4111-8111-111111111111/migrate-hermes-worker?companyId=company-1")
+      .send({});
+
+    expect(res.status, JSON.stringify(res.body)).toBe(422);
+    expect(mockAgentService.update).not.toHaveBeenCalled();
   });
 
   it("persists canonical desired skills when creating an agent directly", async () => {

@@ -49,6 +49,7 @@ export interface PaperclipSkillEntry {
   source: string;
   required?: boolean;
   requiredReason?: string | null;
+  importedFromSourcePath?: string | null;
 }
 
 export interface InstalledSkillTarget {
@@ -109,6 +110,11 @@ function buildManagedSkillOrigin(entry: { required?: boolean }): Pick<
     originLabel: "Managed by Paperclip",
     readOnly: false,
   };
+}
+
+function normalizeOptionalPath(value: string | null | undefined): string | null {
+  if (typeof value !== "string" || value.trim().length === 0) return null;
+  return path.resolve(value);
 }
 
 function resolveInstalledEntryTarget(
@@ -497,12 +503,29 @@ export function buildPersistentSkillSnapshot(
       state = desired ? "installed" : "stale";
       detail = installedDetail ?? null;
     } else if (installedEntry) {
+      const importedFromSourcePath = normalizeOptionalPath(available.importedFromSourcePath);
+      const installedTargetPath = normalizeOptionalPath(installedEntry.targetPath);
+      const importedSourceConflict =
+        Boolean(importedFromSourcePath)
+        && Boolean(installedTargetPath)
+        && importedFromSourcePath === installedTargetPath;
       state = "external";
-      detail = desired ? externalConflictDetail : externalDetail;
+      detail = desired
+        ? importedSourceConflict
+          ? "Paperclip-managed skill is selected, but the original imported Hermes copy still occupies this runtime name."
+          : externalConflictDetail
+        : externalDetail;
     } else if (desired) {
       state = "missing";
       detail = missingDetail;
     }
+
+    const importedFromSourcePath = normalizeOptionalPath(available.importedFromSourcePath);
+    const installedTargetPath = normalizeOptionalPath(installedEntry?.targetPath);
+    const importedSourceConflict =
+      Boolean(importedFromSourcePath)
+      && Boolean(installedTargetPath)
+      && importedFromSourcePath === installedTargetPath;
 
     entries.push({
       key: available.key,
@@ -513,6 +536,8 @@ export function buildPersistentSkillSnapshot(
       sourcePath: available.source,
       targetPath: path.join(skillsHome, available.runtimeName),
       detail,
+      externalConflictKind: state === "external" ? (importedSourceConflict ? "imported_source" : "external_unknown") : undefined,
+      externalConflictPath: state === "external" ? installedEntry?.targetPath ?? null : undefined,
       required: Boolean(available.required),
       requiredReason: available.requiredReason ?? null,
       ...buildManagedSkillOrigin(available),
@@ -580,6 +605,10 @@ function normalizeConfiguredPaperclipRuntimeSkills(value: unknown): PaperclipSki
       key,
       runtimeName,
       source,
+      importedFromSourcePath:
+        typeof entry.importedFromSourcePath === "string" && entry.importedFromSourcePath.trim().length > 0
+          ? entry.importedFromSourcePath.trim()
+          : null,
       required: asBoolean(entry.required, false),
       requiredReason:
         typeof entry.requiredReason === "string" && entry.requiredReason.trim().length > 0

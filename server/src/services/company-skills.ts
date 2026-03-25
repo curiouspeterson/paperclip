@@ -83,6 +83,9 @@ type SkillSourceMeta = {
   workspaceId?: string;
   workspaceName?: string;
   workspaceCwd?: string;
+  importedFromSourceLocator?: string;
+  importedFromSourceKind?: string;
+  importedRuntimeName?: string;
 };
 
 export type LocalSkillInventoryMode = "full" | "project_root";
@@ -1238,6 +1241,23 @@ function normalizeSourceLocatorDirectory(sourceLocator: string | null) {
   return path.basename(resolved).toLowerCase() === "skill.md" ? path.dirname(resolved) : resolved;
 }
 
+function resolveImportedFromSourceDirectory(skill: Pick<CompanySkill, "metadata">) {
+  const metadata = getSkillMeta(skill as CompanySkill);
+  return normalizeSourceLocatorDirectory(asString(metadata.importedFromSourceLocator) ?? null);
+}
+
+export function isHermesSkillDirectoryPath(skillDir: string): boolean {
+  const resolved = normalizeSourceLocatorDirectory(skillDir);
+  if (!resolved) return false;
+  const segments = resolved.split(path.sep).filter(Boolean);
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    if (segments[index] === ".hermes" && segments[index + 1] === "skills") {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function findMissingLocalSkillIds(
   skills: Array<Pick<CompanySkill, "id" | "sourceType" | "sourceLocator">>,
 ) {
@@ -1305,9 +1325,11 @@ function deriveSkillSourceInfo(skill: CompanySkill): {
   sourceLabel: string | null;
   sourceBadge: CompanySkillSourceBadge;
   sourcePath: string | null;
+  importedFromSourcePath: string | null;
 } {
   const metadata = getSkillMeta(skill);
   const localSkillDir = normalizeSkillDirectory(skill);
+  const importedFromSourcePath = resolveImportedFromSourceDirectory(skill);
   if (metadata.sourceKind === "paperclip_bundled") {
     return {
       editable: false,
@@ -1315,6 +1337,7 @@ function deriveSkillSourceInfo(skill: CompanySkill): {
       sourceLabel: "Paperclip bundled",
       sourceBadge: "paperclip",
       sourcePath: null,
+      importedFromSourcePath,
     };
   }
 
@@ -1327,6 +1350,7 @@ function deriveSkillSourceInfo(skill: CompanySkill): {
       sourceLabel: skill.sourceLocator ?? (owner && repo ? `${owner}/${repo}` : null),
       sourceBadge: "skills_sh",
       sourcePath: null,
+      importedFromSourcePath,
     };
   }
 
@@ -1339,6 +1363,7 @@ function deriveSkillSourceInfo(skill: CompanySkill): {
       sourceLabel: owner && repo ? `${owner}/${repo}` : skill.sourceLocator,
       sourceBadge: "github",
       sourcePath: null,
+      importedFromSourcePath,
     };
   }
 
@@ -1349,6 +1374,7 @@ function deriveSkillSourceInfo(skill: CompanySkill): {
       sourceLabel: skill.sourceLocator,
       sourceBadge: "url",
       sourcePath: null,
+      importedFromSourcePath,
     };
   }
 
@@ -1364,6 +1390,7 @@ function deriveSkillSourceInfo(skill: CompanySkill): {
         sourceLabel: "Paperclip workspace",
         sourceBadge: "paperclip",
         sourcePath: managedRoot,
+        importedFromSourcePath,
       };
     }
 
@@ -1376,6 +1403,7 @@ function deriveSkillSourceInfo(skill: CompanySkill): {
         : skill.sourceLocator,
       sourceBadge: "local",
       sourcePath: null,
+      importedFromSourcePath,
     };
   }
 
@@ -1385,6 +1413,7 @@ function deriveSkillSourceInfo(skill: CompanySkill): {
     sourceLabel: skill.sourceLocator,
     sourceBadge: "catalog",
     sourcePath: null,
+    importedFromSourcePath,
   };
 }
 
@@ -1421,6 +1450,43 @@ function toCompanySkillListItem(skill: CompanySkill, attachedAgentCount: number)
     sourceLabel: source.sourceLabel,
     sourceBadge: source.sourceBadge,
     sourcePath: source.sourcePath,
+    importedFromSourcePath: source.importedFromSourcePath,
+  };
+}
+
+export async function materializeImportedLocalSkillCopy(
+  companyId: string,
+  skill: ImportedSkill,
+): Promise<ImportedSkill> {
+  const originalSkillDir = normalizeSourceLocatorDirectory(skill.sourceLocator);
+  if (!originalSkillDir || !isHermesSkillDirectoryPath(originalSkillDir)) return skill;
+
+  const managedRoot = path.resolve(
+    resolveManagedSkillsRoot(companyId),
+    "__imports__",
+    buildSkillRuntimeName(skill.key, skill.slug),
+  );
+  await fs.rm(managedRoot, { recursive: true, force: true });
+  await fs.mkdir(managedRoot, { recursive: true });
+
+  for (const entry of skill.fileInventory) {
+    const sourcePath = path.resolve(originalSkillDir, entry.path);
+    const targetPath = path.resolve(managedRoot, entry.path);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.copyFile(sourcePath, targetPath);
+  }
+
+  return {
+    ...skill,
+    packageDir: managedRoot,
+    sourceLocator: managedRoot,
+    metadata: {
+      ...(skill.metadata ?? {}),
+      sourceKind: "managed_local",
+      importedFromSourceLocator: originalSkillDir,
+      importedFromSourceKind: "hermes_local",
+      importedRuntimeName: path.basename(originalSkillDir),
+    },
   };
 }
 
@@ -2023,8 +2089,14 @@ export function companySkillService(db: Db) {
       const required = sourceKind === "paperclip_bundled";
       out.push({
         key: skill.key,
-        runtimeName: buildSkillRuntimeName(skill.key, skill.slug),
+        runtimeName:
+          sourceKind === "managed_local"
+          && asString(getSkillMeta(skill).importedFromSourceKind) === "hermes_local"
+          && asString(getSkillMeta(skill).importedRuntimeName)
+            ? asString(getSkillMeta(skill).importedRuntimeName)!
+            : buildSkillRuntimeName(skill.key, skill.slug),
         source,
+        importedFromSourcePath: asString(getSkillMeta(skill).importedFromSourceLocator),
         required,
         requiredReason: required
           ? "Bundled Paperclip skills are always available for local adapters."
@@ -2251,7 +2323,12 @@ export function companySkillService(db: Db) {
         skill.key = deriveCanonicalSkillKey(companyId, skill);
       }
     }
-    const imported = await upsertImportedSkills(companyId, filteredSkills);
+    const preparedSkills = await Promise.all(filteredSkills.map((skill) => (
+      skill.sourceType === "local_path"
+        ? materializeImportedLocalSkillCopy(companyId, skill)
+        : Promise.resolve(skill)
+    )));
+    const imported = await upsertImportedSkills(companyId, preparedSkills);
     return { imported, warnings };
   }
 

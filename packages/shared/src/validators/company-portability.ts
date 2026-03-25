@@ -36,6 +36,22 @@ export const portabilityCompanyManifestEntrySchema = z.object({
   brandColor: z.string().nullable(),
   logoPath: z.string().nullable(),
   requireBoardApprovalForNewAgents: z.boolean(),
+  agentDefaultAdapterType: z.string().nullable(),
+  agentDefaultProvider: z.string().nullable(),
+  agentDefaultModel: z.string().nullable(),
+  agentDefaultHeartbeatIntervalSec: z.number().int().positive().nullable(),
+  agentDefaultWakeOnDemand: z.boolean().nullable(),
+  agentDefaultCooldownSec: z.number().int().nonnegative().nullable(),
+  agentDefaultMaxConcurrentRuns: z.number().int().positive().nullable(),
+  agentDefaultMaxTurnsPerRun: z.number().int().positive().nullable(),
+  agentDefaultBrowserAutomationProvider: z.string().nullable(),
+  agentDefaultHermesManagedHome: z.boolean().nullable(),
+  agentDefaultHermesSeedCompanyProfileMemory: z.boolean().nullable(),
+  agentDefaultHermesToolsets: z.string().nullable(),
+  agentDefaultHermesAllowedMcpServers: z.string().nullable(),
+  agentDefaultHermesMcpServers: z.record(z.unknown()).nullable(),
+  agentDefaultDangerouslySkipPermissions: z.boolean().nullable(),
+  agentDefaultDangerouslyBypassSandbox: z.boolean().nullable(),
 });
 
 export const portabilityAgentManifestEntrySchema = z.object({

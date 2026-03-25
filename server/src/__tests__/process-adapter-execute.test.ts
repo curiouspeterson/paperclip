@@ -31,7 +31,17 @@ console.log(JSON.stringify({
   _usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
   _sessionId: "hermes-session-1",
   _sessionDisplayId: "paperclip::agent-1::ROM-1",
-  _sessionParams: { sessionId: "hermes-session-1", sessionName: "paperclip::agent-1::ROM-1" }
+  _sessionParams: { sessionId: "hermes-session-1", sessionName: "paperclip::agent-1::ROM-1" },
+  _paperclipHermesAppliedRuntimePolicy: {
+    hermesHome: "/tmp/hermes-home",
+    managedHome: true,
+    companyProfileMemorySeeded: true,
+    toolsets: ["skills", "browser"],
+    configuredMcpServerNames: ["github"],
+    allowedMcpServerNames: ["github"],
+    materializedMcpServerNames: ["github"],
+    seededContextFiles: ["SOUL.md", "AGENTS.md", "USER.md", "MEMORY.md"]
+  }
 }));
 `;
   await fs.writeFile(commandPath, script, "utf8");
@@ -108,6 +118,18 @@ describe("process adapter execute", () => {
       expect(result.sessionParams).toEqual({
         sessionId: "hermes-session-1",
         sessionName: "paperclip::agent-1::ROM-1",
+      });
+      expect(result.resultJson).toMatchObject({
+        _paperclipHermesAppliedRuntimePolicy: {
+          hermesHome: "/tmp/hermes-home",
+          managedHome: true,
+          companyProfileMemorySeeded: true,
+          toolsets: ["skills", "browser"],
+          configuredMcpServerNames: ["github"],
+          allowedMcpServerNames: ["github"],
+          materializedMcpServerNames: ["github"],
+          seededContextFiles: ["SOUL.md", "AGENTS.md", "USER.md", "MEMORY.md"],
+        },
       });
 
       const expectedWorkspace = await fs.realpath(workspace);

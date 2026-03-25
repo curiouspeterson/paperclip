@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { COMPANY_STATUSES } from "../constants.js";
+import { AGENT_ADAPTER_TYPES, COMPANY_STATUSES } from "../constants.js";
 
 const logoAssetIdSchema = z.string().uuid().nullable().optional();
 const brandColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional();
@@ -11,6 +11,13 @@ const mailchimpTemplateIdSchema = z.string().trim().regex(/^\d+$/).nullable().op
 const mailchimpListIdSchema = z.string().trim().min(1).nullable().optional();
 const mailchimpFromNameSchema = z.string().trim().min(1).max(255).nullable().optional();
 const mailchimpReplyToSchema = z.string().trim().email().nullable().optional();
+const agentDefaultAdapterTypeSchema = z.enum(AGENT_ADAPTER_TYPES).nullable().optional();
+const agentDefaultStringSchema = z.string().trim().min(1).max(255).nullable().optional();
+const agentDefaultLongTextSchema = z.string().trim().min(1).max(20_000).nullable().optional();
+const agentDefaultPositiveIntSchema = z.number().int().positive().nullable().optional();
+const agentDefaultNonNegativeIntSchema = z.number().int().nonnegative().nullable().optional();
+const agentDefaultBooleanSchema = z.boolean().nullable().optional();
+const agentDefaultHermesMcpServersSchema = z.record(z.unknown()).nullable().optional();
 
 export const createCompanySchema = z.object({
   name: z.string().min(1),
@@ -37,6 +44,22 @@ export const updateCompanySchema = createCompanySchema
     mailchimpDefaultTemplateId: mailchimpTemplateIdSchema,
     mailchimpDefaultFromName: mailchimpFromNameSchema,
     mailchimpDefaultReplyTo: mailchimpReplyToSchema,
+    agentDefaultAdapterType: agentDefaultAdapterTypeSchema,
+    agentDefaultProvider: agentDefaultStringSchema,
+    agentDefaultModel: agentDefaultStringSchema,
+    agentDefaultHeartbeatIntervalSec: agentDefaultPositiveIntSchema,
+    agentDefaultWakeOnDemand: agentDefaultBooleanSchema,
+    agentDefaultCooldownSec: agentDefaultNonNegativeIntSchema,
+    agentDefaultMaxConcurrentRuns: agentDefaultPositiveIntSchema,
+    agentDefaultMaxTurnsPerRun: agentDefaultPositiveIntSchema,
+    agentDefaultBrowserAutomationProvider: agentDefaultStringSchema,
+    agentDefaultHermesManagedHome: agentDefaultBooleanSchema,
+    agentDefaultHermesSeedCompanyProfileMemory: agentDefaultBooleanSchema,
+    agentDefaultHermesToolsets: agentDefaultLongTextSchema,
+    agentDefaultHermesAllowedMcpServers: agentDefaultLongTextSchema,
+    agentDefaultHermesMcpServers: agentDefaultHermesMcpServersSchema,
+    agentDefaultDangerouslySkipPermissions: agentDefaultBooleanSchema,
+    agentDefaultDangerouslyBypassSandbox: agentDefaultBooleanSchema,
     logoAssetId: logoAssetIdSchema,
   });
 

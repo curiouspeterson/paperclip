@@ -1,4 +1,4 @@
-import type { AgentSkillEntry } from "@paperclipai/shared";
+import type { AgentSkillEntry, CompanySkillListItem } from "@paperclipai/shared";
 
 export interface AgentSkillDraftState {
   draft: string[];
@@ -37,4 +37,39 @@ export function isReadOnlyUnmanagedSkillEntry(
   if (companySkillKeys.has(entry.key)) return false;
   if (entry.origin === "user_installed" || entry.origin === "external_unknown") return true;
   return entry.managed === false && entry.state === "external";
+}
+
+export function getGovernableUnmanagedSkillImportSource(
+  adapterType: string,
+  entry: AgentSkillEntry,
+): string | null {
+  if (adapterType !== "hermes_local") return null;
+  if (entry.origin !== "user_installed") return null;
+  return typeof entry.targetPath === "string" && entry.targetPath.trim().length > 0
+    ? entry.targetPath
+    : null;
+}
+
+function normalizePortableSourcePath(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/[/\\]+$/, "");
+}
+
+export function findGovernedHermesSkillForImportSource(
+  adapterType: string,
+  entry: AgentSkillEntry,
+  companySkills: CompanySkillListItem[],
+): CompanySkillListItem | null {
+  const importSource = getGovernableUnmanagedSkillImportSource(adapterType, entry);
+  const normalizedImportSource = normalizePortableSourcePath(importSource);
+  if (!normalizedImportSource) return null;
+  return (
+    companySkills.find((skill) => (
+      normalizePortableSourcePath(skill.sourceLocator) === normalizedImportSource
+      || normalizePortableSourcePath(skill.importedFromSourcePath) === normalizedImportSource
+    ))
+    ?? null
+  );
 }

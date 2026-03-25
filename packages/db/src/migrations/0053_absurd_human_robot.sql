@@ -1,0 +1,1 @@
+ALTER TABLE "companies" ADD COLUMN "agent_default_hermes_seed_company_profile_memory" boolean;

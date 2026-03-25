@@ -63,7 +63,9 @@ export {
   agentSkillEntrySchema,
   agentSkillSnapshotSchema,
   agentSkillSyncSchema,
+  agentSkillReplaceExternalSchema,
   type AgentSkillSync,
+  type AgentSkillReplaceExternal,
 } from "./adapter-skills.js";
 export {
   portabilityIncludeSchema,

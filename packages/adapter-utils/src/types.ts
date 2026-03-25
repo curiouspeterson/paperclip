@@ -179,6 +179,8 @@ export interface AdapterSkillEntry {
   sourcePath?: string | null;
   targetPath?: string | null;
   detail?: string | null;
+  externalConflictKind?: "imported_source" | "external_unknown";
+  externalConflictPath?: string | null;
 }
 
 export interface AdapterSkillSnapshot {
@@ -393,6 +395,11 @@ export interface CreateConfigValues {
   adapterType: string;
   cwd: string;
   instructionsFilePath?: string;
+  hermesManagedHome?: boolean;
+  hermesSeedCompanyProfileMemory?: boolean;
+  hermesToolsets?: string;
+  hermesAllowedMcpServers?: string;
+  mcpServersJson?: string;
   externalSkillDirs?: string;
   contextPrepCommand?: string;
   browserAutomationProvider?: BrowserAutomationProvider | "";

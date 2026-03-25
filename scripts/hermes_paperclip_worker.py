@@ -212,6 +212,182 @@ def ensure_directory(path: Path) -> Path:
     return path
 
 
+def write_if_changed(path: Path, content: str) -> None:
+    normalized = content if content.endswith("\n") else f"{content}\n"
+    existing = path.read_text(encoding="utf-8") if path.is_file() else None
+    if existing == normalized:
+        return
+    path.write_text(normalized, encoding="utf-8")
+
+
+def read_company_profile() -> dict[str, Any] | None:
+    raw = os.environ.get("PAPERCLIP_COMPANY_PROFILE_JSON", "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        debug("Ignoring invalid PAPERCLIP_COMPANY_PROFILE_JSON")
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    if not any(parsed.get(key) for key in (
+        "companyName",
+        "voiceDescription",
+        "targetAudience",
+        "defaultChannel",
+        "defaultGoal",
+        "voiceExamplesRight",
+        "voiceExamplesWrong",
+    )):
+        return None
+    return parsed
+
+
+def build_soul_md(profile: dict[str, Any]) -> str:
+    lines = [
+        "# SOUL.md -- Company Voice",
+        "",
+        "Use this as the default brand-voice reference for work done on behalf of the company.",
+    ]
+    if profile.get("companyName"):
+        lines.extend(["", f"Company: {profile['companyName']}"])
+    if profile.get("voiceDescription"):
+        lines.extend(["", "## How We Describe Our Voice", "", str(profile["voiceDescription"]).strip()])
+    if profile.get("targetAudience"):
+        lines.extend(["", "## Who We Are Talking To", "", str(profile["targetAudience"]).strip()])
+    if profile.get("defaultChannel"):
+        lines.extend(["", "## Default Channel", "", str(profile["defaultChannel"]).strip()])
+    if profile.get("defaultGoal"):
+        lines.extend(["", "## Default Goal", "", str(profile["defaultGoal"]).strip()])
+    right = [str(item).strip() for item in profile.get("voiceExamplesRight", []) if str(item).strip()]
+    if right:
+        lines.extend(["", "## Examples That Feel Exactly Right", ""])
+        lines.extend([f"{index + 1}. {sample}" for index, sample in enumerate(right)])
+    wrong = [str(item).strip() for item in profile.get("voiceExamplesWrong", []) if str(item).strip()]
+    if wrong:
+        lines.extend(["", "## Examples That Feel Wrong", ""])
+        lines.extend([f"{index + 1}. {sample}" for index, sample in enumerate(wrong)])
+    return "\n".join(lines)
+
+
+def build_agents_md(profile: dict[str, Any]) -> str:
+    lines = [
+        "# AGENTS.md -- Company Prompt Packet",
+        "",
+        "Before writing, planning, or editing for this company, anchor on this packet:",
+        "",
+        "1. Here is how we describe our voice.",
+        "2. Here are examples that feel exactly right.",
+        "3. Here are examples that feel wrong.",
+        "4. Here is who we are talking to.",
+        "5. Here is what the piece needs to achieve.",
+    ]
+    if profile.get("voiceDescription"):
+        lines.extend(["", "## Voice", "", str(profile["voiceDescription"]).strip()])
+    right = [str(item).strip() for item in profile.get("voiceExamplesRight", []) if str(item).strip()]
+    if right:
+        lines.extend(["", "## Right Examples", ""])
+        lines.extend([f"{index + 1}. {sample}" for index, sample in enumerate(right)])
+    wrong = [str(item).strip() for item in profile.get("voiceExamplesWrong", []) if str(item).strip()]
+    if wrong:
+        lines.extend(["", "## Wrong Examples", ""])
+        lines.extend([f"{index + 1}. {sample}" for index, sample in enumerate(wrong)])
+    if profile.get("targetAudience"):
+        lines.extend(["", "## Audience", "", str(profile["targetAudience"]).strip()])
+    if profile.get("defaultChannel"):
+        lines.extend(["", "## Channel", "", str(profile["defaultChannel"]).strip()])
+    if profile.get("defaultGoal"):
+        lines.extend(["", "## Goal", "", str(profile["defaultGoal"]).strip()])
+    return "\n".join(lines)
+
+
+def build_user_md(profile: dict[str, Any]) -> str:
+    lines = [
+        "# USER.md -- Working Audience",
+        "",
+        "Treat this as stable user/company context for this Hermes home.",
+    ]
+    if profile.get("companyName"):
+        lines.extend(["", f"Company: {profile['companyName']}"])
+    if profile.get("targetAudience"):
+        lines.extend(["", "## Audience", "", str(profile["targetAudience"]).strip()])
+    if profile.get("defaultChannel"):
+        lines.extend(["", "## Default Channel", "", str(profile["defaultChannel"]).strip()])
+    if profile.get("defaultGoal"):
+        lines.extend(["", "## Default Goal", "", str(profile["defaultGoal"]).strip()])
+    return "\n".join(lines)
+
+
+def build_memory_md(profile: dict[str, Any]) -> str:
+    lines = [
+        "# MEMORY.md -- Seeded Company Memory",
+        "",
+        "Seeded from the Paperclip Company Profile. Treat these as durable brand facts unless the profile changes.",
+    ]
+    if profile.get("voiceDescription"):
+        lines.extend(["", "## Voice", "", str(profile["voiceDescription"]).strip()])
+    if profile.get("targetAudience"):
+        lines.extend(["", "## Audience", "", str(profile["targetAudience"]).strip()])
+    if profile.get("defaultChannel"):
+        lines.extend(["", "## Channel", "", str(profile["defaultChannel"]).strip()])
+    if profile.get("defaultGoal"):
+        lines.extend(["", "## Goal", "", str(profile["defaultGoal"]).strip()])
+    right = [str(item).strip() for item in profile.get("voiceExamplesRight", []) if str(item).strip()]
+    if right:
+        lines.extend(["", "## Right Examples", ""])
+        lines.extend([f"{index + 1}. {sample}" for index, sample in enumerate(right)])
+    wrong = [str(item).strip() for item in profile.get("voiceExamplesWrong", []) if str(item).strip()]
+    if wrong:
+        lines.extend(["", "## Wrong Examples", ""])
+        lines.extend([f"{index + 1}. {sample}" for index, sample in enumerate(wrong)])
+    return "\n".join(lines)
+
+
+def seed_hermes_home_context(hermes_home: Path) -> list[str]:
+    profile = read_company_profile()
+    if not profile:
+        return []
+    ensure_directory(hermes_home)
+    seeded_files = ["SOUL.md", "AGENTS.md"]
+    write_if_changed(hermes_home / "SOUL.md", build_soul_md(profile))
+    write_if_changed(hermes_home / "AGENTS.md", build_agents_md(profile))
+    should_seed_memory = os.environ.get("PAPERCLIP_SEED_COMPANY_PROFILE_MEMORY", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if should_seed_memory:
+        write_if_changed(hermes_home / "USER.md", build_user_md(profile))
+        write_if_changed(hermes_home / "MEMORY.md", build_memory_md(profile))
+        seeded_files.extend(["USER.md", "MEMORY.md"])
+    return seeded_files
+
+
+def build_applied_runtime_policy(
+    hermes_home: Path,
+    seeded_context_files: list[str],
+) -> dict[str, Any]:
+    toolsets_raw = os.environ.get("HERMES_TOOLSETS", "").strip()
+    toolsets = [item.strip() for item in toolsets_raw.split(",") if item.strip()]
+    configured_servers_raw = os.environ.get("PAPERCLIP_MANAGED_MCP_SERVER_NAMES", "").strip()
+    configured_servers = sorted({item.strip() for item in configured_servers_raw.split(",") if item.strip()})
+    allowed_servers_raw = os.environ.get("PAPERCLIP_ALLOWED_MCP_SERVER_NAMES", "").strip()
+    allowed_servers = sorted({item.strip() for item in allowed_servers_raw.split(",") if item.strip()})
+    materialized_servers = allowed_servers or configured_servers
+    return {
+        "hermesHome": str(hermes_home),
+        "managedHome": True,
+        "companyProfileMemorySeeded": "USER.md" in seeded_context_files or "MEMORY.md" in seeded_context_files,
+        "toolsets": toolsets,
+        "configuredMcpServerNames": configured_servers,
+        "allowedMcpServerNames": allowed_servers,
+        "materializedMcpServerNames": materialized_servers,
+        "seededContextFiles": seeded_context_files,
+    }
+
+
 def read_runtime_session_params() -> dict[str, Any] | None:
     raw = os.environ.get("PAPERCLIP_RUNTIME_SESSION_PARAMS_JSON", "").strip()
     if not raw:
@@ -318,6 +494,7 @@ def build_worker_result(
     provider: str,
     model: str,
     usage: dict[str, int],
+    applied_runtime_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "ok": True,
@@ -337,6 +514,8 @@ def build_worker_result(
             "sessionId": session_metadata.get("sessionId"),
             "sessionName": session_metadata.get("sessionName"),
         }
+    if applied_runtime_policy:
+        result["_paperclipHermesAppliedRuntimePolicy"] = applied_runtime_policy
     return result
 
 
@@ -1407,6 +1586,7 @@ def main() -> int:
         comments = []
 
     hermes_home = ensure_directory(resolve_hermes_home(os.environ.get("AGENT_HOME", "").strip() or None))
+    seeded_context_files = seed_hermes_home_context(hermes_home)
     runtime_session = read_runtime_session_params() or {}
     session_name = str(runtime_session.get("sessionName") or "").strip() or build_session_name(agent, issue)
     existing_session = find_session_by_title(hermes_home, session_name)
@@ -1463,6 +1643,7 @@ def main() -> int:
         provider,
         model,
         usage,
+        build_applied_runtime_policy(hermes_home, seeded_context_files),
     )
     result["planUpdated"] = bool(plan_markdown)
     print(json.dumps(result))

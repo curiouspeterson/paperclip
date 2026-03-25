@@ -81,6 +81,11 @@ import {
   models as hermesModels,
 } from "hermes-paperclip-adapter";
 import { listHermesSkills, syncHermesSkills } from "./hermes-local/skills.js";
+import {
+  asHermesCompanyProfile,
+  buildHermesAppliedRuntimePolicy,
+  materializeHermesMcpConfig,
+} from "./hermes-local/mcp.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
@@ -185,8 +190,27 @@ const piLocalAdapter: ServerAdapterModule = {
 
 const hermesLocalAdapter: ServerAdapterModule = {
   type: "hermes_local",
-  execute: hermesExecute,
-  testEnvironment: hermesTestEnvironment,
+  execute: async (ctx) => {
+    const config = await materializeHermesMcpConfig(ctx);
+    const result = await hermesExecute({
+      ...ctx,
+      config,
+    });
+    return {
+      ...result,
+      resultJson: {
+        ...(result.resultJson ?? {}),
+        _paperclipHermesAppliedRuntimePolicy: buildHermesAppliedRuntimePolicy(
+          config,
+          asHermesCompanyProfile(ctx.context?.paperclipCompanyProfile),
+        ),
+      },
+    };
+  },
+  testEnvironment: async (ctx) => hermesTestEnvironment({
+    ...ctx,
+    config: await materializeHermesMcpConfig(ctx),
+  }),
   listSkills: listHermesSkills,
   syncSkills: syncHermesSkills,
   sessionCodec: hermesSessionCodec,

@@ -69,6 +69,8 @@ import {
   ChevronDown,
   ArrowLeft,
   HelpCircle,
+  BrainCircuit,
+  FileCode2,
 } from "lucide-react";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -78,6 +80,7 @@ import { RunTranscriptView, type TranscriptMode } from "../components/transcript
 import {
   isUuidLike,
   type Agent,
+  type Company,
   type AgentSkillEntry,
   type AgentSkillSnapshot,
   type AgentDetail as AgentDetailRecord,
@@ -85,6 +88,7 @@ import {
   type HeartbeatRun,
   type HeartbeatRunEvent,
   type AgentRuntimeState,
+  type AgentTaskSession,
   type LiveEvent,
   type WorkspaceOperation,
 } from "@paperclipai/shared";
@@ -93,8 +97,20 @@ import { agentRouteRef } from "../lib/utils";
 import {
   applyAgentSkillSnapshot,
   arraysEqual,
+  findGovernedHermesSkillForImportSource,
+  getGovernableUnmanagedSkillImportSource,
   isReadOnlyUnmanagedSkillEntry,
 } from "../lib/agent-skills-state";
+import { buildHermesDiagnosticsSummary } from "../lib/hermes-diagnostics";
+import {
+  buildEffectiveHermesContextPreview,
+  buildHermesEffectiveContextDiff,
+} from "../lib/hermes-context-preview";
+import {
+  buildLegacyHermesWorkerMigrationPreview,
+  isLegacyHermesWorkerProcessAgent,
+} from "../lib/hermes-worker-migration";
+import { useToast } from "../context/ToastContext";
 
 const runStatusIcons: Record<string, { icon: typeof CheckCircle2; color: string }> = {
   succeeded: { icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
@@ -1024,6 +1040,9 @@ export function AgentDetail() {
         <AgentSkillsTab
           agent={agent}
           companyId={resolvedCompanyId ?? undefined}
+          companies={companies}
+          onResetSessions={() => resetTaskSession.mutate(null)}
+          resetSessionsPending={resetTaskSession.isPending}
         />
       )}
 
@@ -1421,6 +1440,7 @@ function ConfigurationTab({
   hideInstructionsFile?: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
   const [awaitingRefreshAfterSave, setAwaitingRefreshAfterSave] = useState(false);
   const lastAgentRef = useRef(agent);
 
@@ -1445,6 +1465,33 @@ function ConfigurationTab({
     },
     onError: () => {
       setAwaitingRefreshAfterSave(false);
+    },
+  });
+  const migrateHermesWorker = useMutation({
+    mutationFn: () => agentsApi.migrateHermesWorker(agent.id, companyId),
+    onMutate: () => {
+      setAwaitingRefreshAfterSave(true);
+    },
+    onSuccess: () => {
+      pushToast({
+        tone: "success",
+        title: "Migrated to native Hermes",
+        body: "This legacy process-based Hermes worker now uses the native hermes_local adapter.",
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.configRevisions(agent.id) });
+      if (companyId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(companyId) });
+      }
+    },
+    onError: (error) => {
+      setAwaitingRefreshAfterSave(false);
+      pushToast({
+        tone: "error",
+        title: "Hermes migration failed",
+        body: error instanceof Error ? error.message : "Failed to migrate legacy Hermes worker.",
+      });
     },
   });
 
@@ -1472,9 +1519,59 @@ function ConfigurationTab({
         : taskAssignSource === "explicit_grant"
           ? "Enabled via explicit company permission grant."
           : "Disabled unless explicitly granted.";
+  const showLegacyHermesWorkerMigration = isLegacyHermesWorkerProcessAgent(agent);
+  const legacyHermesWorkerPreview = showLegacyHermesWorkerMigration
+    ? buildLegacyHermesWorkerMigrationPreview(agent)
+    : null;
 
   return (
     <div className="space-y-6">
+      {showLegacyHermesWorkerMigration && legacyHermesWorkerPreview ? (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-medium">Legacy Hermes Worker Detected</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                This agent still runs through the old process-based Hermes worker. Migrate it to the native Hermes adapter to use the full managed-home, MCP, skills, and diagnostics path.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => migrateHermesWorker.mutate()}
+              disabled={migrateHermesWorker.isPending || isConfigSaving}
+            >
+              {migrateHermesWorker.isPending ? "Migrating..." : "Migrate to Native Hermes"}
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Provider:</span>{" "}
+              {legacyHermesWorkerPreview.provider ?? "Hermes default"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Model:</span>{" "}
+              {legacyHermesWorkerPreview.model ?? "Hermes default"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Hermes binary:</span>{" "}
+              {legacyHermesWorkerPreview.hermesCommand ?? "hermes"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Browser provider:</span>{" "}
+              {legacyHermesWorkerPreview.browserAutomationProvider ?? "None"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Managed home:</span>{" "}
+              {legacyHermesWorkerPreview.managedHome ? "Enabled" : "Disabled"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Memory seeding:</span>{" "}
+              {legacyHermesWorkerPreview.memorySeeding ? "Enabled" : "Disabled"}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <AgentConfigForm
         mode="edit"
         agent={agent}
@@ -2268,9 +2365,15 @@ function PromptEditorSkeleton() {
 function AgentSkillsTab({
   agent,
   companyId,
+  companies,
+  onResetSessions,
+  resetSessionsPending,
 }: {
   agent: Agent;
   companyId?: string;
+  companies: Company[];
+  onResetSessions?: () => void;
+  resetSessionsPending?: boolean;
 }) {
   type SkillRow = {
     id: string;
@@ -2282,10 +2385,18 @@ function AgentSkillsTab({
     originLabel: string | null;
     linkTo: string | null;
     readOnly: boolean;
+    importSource: string | null;
+    adoptedSkillId: string | null;
+    adoptedSkillName: string | null;
+    adoptedSkillKey: string | null;
+    adoptedManagedState: AgentSkillEntry["state"] | null;
+    adoptedManagedDesired: boolean;
+    importedFromSourcePath: string | null;
     adapterEntry: AgentSkillEntry | null;
   };
 
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
   const [skillDraft, setSkillDraft] = useState<string[]>([]);
   const [lastSavedSkills, setLastSavedSkills] = useState<string[]>([]);
   const lastSavedSkillsRef = useRef<string[]>([]);
@@ -2303,6 +2414,16 @@ function AgentSkillsTab({
     queryFn: () => companySkillsApi.list(companyId!),
     enabled: Boolean(companyId),
   });
+  const { data: runtimeState } = useQuery({
+    queryKey: queryKeys.agents.runtimeState(agent.id),
+    queryFn: () => agentsApi.runtimeState(agent.id, companyId),
+    enabled: Boolean(companyId) && agent.adapterType === "hermes_local",
+  });
+  const { data: taskSessions } = useQuery({
+    queryKey: queryKeys.agents.taskSessions(agent.id),
+    queryFn: () => agentsApi.taskSessions(agent.id, companyId),
+    enabled: Boolean(companyId) && agent.adapterType === "hermes_local",
+  });
 
   const syncSkills = useMutation({
     mutationFn: (desiredSkills: string[]) => agentsApi.syncSkills(agent.id, desiredSkills, companyId),
@@ -2314,6 +2435,66 @@ function AgentSkillsTab({
         queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) }),
       ]);
+    },
+  });
+
+  const importUnmanagedSkill = useMutation({
+    mutationFn: (source: string) => companySkillsApi.importFromSource(companyId!, source),
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.list(companyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills(agent.id) }),
+      ]);
+      const imported = result.imported[0];
+      pushToast({
+        tone: "success",
+        title: imported ? "Skill imported into company library" : "Skill import completed",
+        body: imported
+          ? `${imported.name} can now be managed through Paperclip like other company skills.`
+          : "The unmanaged skill was imported into the company library.",
+        ...(imported ? { action: { label: "View skill", href: `/skills/${imported.id}` } } : {}),
+      });
+      if (result.warnings[0]) {
+        pushToast({
+          tone: "warn",
+          title: "Import warnings",
+          body: result.warnings[0],
+        });
+      }
+    },
+    onError: (error) => {
+      pushToast({
+        tone: "error",
+        title: "Skill import failed",
+        body: error instanceof Error ? error.message : "Failed to import unmanaged Hermes skill.",
+      });
+    },
+  });
+
+  const replaceExternalSkill = useMutation({
+    mutationFn: (payload: { desiredSkillKey: string; runtimeName: string }) =>
+      agentsApi.replaceExternalSkill(agent.id, payload, companyId),
+    onSuccess: async (snapshot) => {
+      queryClient.setQueryData(queryKeys.agents.skills(agent.id), snapshot);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills(agent.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) }),
+      ]);
+      pushToast({
+        tone: "success",
+        title: "Managed Hermes skill installed",
+        body: "The external Hermes skill copy was replaced with the Paperclip-managed version.",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        tone: "error",
+        title: "Could not replace external skill",
+        body: error instanceof Error
+          ? error.message
+          : "Failed to replace the external Hermes skill with the managed copy.",
+      });
     },
   });
 
@@ -2386,6 +2567,13 @@ function AgentSkillsTab({
           originLabel: adapterEntryByKey.get(skill.key)?.originLabel ?? null,
           linkTo: `/skills/${skill.id}`,
           readOnly: false,
+          importSource: null,
+          adoptedSkillId: null,
+          adoptedSkillName: null,
+          adoptedSkillKey: null,
+          adoptedManagedState: null,
+          adoptedManagedDesired: false,
+          importedFromSourcePath: skill.importedFromSourcePath ?? null,
           adapterEntry: adapterEntryByKey.get(skill.key) ?? null,
         })),
     [adapterEntryByKey, companySkills],
@@ -2406,6 +2594,13 @@ function AgentSkillsTab({
             originLabel: entry.originLabel ?? null,
             linkTo: companySkill ? `/skills/${companySkill.id}` : null,
             readOnly: false,
+            importSource: null,
+            adoptedSkillId: null,
+            adoptedSkillName: null,
+            adoptedSkillKey: null,
+            adoptedManagedState: null,
+            adoptedManagedDesired: false,
+            importedFromSourcePath: null,
             adapterEntry: entry,
           };
         }),
@@ -2415,19 +2610,34 @@ function AgentSkillsTab({
     () =>
       (skillSnapshot?.entries ?? [])
         .filter((entry) => isReadOnlyUnmanagedSkillEntry(entry, companySkillKeys))
-        .map((entry) => ({
-          id: `external:${entry.key}`,
-          key: entry.key,
-          name: entry.runtimeName ?? entry.key,
-          description: null,
-          detail: entry.detail ?? null,
-          locationLabel: entry.locationLabel ?? null,
-          originLabel: entry.originLabel ?? null,
-          linkTo: null,
-          readOnly: true,
-          adapterEntry: entry,
-        })),
-    [companySkillKeys, skillSnapshot],
+        .map((entry) => {
+          const adoptedSkill = findGovernedHermesSkillForImportSource(
+            agent.adapterType,
+            entry,
+            companySkills ?? [],
+          );
+          const adoptedManagedEntry = adoptedSkill ? adapterEntryByKey.get(adoptedSkill.key) ?? null : null;
+          return {
+            id: `external:${entry.key}`,
+            key: entry.key,
+            name: entry.runtimeName ?? entry.key,
+            description: null,
+            detail: entry.detail ?? null,
+            locationLabel: entry.locationLabel ?? null,
+            originLabel: entry.originLabel ?? null,
+            linkTo: adoptedSkill ? `/skills/${adoptedSkill.id}` : null,
+            readOnly: true,
+            importSource: adoptedSkill ? null : getGovernableUnmanagedSkillImportSource(agent.adapterType, entry),
+            adoptedSkillId: adoptedSkill?.id ?? null,
+            adoptedSkillName: adoptedSkill?.name ?? null,
+            adoptedSkillKey: adoptedSkill?.key ?? null,
+            adoptedManagedState: adoptedManagedEntry?.state ?? null,
+            adoptedManagedDesired: Boolean(adoptedManagedEntry?.desired),
+            importedFromSourcePath: adoptedSkill?.importedFromSourcePath ?? null,
+            adapterEntry: entry,
+          };
+        }),
+    [adapterEntryByKey, agent.adapterType, companySkillKeys, companySkills, skillSnapshot],
   );
   const desiredOnlyMissingSkills = useMemo(
     () => skillDraft.filter((key) => !companySkillByKey.has(key)),
@@ -2458,9 +2668,434 @@ function AgentSkillsTab({
     : hasUnsavedChanges
       ? "Saving soon..."
       : null;
+  const hermesDiagnostics = useMemo(
+    () => buildHermesDiagnosticsSummary({
+      agent,
+      runtimeState: runtimeState as AgentRuntimeState | null | undefined,
+      taskSessions: taskSessions as AgentTaskSession[] | null | undefined,
+      skillSnapshot,
+      companySkills,
+    }),
+    [agent, companySkills, runtimeState, skillSnapshot, taskSessions],
+  );
+  const hermesPreviewCompany = useMemo(
+    () => companies.find((company) => company.id === (agent.companyId ?? companyId)) ?? null,
+    [agent.companyId, companies, companyId],
+  );
+  const hermesEffectiveContextPreview = useMemo(() => {
+    if (agent.adapterType !== "hermes_local" || !hermesPreviewCompany) return null;
+    return buildEffectiveHermesContextPreview({
+      profile: {
+        companyName: hermesPreviewCompany.name,
+        voiceDescription: hermesPreviewCompany.voiceDescription,
+        targetAudience: hermesPreviewCompany.targetAudience,
+        defaultChannel: hermesPreviewCompany.defaultChannel,
+        defaultGoal: hermesPreviewCompany.defaultGoal,
+        voiceExamplesRight: hermesPreviewCompany.voiceExamplesRight,
+        voiceExamplesWrong: hermesPreviewCompany.voiceExamplesWrong,
+      },
+      agentConfig: agent.adapterConfig,
+      companyDefaults: {
+        agentDefaultHermesManagedHome: hermesPreviewCompany.agentDefaultHermesManagedHome,
+        agentDefaultHermesSeedCompanyProfileMemory: hermesPreviewCompany.agentDefaultHermesSeedCompanyProfileMemory,
+      },
+    });
+  }, [agent, hermesPreviewCompany]);
+  const hermesEffectiveContextDiff = useMemo(() => {
+    if (agent.adapterType !== "hermes_local" || !hermesPreviewCompany) return null;
+    return buildHermesEffectiveContextDiff({
+      profile: {
+        companyName: hermesPreviewCompany.name,
+        voiceDescription: hermesPreviewCompany.voiceDescription,
+        targetAudience: hermesPreviewCompany.targetAudience,
+        defaultChannel: hermesPreviewCompany.defaultChannel,
+        defaultGoal: hermesPreviewCompany.defaultGoal,
+        voiceExamplesRight: hermesPreviewCompany.voiceExamplesRight,
+        voiceExamplesWrong: hermesPreviewCompany.voiceExamplesWrong,
+      },
+      agentConfig: agent.adapterConfig,
+      companyDefaults: {
+        agentDefaultHermesManagedHome: hermesPreviewCompany.agentDefaultHermesManagedHome,
+        agentDefaultHermesSeedCompanyProfileMemory: hermesPreviewCompany.agentDefaultHermesSeedCompanyProfileMemory,
+      },
+    });
+  }, [agent, hermesPreviewCompany]);
+  const hermesManagedHomeSourceLabel = hermesEffectiveContextPreview
+    ? (hermesEffectiveContextPreview.policySources.managedHome === "agent_override"
+      ? "Agent override"
+      : "Company default")
+    : null;
+  const hermesMemorySourceLabel = hermesEffectiveContextPreview
+    ? (hermesEffectiveContextPreview.policySources.companyProfileMemorySeeded === "agent_override"
+      ? "Agent override"
+      : "Company default")
+    : null;
 
   return (
     <div className="max-w-4xl space-y-5">
+      {hermesDiagnostics ? (
+        <div className="rounded-xl border border-border bg-muted/20 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Hermes Diagnostics</h3>
+              <p className="text-xs text-muted-foreground">
+                Active Hermes home, session continuity, and runtime skill migration state.
+              </p>
+            </div>
+            {hermesDiagnostics.importedSourceConflictRuntimeNames.length > 0 ? (
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                {hermesDiagnostics.importedSourceConflictRuntimeNames.length} runtime conflict
+                {hermesDiagnostics.importedSourceConflictRuntimeNames.length === 1 ? "" : "s"}
+              </span>
+            ) : (
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                Runtime skills aligned
+              </span>
+            )}
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-border bg-background/80 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Hermes home</div>
+              <div className="mt-1 break-all font-mono text-xs">{hermesDiagnostics.hermesHome}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/80 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Active session</div>
+              <div className="mt-1 break-all font-mono text-xs">
+                {hermesDiagnostics.activeSessionDisplayId ?? hermesDiagnostics.activeSessionId ?? "None"}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/80 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Task sessions</div>
+              <div className="mt-1 text-sm font-semibold">{hermesDiagnostics.taskSessionCount}</div>
+              {hermesDiagnostics.taskSessionDisplayIds[0] ? (
+                <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                  {hermesDiagnostics.taskSessionDisplayIds[0]}
+                </div>
+              ) : null}
+            </div>
+            <div className="rounded-lg border border-border bg-background/80 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Managed skills</div>
+              <div className="mt-1 text-sm font-semibold">{hermesDiagnostics.desiredManagedSkillCount}</div>
+              {hermesDiagnostics.importedSourceConflictRuntimeNames.length > 0 ? (
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Conflicts: {hermesDiagnostics.importedSourceConflictRuntimeNames.join(", ")}
+                </div>
+              ) : (
+                <div className="mt-1 text-[11px] text-muted-foreground">No imported-source conflicts</div>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-border bg-background/80 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Toolsets</div>
+              <div className="mt-1 text-xs">
+                {hermesDiagnostics.toolsets.length > 0
+                  ? hermesDiagnostics.toolsets.join(", ")
+                  : "Hermes defaults"}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/80 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">MCP servers</div>
+              <div className="mt-1 text-xs">
+                {hermesDiagnostics.configuredMcpServerCount > 0
+                  ? `${hermesDiagnostics.allowedMcpServerNames.length > 0 ? hermesDiagnostics.allowedMcpServerNames.length : hermesDiagnostics.configuredMcpServerCount}/${hermesDiagnostics.configuredMcpServerCount} materialized`
+                  : "None configured"}
+              </div>
+              {hermesDiagnostics.allowedMcpServerNames.length > 0 ? (
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Allowed: {hermesDiagnostics.allowedMcpServerNames.join(", ")}
+                </div>
+              ) : null}
+            </div>
+            <div className="rounded-lg border border-border bg-background/80 px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Managed home policy</div>
+              <div className="mt-1 text-xs">
+                {hermesDiagnostics.managedHome ? "Paperclip-managed Hermes home" : "External/shared Hermes home"}
+              </div>
+              {hermesManagedHomeSourceLabel ? (
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Source: {hermesManagedHomeSourceLabel}
+                </div>
+              ) : null}
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                {hermesDiagnostics.companyProfileMemorySeeded
+                  ? "Company profile memory seeding enabled (USER.md, MEMORY.md)"
+                  : "Company profile memory seeding disabled"}
+              </div>
+              {hermesMemorySourceLabel ? (
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Memory source: {hermesMemorySourceLabel}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          {hermesDiagnostics.lastAppliedRuntimePolicy ? (
+            <div className="mt-4 rounded-lg border border-border bg-background/80 px-3 py-3">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Last applied runtime policy
+              </div>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Hermes home:</span>{" "}
+                  {hermesDiagnostics.lastAppliedRuntimePolicy.hermesHome}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Managed home:</span>{" "}
+                  {hermesDiagnostics.lastAppliedRuntimePolicy.managedHome ? "Enabled" : "Disabled"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Memory seeding:</span>{" "}
+                  {hermesDiagnostics.lastAppliedRuntimePolicy.companyProfileMemorySeeded ? "Enabled" : "Disabled"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Toolsets:</span>{" "}
+                  {hermesDiagnostics.lastAppliedRuntimePolicy.toolsets.length > 0
+                    ? hermesDiagnostics.lastAppliedRuntimePolicy.toolsets.join(", ")
+                    : "Hermes defaults"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Configured MCP:</span>{" "}
+                  {hermesDiagnostics.lastAppliedRuntimePolicy.configuredMcpServerNames.length > 0
+                    ? hermesDiagnostics.lastAppliedRuntimePolicy.configuredMcpServerNames.join(", ")
+                    : "None"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Materialized MCP:</span>{" "}
+                  {hermesDiagnostics.lastAppliedRuntimePolicy.materializedMcpServerNames.length > 0
+                    ? hermesDiagnostics.lastAppliedRuntimePolicy.materializedMcpServerNames.join(", ")
+                    : "None"}
+                </div>
+                <div className="text-xs text-muted-foreground md:col-span-2">
+                  <span className="font-medium text-foreground">Seeded files:</span>{" "}
+                  {hermesDiagnostics.lastAppliedRuntimePolicy.seededContextFiles.length > 0
+                    ? hermesDiagnostics.lastAppliedRuntimePolicy.seededContextFiles.join(", ")
+                    : "No company profile files were materialized"}
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {hermesDiagnostics.continuityDrift ? (
+            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+              The active Hermes runtime session is not currently mapped to a saved task session. Session continuity may have drifted.
+            </div>
+          ) : null}
+          {hermesDiagnostics.runtimeConfigDrift ? (
+            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-xs text-amber-800 dark:text-amber-200">
+              <div>{hermesDiagnostics.runtimeConfigDriftReason}</div>
+              {onResetSessions ? (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onResetSessions}
+                    disabled={Boolean(resetSessionsPending)}
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    {resetSessionsPending ? "Resetting…" : "Reset Sessions"}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {hermesEffectiveContextPreview ? (
+            <div className="mt-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <BrainCircuit className="h-4 w-4 text-muted-foreground" />
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Effective Hermes context
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    This shows the context files this specific agent can inherit after combining the company profile with the agent’s managed-home policy.
+                  </p>
+                </div>
+                <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+                  {hermesEffectiveContextPreview.managedHome
+                    ? (hermesEffectiveContextPreview.companyProfileMemorySeeded
+                      ? "Managed home + memory"
+                      : "Managed home only")
+                    : "External/shared home"}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+                  Managed home: {hermesManagedHomeSourceLabel ?? "Unknown source"}
+                </span>
+                <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+                  Memory: {hermesMemorySourceLabel ?? "Unknown source"}
+                </span>
+              </div>
+              {hermesEffectiveContextDiff ? (
+                hermesEffectiveContextDiff.matchesCompanyDefaults ? (
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-3 text-xs text-emerald-800 dark:text-emerald-200">
+                    This agent’s Hermes context policy matches the company defaults.
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-background/80 px-3 py-3">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Diff vs company defaults
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {hermesEffectiveContextDiff.entries.map((entry) => (
+                        <div key={entry.key} className="rounded-md border border-border/70 bg-muted/20 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-xs font-medium">{entry.label}</div>
+                            {entry.affectedDocs.length > 0 ? (
+                              <span className="text-[11px] text-muted-foreground">
+                                Affects {entry.affectedDocs.join(", ")}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">{entry.detail}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              ) : null}
+              {hermesEffectiveContextPreview.docs.length > 0 ? (
+                <div className="grid gap-3 xl:grid-cols-2">
+                  {hermesEffectiveContextPreview.docs.map((doc) => (
+                    <div key={doc.key} className="overflow-hidden rounded-lg border border-border bg-background/80">
+                      <div className="border-b border-border px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <FileCode2 className="h-4 w-4 text-muted-foreground" />
+                          <div className="text-sm font-medium">{doc.title}</div>
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground">{doc.description}</p>
+                      </div>
+                      <pre className="max-h-[240px] overflow-auto px-3 py-3 text-xs leading-5 text-muted-foreground">
+                        <code>{doc.content}</code>
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border bg-background/80 px-3 py-3 text-xs text-muted-foreground">
+                  This agent is not currently using a Paperclip-managed Hermes home, so Paperclip will not materialize company profile context files for it.
+                </div>
+              )}
+            </div>
+          ) : null}
+          {hermesDiagnostics.recentTaskSessions.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Recent task sessions
+              </div>
+              <div className="space-y-2">
+                {hermesDiagnostics.recentTaskSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className="rounded-lg border border-border bg-background/80 px-3 py-3"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="break-all font-mono text-xs">{session.sessionLabel}</div>
+                          {session.isActive ? (
+                            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                              Active
+                            </span>
+                          ) : null}
+                          {session.lastError ? (
+                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                              Last run errored
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Task key: <span className="font-mono">{session.taskKey}</span>
+                        </div>
+                        {session.lastRunId ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Last run: <span className="font-mono">{session.lastRunId}</span>
+                          </div>
+                        ) : null}
+                        {session.lastError ? (
+                          <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                            {session.lastError}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="shrink-0 text-right text-[11px] text-muted-foreground">
+                        <div>Updated {relativeTime(session.updatedAt)}</div>
+                        <div className="mt-1">{formatDate(session.updatedAt)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {hermesDiagnostics.importedSourceConflicts.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Imported-source conflicts
+              </div>
+              <div className="space-y-2">
+                {hermesDiagnostics.importedSourceConflicts.map((conflict) => {
+                  const replacing =
+                    replaceExternalSkill.isPending
+                    && replaceExternalSkill.variables?.desiredSkillKey === conflict.key
+                    && replaceExternalSkill.variables?.runtimeName === conflict.runtimeName;
+                  return (
+                    <div
+                      key={`${conflict.key}:${conflict.runtimeName}`}
+                      className="rounded-lg border border-amber-500/20 bg-background/80 px-3 py-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium">{conflict.runtimeName}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {conflict.companySkillName
+                              ? `Imported into the company library as ${conflict.companySkillName}.`
+                              : "Imported Hermes skill conflict detected."}
+                          </div>
+                          {conflict.externalConflictPath ? (
+                            <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                              {conflict.externalConflictPath}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {conflict.companySkillId ? (
+                            <Link
+                              to={`/skills/${conflict.companySkillId}`}
+                              className="text-xs text-muted-foreground no-underline hover:text-foreground"
+                            >
+                              View skill
+                            </Link>
+                          ) : null}
+                          {conflict.companySkillId ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              disabled={replacing}
+                              onClick={() => {
+                                replaceExternalSkill.mutate({
+                                  desiredSkillKey: conflict.key,
+                                  runtimeName: conflict.runtimeName,
+                                });
+                              }}
+                            >
+                              {replacing ? "Replacing..." : "Replace external copy"}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           to="/skills"
@@ -2530,6 +3165,131 @@ function AgentSkillsTab({
                   )}
                   {skill.detail && (
                     <p className="mt-1 text-xs text-muted-foreground">{skill.detail}</p>
+                  )}
+                  {skill.readOnly && skill.adoptedSkillName && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Imported into the company library as {skill.adoptedSkillName}.
+                    </p>
+                  )}
+                  {skill.readOnly && skill.adoptedManagedState === "external" && skill.adoptedManagedDesired && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                      The imported Paperclip-managed version is selected for this agent, but the external Hermes
+                      installation still occupies this runtime name. Remove or rename the external skill to let
+                      Paperclip install its managed copy.
+                    </p>
+                  )}
+                  {skill.readOnly && skill.adoptedManagedState === "installed" && skill.adoptedManagedDesired && (
+                    <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                      This Hermes skill has been adopted into the company library and is installed as a managed skill.
+                    </p>
+                  )}
+                  {skill.readOnly && skill.importSource && (
+                    <div className="mt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={
+                          importUnmanagedSkill.isPending &&
+                          importUnmanagedSkill.variables === skill.importSource
+                        }
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          importUnmanagedSkill.mutate(skill.importSource!);
+                        }}
+                      >
+                        {importUnmanagedSkill.isPending &&
+                        importUnmanagedSkill.variables === skill.importSource
+                          ? "Importing..."
+                          : "Import to company library"}
+                      </Button>
+                    </div>
+                  )}
+                  {skill.readOnly && skill.adoptedSkillKey && !skill.adoptedManagedDesired && skillSnapshot?.mode !== "unsupported" && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={syncSkills.isPending}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setSkillDraft(Array.from(new Set([...skillDraft, skill.adoptedSkillKey!])));
+                        }}
+                      >
+                        Use imported company skill
+                      </Button>
+                    </div>
+                  )}
+                  {skill.readOnly && skill.adoptedSkillKey && skill.adoptedManagedDesired && skill.adoptedManagedState === "external" && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={
+                          replaceExternalSkill.isPending
+                          && replaceExternalSkill.variables?.desiredSkillKey === skill.adoptedSkillKey
+                          && replaceExternalSkill.variables?.runtimeName === skill.name
+                        }
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          replaceExternalSkill.mutate({
+                            desiredSkillKey: skill.adoptedSkillKey!,
+                            runtimeName: skill.name,
+                          });
+                        }}
+                      >
+                        {replaceExternalSkill.isPending
+                        && replaceExternalSkill.variables?.desiredSkillKey === skill.adoptedSkillKey
+                        && replaceExternalSkill.variables?.runtimeName === skill.name
+                          ? "Replacing..."
+                          : "Replace external copy"}
+                      </Button>
+                    </div>
+                  )}
+                  {!skill.readOnly
+                  && adapterEntry?.state === "external"
+                  && adapterEntry.externalConflictKind === "imported_source"
+                  && skill.importedFromSourcePath
+                  && adapterEntry.runtimeName && (
+                    <div className="mt-2 space-y-2">
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        This Paperclip-managed Hermes skill is selected, but Hermes is still loading the original
+                        imported copy at {skill.importedFromSourcePath}.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={
+                          replaceExternalSkill.isPending
+                          && replaceExternalSkill.variables?.desiredSkillKey === skill.key
+                          && replaceExternalSkill.variables?.runtimeName === adapterEntry.runtimeName
+                        }
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          replaceExternalSkill.mutate({
+                            desiredSkillKey: skill.key,
+                            runtimeName: adapterEntry.runtimeName!,
+                          });
+                        }}
+                      >
+                        {replaceExternalSkill.isPending
+                        && replaceExternalSkill.variables?.desiredSkillKey === skill.key
+                        && replaceExternalSkill.variables?.runtimeName === adapterEntry.runtimeName
+                          ? "Replacing..."
+                          : "Replace external copy"}
+                      </Button>
+                    </div>
                   )}
                 </div>
               );

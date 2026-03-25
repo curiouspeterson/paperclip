@@ -145,6 +145,13 @@ export const agentsApi = {
     api.get<AgentSkillSnapshot>(agentPath(id, companyId, "/skills")),
   syncSkills: (id: string, desiredSkills: string[], companyId?: string) =>
     api.post<AgentSkillSnapshot>(agentPath(id, companyId, "/skills/sync"), { desiredSkills }),
+  replaceExternalSkill: (
+    id: string,
+    payload: { desiredSkillKey: string; runtimeName: string },
+    companyId?: string,
+  ) => api.post<AgentSkillSnapshot>(agentPath(id, companyId, "/skills/replace-external"), payload),
+  migrateHermesWorker: (id: string, companyId?: string) =>
+    api.post<Agent>(agentPath(id, companyId, "/migrate-hermes-worker"), {}),
   createKey: (id: string, name: string, companyId?: string) =>
     api.post<AgentKeyCreated>(agentPath(id, companyId, "/keys"), { name }),
   revokeKey: (agentId: string, keyId: string, companyId?: string) =>

@@ -51,6 +51,7 @@ export interface CompanySkillListItem {
   sourceLabel: string | null;
   sourceBadge: CompanySkillSourceBadge;
   sourcePath: string | null;
+  importedFromSourcePath: string | null;
 }
 
 export interface CompanySkillUsageAgent {
@@ -70,6 +71,7 @@ export interface CompanySkillDetail extends CompanySkill {
   sourceLabel: string | null;
   sourceBadge: CompanySkillSourceBadge;
   sourcePath: string | null;
+  importedFromSourcePath: string | null;
 }
 
 export interface CompanySkillUpdateStatus {

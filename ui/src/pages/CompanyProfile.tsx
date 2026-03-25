@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookText, MessageSquareQuote, Target, Users, Megaphone, Plus, Trash2 } from "lucide-react";
+import { BookText, MessageSquareQuote, Target, Users, Megaphone, Plus, Trash2, BrainCircuit, FileCode2, Copy, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
@@ -8,6 +8,13 @@ import { useToast } from "../context/ToastContext";
 import { companiesApi } from "../api/companies";
 import { queryKeys } from "../lib/queryKeys";
 import { Field } from "../components/agent-config-primitives";
+import {
+  buildHermesContextArchiveFiles,
+  buildHermesContextBundleText,
+  buildHermesContextPreview,
+  buildHermesContextPreviewState,
+} from "../lib/hermes-context-preview";
+import { createZipArchive } from "../lib/zip";
 
 function normalizeSamples(values: string[]) {
   return values.map((value) => value.trim()).filter((value) => value.length > 0);
@@ -16,6 +23,33 @@ function normalizeSamples(values: string[]) {
 function arraysEqual(left: string[], right: string[]) {
   if (left.length !== right.length) return false;
   return left.every((value, index) => value === right[index]);
+}
+
+function downloadTextFile(filename: string, body: string, type = "text/markdown;charset=utf-8") {
+  const blob = new Blob([body], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadZipFile(filename: string, files: Record<string, string>) {
+  const zipBytes = createZipArchive(files, filename.replace(/\.zip$/i, ""));
+  const zipBuffer = new ArrayBuffer(zipBytes.byteLength);
+  new Uint8Array(zipBuffer).set(zipBytes);
+  const blob = new Blob([zipBuffer], { type: "application/zip" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function SampleListEditor({
@@ -128,6 +162,42 @@ export function CompanyProfile() {
 
   const normalizedRight = useMemo(() => normalizeSamples(voiceExamplesRight), [voiceExamplesRight]);
   const normalizedWrong = useMemo(() => normalizeSamples(voiceExamplesWrong), [voiceExamplesWrong]);
+  const hermesPreviewDocs = useMemo(() => buildHermesContextPreview({
+    companyName: selectedCompany?.name ?? null,
+    voiceDescription,
+    targetAudience,
+    defaultChannel,
+    defaultGoal,
+    voiceExamplesRight: normalizedRight,
+    voiceExamplesWrong: normalizedWrong,
+  }, {
+    includeMemoryDocs: selectedCompany?.agentDefaultHermesSeedCompanyProfileMemory ?? false,
+  }), [
+    defaultChannel,
+    defaultGoal,
+    normalizedRight,
+    normalizedWrong,
+    selectedCompany?.agentDefaultHermesSeedCompanyProfileMemory,
+    selectedCompany?.name,
+    targetAudience,
+    voiceDescription,
+  ]);
+  const hermesPreviewBundleText = useMemo(
+    () => buildHermesContextBundleText(hermesPreviewDocs),
+    [hermesPreviewDocs],
+  );
+  const hermesPreviewArchiveFiles = useMemo(
+    () => buildHermesContextArchiveFiles(hermesPreviewDocs),
+    [hermesPreviewDocs],
+  );
+  const hermesPreviewArchiveName = useMemo(() => {
+    const base = (selectedCompany?.name ?? "company")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      || "company";
+    return `${base}-hermes-context.zip`;
+  }, [selectedCompany?.name]);
 
   const dirty = !!selectedCompany && (
     voiceDescription !== (selectedCompany.voiceDescription ?? "")
@@ -137,6 +207,7 @@ export function CompanyProfile() {
     || !arraysEqual(normalizedRight, selectedCompany.voiceExamplesRight ?? [])
     || !arraysEqual(normalizedWrong, selectedCompany.voiceExamplesWrong ?? [])
   );
+  const hermesPreviewState = useMemo(() => buildHermesContextPreviewState(dirty), [dirty]);
 
   const profileMutation = useMutation({
     mutationFn: () => companiesApi.update(selectedCompanyId!, {
@@ -155,6 +226,24 @@ export function CompanyProfile() {
       });
     },
   });
+
+  async function copyHermesDoc(title: string, content: string) {
+    await navigator.clipboard.writeText(content);
+    pushToast({
+      title: `${title} copied`,
+      body: "The generated Hermes context file was copied to your clipboard.",
+      tone: "success",
+    });
+  }
+
+  async function copyHermesBundle() {
+    await navigator.clipboard.writeText(hermesPreviewBundleText);
+    pushToast({
+      title: "Hermes context packet copied",
+      body: "All generated Hermes context files were copied as a single packet.",
+      tone: "success",
+    });
+  }
 
   if (!selectedCompany) {
     return (
@@ -278,6 +367,81 @@ export function CompanyProfile() {
           <p>4. Use audience, channel, and goal to shape the final piece.</p>
         </div>
       </div>
+
+      {hermesPreviewDocs.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <BrainCircuit className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold">Hermes Context Preview</h2>
+              </div>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                This is the managed-home context Hermes can inherit from the company profile. Review it here
+                before a run instead of guessing what landed in the runtime files.
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{hermesPreviewState.label}.</span>{" "}
+                {hermesPreviewState.description}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
+                {selectedCompany.agentDefaultHermesSeedCompanyProfileMemory
+                  ? "Managed home + memory seeding"
+                  : "Managed home context only"}
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => void copyHermesBundle()}>
+                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                Copy packet
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => downloadZipFile(hermesPreviewArchiveName, hermesPreviewArchiveFiles)}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Export zip
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            {hermesPreviewDocs.map((doc) => (
+              <div key={doc.key} className="overflow-hidden rounded-xl border border-border/80 bg-background">
+                <div className="flex items-start justify-between gap-3 border-b border-border/80 px-4 py-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <FileCode2 className="h-4 w-4 text-muted-foreground" />
+                      <h3 className="text-sm font-semibold">{doc.title}</h3>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{doc.description}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => void copyHermesDoc(doc.title, doc.content)}>
+                      <Copy className="mr-1.5 h-3.5 w-3.5" />
+                      Copy
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => downloadTextFile(doc.title, doc.content)}
+                    >
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      Export
+                    </Button>
+                  </div>
+                </div>
+                <pre className="max-h-[340px] overflow-auto px-4 py-4 text-xs leading-5 text-muted-foreground">
+                  <code>{doc.content}</code>
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import type { Db } from "@paperclipai/db";
 import { agents as agentsTable, companies, heartbeatRuns } from "@paperclipai/db";
 import { and, desc, eq, inArray, not, sql } from "drizzle-orm";
 import {
+  agentSkillReplaceExternalSchema,
   agentSkillSyncSchema,
   createAgentKeySchema,
   createAgentHireSchema,
@@ -45,6 +46,7 @@ import {
 import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
 import { findServerAdapter, listAdapterModels } from "../adapters/index.js";
+import { replaceHermesExternalSkill } from "../adapters/hermes-local/skills.js";
 import { redactEventPayload } from "../redaction.js";
 import { redactCurrentUserValue } from "../log-redaction.js";
 import { renderOrgChartSvg, renderOrgChartPng, type OrgNode, type OrgChartStyle, ORG_CHART_STYLES } from "./org-chart-svg.js";
@@ -426,6 +428,69 @@ export function agentRoutes(db: Db) {
       throw unprocessable("adapterConfig.cwd must be an absolute path to resolve relative instructions path");
     }
     return path.resolve(cwd, trimmed);
+  }
+
+  function readPlainEnvValue(env: Record<string, unknown>, key: string) {
+    const value = env[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+    const record = asRecord(value);
+    if (!record) return null;
+    if (record.type === "plain" && typeof record.value === "string" && record.value.trim().length > 0) {
+      return record.value.trim();
+    }
+    return null;
+  }
+
+  function isLegacyHermesWorkerAdapterConfig(adapterType: string, adapterConfig: Record<string, unknown>) {
+    if (adapterType !== "process") return false;
+    const args = Array.isArray(adapterConfig.args)
+      ? adapterConfig.args.filter((value): value is string => typeof value === "string")
+      : [];
+    return args.some((value) => /(^|[/\\])hermes_paperclip_worker\.py$/i.test(value.trim()));
+  }
+
+  function buildHermesLocalConfigFromLegacyWorker(adapterConfig: Record<string, unknown>) {
+    const env = asRecord(adapterConfig.env) ?? {};
+    const nextConfig: Record<string, unknown> = {
+      paperclipManagedHermesHome: true,
+      paperclipSeedCompanyProfileMemory: true,
+    };
+
+    const provider = readPlainEnvValue(env, "HERMES_PROVIDER");
+    if (provider) nextConfig.provider = provider;
+    const model = readPlainEnvValue(env, "HERMES_MODEL");
+    if (model) nextConfig.model = model;
+    const hermesCommand = readPlainEnvValue(env, "HERMES_BIN");
+    if (hermesCommand) nextConfig.hermesCommand = hermesCommand;
+
+    if (typeof adapterConfig.browserAutomationProvider === "string" && adapterConfig.browserAutomationProvider.trim()) {
+      nextConfig.browserAutomationProvider = adapterConfig.browserAutomationProvider.trim();
+    }
+    if (typeof adapterConfig.browserAutomationCommand === "string" && adapterConfig.browserAutomationCommand.trim()) {
+      nextConfig.browserAutomationCommand = adapterConfig.browserAutomationCommand.trim();
+    }
+    if (typeof adapterConfig.browserSessionProfile === "string" && adapterConfig.browserSessionProfile.trim()) {
+      nextConfig.browserSessionProfile = adapterConfig.browserSessionProfile.trim();
+    }
+    if (adapterConfig.browserHeadless === true) {
+      nextConfig.browserHeadless = true;
+    }
+    if (adapterConfig.timeoutSec != null) {
+      nextConfig.timeoutSec = adapterConfig.timeoutSec;
+    }
+    if (adapterConfig.graceSec != null) {
+      nextConfig.graceSec = adapterConfig.graceSec;
+    }
+
+    const migratedEnv = { ...env };
+    delete migratedEnv.HERMES_PROVIDER;
+    delete migratedEnv.HERMES_MODEL;
+    delete migratedEnv.HERMES_BIN;
+    if (Object.keys(migratedEnv).length > 0) {
+      nextConfig.env = migratedEnv;
+    }
+
+    return nextConfig;
   }
 
   async function materializeDefaultInstructionsBundleForNewAgent<T extends {
@@ -827,6 +892,164 @@ export function agentRoutes(db: Db) {
       res.json(snapshot);
     },
   );
+
+  router.post(
+    "/agents/:id/skills/replace-external",
+    validate(agentSkillReplaceExternalSchema),
+    async (req, res) => {
+      const id = req.params.id as string;
+      const agent = await svc.getById(id);
+      if (!agent) {
+        res.status(404).json({ error: "Agent not found" });
+        return;
+      }
+      await assertCanUpdateAgent(req, agent);
+      if (agent.adapterType !== "hermes_local") {
+        throw unprocessable("Replacing external runtime skills is only supported for hermes_local agents.");
+      }
+
+      const desiredSkillKey = String(req.body.desiredSkillKey ?? "").trim();
+      const runtimeName = String(req.body.runtimeName ?? "").trim();
+      const companySkill = await companySkills.getByKey(agent.companyId, desiredSkillKey);
+      if (!companySkill) {
+        throw notFound("Company skill not found");
+      }
+      const importedFromSourceLocator = (
+        companySkill.metadata
+        && typeof companySkill.metadata === "object"
+        && !Array.isArray(companySkill.metadata)
+        && typeof (companySkill.metadata as Record<string, unknown>).importedFromSourceLocator === "string"
+      )
+        ? String((companySkill.metadata as Record<string, unknown>).importedFromSourceLocator)
+        : null;
+      if (!importedFromSourceLocator) {
+        throw unprocessable("Selected skill was not imported from an external Hermes local skill.");
+      }
+
+      const currentPreference = readPaperclipSkillSyncPreference(agent.adapterConfig as Record<string, unknown>);
+      const {
+        adapterConfig: nextAdapterConfig,
+        desiredSkills,
+        runtimeSkillEntries,
+      } = await resolveDesiredSkillAssignment(
+        agent.companyId,
+        agent.adapterType,
+        agent.adapterConfig as Record<string, unknown>,
+        Array.from(new Set([...currentPreference.desiredSkills, desiredSkillKey])),
+      );
+      if (!desiredSkills || !runtimeSkillEntries) {
+        throw unprocessable("Skill migration requires desiredSkills.");
+      }
+
+      const actor = getActorInfo(req);
+      const updated = await svc.update(agent.id, {
+        adapterConfig: nextAdapterConfig,
+      }, {
+        recordRevision: {
+          createdByAgentId: actor.agentId,
+          createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+          source: "skill-replace-external",
+        },
+      });
+      if (!updated) {
+        res.status(404).json({ error: "Agent not found" });
+        return;
+      }
+
+      const { config: runtimeConfig } = await secretsSvc.resolveAdapterConfigForRuntime(
+        updated.companyId,
+        updated.adapterConfig,
+      );
+      const snapshot = await replaceHermesExternalSkill({
+        agentId: updated.id,
+        companyId: updated.companyId,
+        adapterType: updated.adapterType,
+        config: {
+          ...runtimeConfig,
+          paperclipRuntimeSkills: runtimeSkillEntries,
+          paperclipSkillSync: {
+            desiredSkills,
+          },
+        },
+      }, {
+        desiredSkillKey,
+        runtimeName,
+        expectedExternalSourcePath: importedFromSourceLocator,
+      });
+
+      await logActivity(db, {
+        companyId: updated.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        action: "agent.skill_external_replaced",
+        entityType: "agent",
+        entityId: updated.id,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        details: {
+          adapterType: updated.adapterType,
+          desiredSkillKey,
+          runtimeName,
+        },
+      });
+
+      res.json(snapshot);
+    },
+  );
+
+  router.post("/agents/:id/migrate-hermes-worker", async (req, res) => {
+    const id = req.params.id as string;
+    const agent = await svc.getById(id);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    await assertCanUpdateAgent(req, agent);
+
+    const currentAdapterConfig = asRecord(agent.adapterConfig) ?? {};
+    if (!isLegacyHermesWorkerAdapterConfig(agent.adapterType, currentAdapterConfig)) {
+      throw unprocessable("Only legacy process-based Hermes worker agents can be migrated.");
+    }
+
+    const actor = getActorInfo(req);
+    const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
+      agent.companyId,
+      buildHermesLocalConfigFromLegacyWorker(currentAdapterConfig),
+      { strictMode: strictSecretsMode },
+    );
+    const updated = await svc.update(agent.id, {
+      adapterType: "hermes_local",
+      adapterConfig: normalizedAdapterConfig,
+    }, {
+      recordRevision: {
+        createdByAgentId: actor.agentId,
+        createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+        source: "migrate_hermes_worker",
+      },
+    });
+    if (!updated) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    await logActivity(db, {
+      companyId: updated.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      action: "agent.hermes_worker_migrated",
+      entityType: "agent",
+      entityId: updated.id,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      details: {
+        previousAdapterType: agent.adapterType,
+        nextAdapterType: updated.adapterType,
+        migratedFromCommand: currentAdapterConfig.command ?? null,
+      },
+    });
+
+    res.json(updated);
+  });
 
   router.get("/companies/:companyId/agents", async (req, res) => {
     const companyId = req.params.companyId as string;

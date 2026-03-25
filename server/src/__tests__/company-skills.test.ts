@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   discoverProjectWorkspaceSkillDirectories,
   findMissingLocalSkillIds,
+  isHermesSkillDirectoryPath,
+  materializeImportedLocalSkillCopy,
   parseSkillImportSourceInput,
   readLocalSkillImportFromDirectory,
 } from "../services/company-skills.js";
@@ -217,5 +219,43 @@ describe("missing local skill reconciliation", () => {
     ]);
 
     expect(missingIds).toEqual(["skill-1"]);
+  });
+});
+
+describe("Hermes local skill adoption", () => {
+  it("detects Hermes skills-home directories", () => {
+    expect(isHermesSkillDirectoryPath("/Users/demo/.hermes/skills/story-weaver")).toBe(true);
+    expect(isHermesSkillDirectoryPath("/Users/demo/company-skills/story-weaver")).toBe(false);
+  });
+
+  it("copies Hermes local imports into Paperclip-managed storage and preserves source metadata", async () => {
+    const hermesHome = await makeTempDir("paperclip-hermes-import-");
+    const skillDir = path.join(hermesHome, ".hermes", "skills", "story-weaver");
+    await fs.mkdir(path.join(skillDir, "references"), { recursive: true });
+    await fs.writeFile(path.join(skillDir, "SKILL.md"), "---\nname: Story Weaver\n---\n\n# Story Weaver\n", "utf8");
+    await fs.writeFile(path.join(skillDir, "references", "notes.md"), "# Notes\n", "utf8");
+
+    const imported = await readLocalSkillImportFromDirectory(
+      "33333333-3333-4333-8333-333333333333",
+      skillDir,
+      { inventoryMode: "full" },
+    );
+
+    const materialized = await materializeImportedLocalSkillCopy(
+      "33333333-3333-4333-8333-333333333333",
+      imported,
+    );
+    cleanupDirs.add(path.resolve(materialized.sourceLocator!));
+
+    expect(materialized.sourceLocator).not.toBe(skillDir);
+    expect(materialized.sourceLocator).toContain(path.join("skills", "33333333-3333-4333-8333-333333333333", "__imports__"));
+    expect(materialized.metadata).toMatchObject({
+      sourceKind: "managed_local",
+      importedFromSourceLocator: path.resolve(skillDir),
+      importedFromSourceKind: "hermes_local",
+      importedRuntimeName: "story-weaver",
+    });
+    await expect(fs.readFile(path.join(materialized.sourceLocator!, "SKILL.md"), "utf8")).resolves.toContain("Story Weaver");
+    await expect(fs.readFile(path.join(materialized.sourceLocator!, "references", "notes.md"), "utf8")).resolves.toContain("Notes");
   });
 });
