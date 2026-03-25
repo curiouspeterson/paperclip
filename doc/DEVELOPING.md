@@ -29,29 +29,49 @@ For `paperclipai/paperclip`, the canonical upstream default branch is `master`.
 
 - Treat `upstream/master` as the source of truth.
 - Keep your fork's `master` clean and disposable.
-- Do not commit directly to `master`; create short-lived feature branches for real work.
-- Rebase feature branches onto `upstream/master` or a freshly synced local `master`.
+- Do not commit directly to `master`.
+- If your fork carries long-lived local/custom Paperclip changes, keep them on a dedicated integration branch such as `current-work`.
+- Do day-to-day edits in short-lived branches or git worktrees cut from that integration branch, not from `master`.
+- Rebase your integration branch and short-lived work branches onto `upstream/master`.
 - Use `--force-with-lease` when pushing rebased branches back to your fork.
+
+Recommended fork layout:
+
+- `upstream/master`: upstream source of truth
+- `master`: clean mirror branch in your fork
+- `current-work` (or another dedicated integration branch): your long-lived fork-specific changes
+- short-lived feature branches or worktrees: your local edits for a single task, cut from `current-work`
 
 If your fork's `master` is only a mirror of the upstream project, the recommended sync flow is:
 
 ```sh
-git fetch upstream
+git fetch upstream origin
 git switch master
 git reset --hard upstream/master
 git push --force-with-lease origin master
 ```
 
-Then create or refresh your work branch from that clean base:
+Then rebase your long-lived integration branch onto the refreshed upstream base:
 
 ```sh
-git switch -c fix/issue-lock-cleanup
-# or, if the branch already exists:
-git switch fix/issue-lock-cleanup
-git rebase master
+git switch current-work
+git rebase upstream/master
+git push --force-with-lease origin current-work
 ```
 
-Do not hard-reset `master` if it contains unique local commits or is being used as a shared collaboration branch.
+Then create or refresh an isolated local edit branch/worktree from that integration branch:
+
+```sh
+pnpm paperclipai worktree:make paperclip-my-fix --start-point current-work
+cd ~/paperclip-my-fix
+pnpm dev
+```
+
+`worktree:make` creates the git worktree and runs `paperclipai worktree init` automatically, so the new checkout gets its own repo-local `.paperclip/.env`, server port, and embedded PostgreSQL port.
+
+If you are contributing directly upstream and do not have a long-lived customization branch, create short-lived branches from the clean `master` instead.
+
+Do not hard-reset `master` if it contains unique local commits or is being used as a shared collaboration branch. If your integration branch grows large or rebases become painful, peel off upstreamable changes and split the remaining fork-only work into smaller stacked branches or PR-sized chunks.
 
 ## Start Dev
 
@@ -176,6 +196,14 @@ paperclipai worktree init
 pnpm paperclipai worktree:make paperclip-pr-432
 ```
 
+For long-lived customized forks, prefer starting new task worktrees from your integration branch:
+
+```sh
+pnpm paperclipai worktree:make paperclip-my-fix --start-point current-work
+```
+
+Use `paperclipai worktree init` when you created the git worktree yourself and only need the repo-local Paperclip instance/bootstrap step.
+
 This command:
 
 - writes repo-local files at `.paperclip/config.json` and `.paperclip/.env`
@@ -240,7 +268,7 @@ paperclipai worktree init --force
 
 | Option | Description |
 |---|---|
-| `--start-point <ref>` | Remote ref to base the new branch on (e.g. `origin/master`) |
+| `--start-point <ref>` | Ref to base the new branch on (for example `current-work` in a customized fork or `upstream/master` for a fresh upstream-based worktree) |
 | `--instance <id>` | Explicit isolated instance id |
 | `--home <path>` | Home root for worktree instances (default: `~/.paperclip-worktrees`) |
 | `--from-config <path>` | Source config.json to seed from |
@@ -256,7 +284,8 @@ Examples:
 
 ```sh
 pnpm paperclipai worktree:make paperclip-pr-432
-pnpm paperclipai worktree:make my-feature --start-point origin/master
+pnpm paperclipai worktree:make my-feature --start-point current-work
+pnpm paperclipai worktree:make upstream-review --start-point upstream/master
 pnpm paperclipai worktree:make experiment --no-seed
 ```
 

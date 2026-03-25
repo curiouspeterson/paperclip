@@ -104,10 +104,6 @@ console.log(JSON.stringify({
   await fsPromises.chmod(commandPath, 0o755);
 }
 
-async function sleep(ms: number) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 describe("heartbeat run issue comments", () => {
   let db!: ReturnType<typeof createDb>;
   let instance: EmbeddedPostgresInstance | null = null;
@@ -197,43 +193,25 @@ describe("heartbeat run issue comments", () => {
 
     expect(queuedRun).not.toBeNull();
 
-    const deadline = Date.now() + 10_000;
-    let finalizedRun = queuedRun;
-    while (Date.now() < deadline) {
-      const current = await heartbeat.getRun(queuedRun!.id);
-      if (current && ["succeeded", "failed", "cancelled", "timed_out"].includes(current.status)) {
-        finalizedRun = current;
-        break;
-      }
-      await sleep(50);
-    }
+    const finalizedRun = await heartbeat.waitForRunSettled(queuedRun!.id, { timeoutMs: 10_000 });
 
     expect(finalizedRun?.status).toBe("succeeded");
 
-    let comments: Array<typeof issueComments.$inferSelect> = [];
-    let loggedActivity: Array<typeof activityLog.$inferSelect> = [];
-    const commentDeadline = Date.now() + 5_000;
-    while (Date.now() < commentDeadline) {
-      comments = await db
-        .select()
-        .from(issueComments)
-        .where(eq(issueComments.issueId, issueId));
-      loggedActivity = await db
-        .select()
-        .from(activityLog)
-        .where(
-          and(
-            eq(activityLog.runId, finalizedRun!.id),
-            eq(activityLog.action, "issue.comment_added"),
-            eq(activityLog.entityType, "issue"),
-            eq(activityLog.entityId, issueId),
-          ),
-        );
-      if (loggedActivity.some((entry) => entry.details?.source === "heartbeat_run_completion_fallback")) {
-        break;
-      }
-      await sleep(50);
-    }
+    const comments = await db
+      .select()
+      .from(issueComments)
+      .where(eq(issueComments.issueId, issueId));
+    const loggedActivity = await db
+      .select()
+      .from(activityLog)
+      .where(
+        and(
+          eq(activityLog.runId, finalizedRun!.id),
+          eq(activityLog.action, "issue.comment_added"),
+          eq(activityLog.entityType, "issue"),
+          eq(activityLog.entityId, issueId),
+        ),
+      );
 
     expect(comments.some((comment) => comment.body.includes("Run completed before the agent posted its structured update."))).toBe(true);
     expect(comments.some((comment) => comment.body.includes("Provider: process-test"))).toBe(true);

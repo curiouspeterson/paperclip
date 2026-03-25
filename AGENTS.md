@@ -61,8 +61,10 @@ pnpm dev
 Paperclip's canonical upstream default branch is `master`, not `main`.
 
 - When this repository is checked out as a fork with an `upstream` remote, treat `upstream/master` as the source of truth.
-- Keep local `master` clean and disposable. Do not commit directly to `master`; do real work on feature branches.
-- Before starting work, prefer updating `master` from upstream, then branching from that clean base.
+- Keep local `master` clean and disposable. Do not commit directly to `master`.
+- If the fork carries long-lived local/custom Paperclip changes, keep them on a dedicated integration branch such as `current-work`.
+- Do real work on short-lived branches or worktrees cut from that integration branch.
+- Before starting work, prefer updating `master` from upstream, rebasing the integration branch, then branching or creating a worktree from that clean customized base.
 - If `master` is only a mirror branch, the safe sync flow is:
 
 ```sh
@@ -72,10 +74,19 @@ git reset --hard upstream/master
 git push --force-with-lease origin master
 ```
 
-- Rebase feature branches onto `upstream/master` or a freshly synced local `master`.
+- Then refresh the long-lived integration branch:
+
+```sh
+git switch current-work
+git rebase upstream/master
+git push --force-with-lease origin current-work
+```
+
+- Rebase short-lived work branches onto `upstream/master` or the refreshed integration branch, depending on whether they are upstream-first or fork-only work.
 - Use `--force-with-lease` when updating rebased feature branches on your fork.
 - Never use `main` as the Paperclip upstream branch name in repo instructions, examples, or automation.
 - Do not hard-reset `master` if it contains unique local commits or is being used as a shared collaboration branch.
+- If the integration branch becomes difficult to rebase, split it into smaller stacked branches or upstreamable PR-sized chunks.
 
 ## 6. Core Engineering Rules
 

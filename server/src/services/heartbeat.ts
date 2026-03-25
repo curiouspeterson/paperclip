@@ -70,6 +70,7 @@ const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const DETACHED_PROCESS_ERROR_CODE = "process_detached";
+const TERMINAL_HEARTBEAT_RUN_STATUSES = new Set(["succeeded", "failed", "cancelled", "timed_out"]);
 const startLocksByAgent = new Map<string, Promise<void>>();
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 const MANAGED_WORKSPACE_GIT_CLONE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -868,6 +869,30 @@ export function heartbeatService(db: Db) {
       .from(heartbeatRuns)
       .where(eq(heartbeatRuns.id, runId))
       .then((rows) => rows[0] ?? null);
+  }
+
+  async function waitForRunSettled(
+    runId: string,
+    opts?: { timeoutMs?: number; pollMs?: number },
+  ) {
+    const timeoutMs = Math.max(1, opts?.timeoutMs ?? 10_000);
+    const pollMs = Math.max(1, opts?.pollMs ?? 25);
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      const run = await getRun(runId);
+      if (
+        run
+        && TERMINAL_HEARTBEAT_RUN_STATUSES.has(run.status)
+        && !activeRunExecutions.has(runId)
+        && !runningProcesses.has(runId)
+      ) {
+        return run;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    return getRun(runId);
   }
 
   async function ensureRunIssueComment(input: {
@@ -3921,6 +3946,8 @@ export function heartbeatService(db: Db) {
     },
 
     getRun,
+
+    waitForRunSettled,
 
     getRuntimeState: async (agentId: string) => {
       const state = await getRuntimeState(agentId);

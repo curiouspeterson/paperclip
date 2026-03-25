@@ -228,6 +228,8 @@ pnpm db:generate      # Generate DB migration
 pnpm db:migrate       # Apply migrations
 ```
 
+If you maintain a long-lived fork with local Paperclip customizations, keep `master` as a clean mirror of `upstream/master`, keep your fork-only changes on a dedicated integration branch such as `current-work`, and do day-to-day edits in short-lived worktrees branched from that integration branch. `pnpm paperclipai worktree:make my-change --start-point current-work` creates the git worktree and initializes an isolated repo-local Paperclip instance for it.
+
 See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full development guide.
 
 <br/>
