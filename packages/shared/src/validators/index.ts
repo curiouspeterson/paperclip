@@ -20,9 +20,11 @@ export {
   createCompanySchema,
   updateCompanySchema,
   updateCompanyBrandingSchema,
+  applyCompanyAgentRuntimeDefaultsSchema,
   type CreateCompany,
   type UpdateCompany,
   type UpdateCompanyBranding,
+  type ApplyCompanyAgentRuntimeDefaults,
 } from "./company.js";
 
 export {

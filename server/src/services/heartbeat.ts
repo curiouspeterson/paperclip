@@ -6,6 +6,7 @@ import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import type { BillingType } from "@paperclipai/shared";
 import {
+  activityLog,
   agents,
   agentRuntimeState,
   agentTaskSessions,
@@ -31,6 +32,8 @@ import { budgetService, type BudgetEnforcementScope } from "./budgets.js";
 import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir, resolveManagedProjectWorkspaceDir } from "../home-paths.js";
 import { summarizeHeartbeatRunResultJson } from "./heartbeat-run-summary.js";
+import { buildHeartbeatRunIssueComment } from "./heartbeat-issue-comment.js";
+import { applyStructuredHeartbeatIssueUpdate } from "./heartbeat-structured-update.js";
 import {
   buildWorkspaceReadyComment,
   cleanupExecutionWorkspaceArtifacts,
@@ -41,6 +44,7 @@ import {
   sanitizeRuntimeServiceBaseEnv,
 } from "./workspace-runtime.js";
 import { issueService } from "./issues.js";
+import { documentService } from "./documents.js";
 import { executionWorkspaceService } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import {
@@ -52,6 +56,8 @@ import {
 } from "./execution-workspace-policy.js";
 import { instanceSettingsService } from "./instance-settings.js";
 import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.js";
+import { redactSecretSnippet } from "../redaction.js";
+import { logActivity } from "./activity-log.js";
 import {
   hasSessionCompactionThresholds,
   resolveSessionCompactionPolicy,
@@ -525,6 +531,16 @@ export function shouldResetTaskSessionForWake(
   return false;
 }
 
+export function shouldResetHermesSessionForConfigDrift(input: {
+  agent: Pick<typeof agents.$inferSelect, "adapterType" | "updatedAt">;
+  runtimeState: Pick<typeof agentRuntimeState.$inferSelect, "updatedAt" | "sessionId"> | null | undefined;
+}) {
+  if (input.agent.adapterType !== "hermes_local") return false;
+  if (!input.runtimeState) return false;
+  if (!readNonEmptyString(input.runtimeState.sessionId)) return false;
+  return input.agent.updatedAt.getTime() > input.runtimeState.updatedAt.getTime();
+}
+
 export function formatRuntimeWorkspaceWarningLog(warning: string) {
   return {
     stream: "stdout" as const,
@@ -534,11 +550,13 @@ export function formatRuntimeWorkspaceWarningLog(warning: string) {
 
 function describeSessionResetReason(
   contextSnapshot: Record<string, unknown> | null | undefined,
+  opts?: { runtimeConfigDrift?: boolean },
 ) {
   if (contextSnapshot?.forceFreshSession === true) return "forceFreshSession was requested";
 
   const wakeReason = readNonEmptyString(contextSnapshot?.wakeReason);
   if (wakeReason === "issue_assigned") return "wake reason is issue_assigned";
+  if (opts?.runtimeConfigDrift) return "the Hermes runtime policy changed since the last active session";
   return null;
 }
 
@@ -622,6 +640,27 @@ function runTaskKey(run: typeof heartbeatRuns.$inferSelect) {
   return deriveTaskKey(run.contextSnapshot as Record<string, unknown> | null, null);
 }
 
+async function runAlreadyLoggedIssueComment(
+  db: Db,
+  input: { companyId: string; issueId: string; runId: string },
+) {
+  const row = await db
+    .select({ id: activityLog.id })
+    .from(activityLog)
+    .where(
+      and(
+        eq(activityLog.companyId, input.companyId),
+        eq(activityLog.entityType, "issue"),
+        eq(activityLog.entityId, input.issueId),
+        eq(activityLog.action, "issue.comment_added"),
+        eq(activityLog.runId, input.runId),
+      ),
+    )
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
+  return Boolean(row);
+}
+
 function isSameTaskScope(left: string | null, right: string | null) {
   return (left ?? null) === (right ?? null);
 }
@@ -682,6 +721,14 @@ function getAdapterSessionCodec(adapterType: string) {
 function normalizeSessionParams(params: Record<string, unknown> | null | undefined) {
   if (!params) return null;
   return Object.keys(params).length > 0 ? params : null;
+}
+
+export function buildPersistedHeartbeatResultJson(adapterResult: AdapterExecutionResult) {
+  const persisted = {
+    ...(adapterResult.resultJson ?? {}),
+    ...(readNonEmptyString(adapterResult.summary) ? { summary: readNonEmptyString(adapterResult.summary) } : {}),
+  };
+  return Object.keys(persisted).length > 0 ? persisted : null;
 }
 
 function resolveNextSessionState(input: {
@@ -752,6 +799,7 @@ export function heartbeatService(db: Db) {
   const companiesSvc = companyService(db);
   const companySkills = companySkillService(db);
   const issuesSvc = issueService(db);
+  const documentsSvc = documentService(db);
   const executionWorkspacesSvc = executionWorkspaceService(db);
   const workspaceOperationsSvc = workspaceOperationService(db);
   const activeRunExecutions = new Set<string>();
@@ -774,6 +822,66 @@ export function heartbeatService(db: Db) {
       .from(heartbeatRuns)
       .where(eq(heartbeatRuns.id, runId))
       .then((rows) => rows[0] ?? null);
+  }
+
+  async function ensureRunIssueComment(input: {
+    agent: typeof agents.$inferSelect;
+    run: typeof heartbeatRuns.$inferSelect;
+  }) {
+    const context = parseObject(input.run.contextSnapshot);
+    const issueId = readNonEmptyString(context.issueId);
+    if (!issueId) return;
+    if (await runAlreadyLoggedIssueComment(db, {
+      companyId: input.run.companyId,
+      issueId,
+      runId: input.run.id,
+    })) {
+      return;
+    }
+
+    if (input.run.status === "succeeded") {
+      const structuredApplied = await applyStructuredHeartbeatIssueUpdate(
+        {
+          getIssueById: (candidateIssueId) => issuesSvc.getById(candidateIssueId),
+          updateIssue: (candidateIssueId, patch) => issuesSvc.update(candidateIssueId, patch),
+          addComment: (candidateIssueId, body, actor) => issuesSvc.addComment(candidateIssueId, body, actor),
+          getIssueDocumentByKey: (candidateIssueId, key) => documentsSvc.getIssueDocumentByKey(candidateIssueId, key),
+          upsertIssueDocument: (params) => documentsSvc.upsertIssueDocument(params),
+          logActivity: (activity) => logActivity(db, activity),
+        },
+        {
+          issueId,
+          companyId: input.run.companyId,
+          runId: input.run.id,
+          agentId: input.agent.id,
+          resultJson: input.run.resultJson,
+        },
+      );
+      if (structuredApplied) return;
+    }
+
+    const commentBody = buildHeartbeatRunIssueComment({
+      status: input.run.status,
+      error: input.run.error,
+      resultJson: input.run.resultJson,
+      usageJson: input.run.usageJson,
+    });
+    const comment = await issuesSvc.addComment(issueId, commentBody, { agentId: input.agent.id });
+    await logActivity(db, {
+      companyId: input.run.companyId,
+      actorType: "agent",
+      actorId: input.agent.id,
+      agentId: input.agent.id,
+      runId: input.run.id,
+      action: "issue.comment_added",
+      entityType: "issue",
+      entityId: issueId,
+      details: {
+        commentId: comment.id,
+        bodySnippet: redactSecretSnippet(comment.body),
+        source: "heartbeat_run_completion_fallback",
+      },
+    });
   }
 
   async function getRuntimeState(agentId: string) {
@@ -1987,8 +2095,15 @@ export function heartbeatService(db: Db) {
     const taskSession = taskKey
       ? await getTaskSession(agent.companyId, agent.id, agent.adapterType, taskKey)
       : null;
-    const resetTaskSession = shouldResetTaskSessionForWake(context);
-    const sessionResetReason = describeSessionResetReason(context);
+    const resetTaskSessionForWake = shouldResetTaskSessionForWake(context);
+    const resetTaskSessionForConfigDrift = shouldResetHermesSessionForConfigDrift({
+      agent,
+      runtimeState: runtime,
+    });
+    const resetTaskSession = resetTaskSessionForWake || resetTaskSessionForConfigDrift;
+    const sessionResetReason = describeSessionResetReason(context, {
+      runtimeConfigDrift: resetTaskSessionForConfigDrift,
+    });
     const taskSessionForRun = resetTaskSession ? null : taskSession;
     const previousSessionParams = normalizeSessionParams(
       sessionCodec.deserialize(taskSessionForRun?.sessionParamsJson ?? null),
@@ -2613,7 +2728,7 @@ export function heartbeatService(db: Db) {
         exitCode: adapterResult.exitCode,
         signal: adapterResult.signal,
         usageJson,
-        resultJson: adapterResult.resultJson ?? null,
+        resultJson: buildPersistedHeartbeatResultJson(adapterResult),
         sessionIdAfter: nextSessionState.displayId ?? nextSessionState.legacySessionId,
         stdoutExcerpt,
         stderrExcerpt,
@@ -2639,6 +2754,18 @@ export function heartbeatService(db: Db) {
             exitCode: adapterResult.exitCode,
           },
         });
+        try {
+          await ensureRunIssueComment({ agent, run: finalizedRun });
+        } catch (commentErr) {
+          logger.warn(
+            {
+              err: commentErr,
+              runId: finalizedRun.id,
+              issueId: readNonEmptyString(parseObject(finalizedRun.contextSnapshot).issueId),
+            },
+            "failed to synthesize fallback issue comment for heartbeat run",
+          );
+        }
         await releaseIssueExecutionAndPromote(finalizedRun);
       }
 
@@ -2705,6 +2832,18 @@ export function heartbeatService(db: Db) {
           level: "error",
           message,
         });
+        try {
+          await ensureRunIssueComment({ agent, run: failedRun });
+        } catch (commentErr) {
+          logger.warn(
+            {
+              err: commentErr,
+              runId: failedRun.id,
+              issueId: readNonEmptyString(parseObject(failedRun.contextSnapshot).issueId),
+            },
+            "failed to synthesize fallback issue comment for heartbeat run",
+          );
+        }
         await releaseIssueExecutionAndPromote(failedRun);
 
         await updateRuntimeState(agent, failedRun, {
@@ -2756,6 +2895,13 @@ export function heartbeatService(db: Db) {
               level: "error",
               message,
             }).catch(() => undefined);
+            const failedAgent = await getAgent(run.agentId).catch(() => null);
+            if (failedAgent) {
+              await ensureRunIssueComment({
+                agent: failedAgent,
+                run: failedRun,
+              }).catch(() => undefined);
+            }
             await releaseIssueExecutionAndPromote(failedRun).catch(() => undefined);
           }
           // Ensure the agent is not left stuck in "running" if the inner catch handler's

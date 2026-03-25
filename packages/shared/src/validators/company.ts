@@ -82,3 +82,16 @@ export const updateCompanyBrandingSchema = z
   );
 
 export type UpdateCompanyBranding = z.infer<typeof updateCompanyBrandingSchema>;
+
+export const applyCompanyAgentRuntimeDefaultsSchema = z
+  .object({
+    provider: agentDefaultStringSchema,
+    model: agentDefaultStringSchema,
+  })
+  .strict()
+  .refine(
+    (value) => value.provider !== undefined || value.model !== undefined,
+    "At least one runtime default field must be provided",
+  );
+
+export type ApplyCompanyAgentRuntimeDefaults = z.infer<typeof applyCompanyAgentRuntimeDefaultsSchema>;

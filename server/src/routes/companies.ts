@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import type { Db } from "@paperclipai/db";
 import {
+  applyCompanyAgentRuntimeDefaultsSchema,
   companyPortabilityExportSchema,
   companyPortabilityImportSchema,
   companyPortabilityPreviewSchema,
@@ -30,6 +31,22 @@ export function companyRoutes(db: Db, storage?: StorageService) {
   const portability = companyPortabilityService(db, storage);
   const access = accessService(db);
   const budgets = budgetService(db);
+
+  function applyAgentRuntimeDefaultsToConfig(
+    config: Record<string, unknown> | null | undefined,
+    defaults: { provider?: string | null; model?: string | null },
+  ) {
+    const next = { ...(config ?? {}) };
+    if (defaults.provider !== undefined) {
+      if (defaults.provider) next.provider = defaults.provider;
+      else delete next.provider;
+    }
+    if (defaults.model !== undefined) {
+      if (defaults.model) next.model = defaults.model;
+      else delete next.model;
+    }
+    return next;
+  }
 
   async function assertCanUpdateBranding(req: Request, companyId: string) {
     assertCompanyAccess(req, companyId);
@@ -307,6 +324,99 @@ export function companyRoutes(db: Db, storage?: StorageService) {
     });
     res.json(company);
   });
+
+  router.post(
+    "/:companyId/agents/apply-runtime-defaults",
+    validate(applyCompanyAgentRuntimeDefaultsSchema),
+    async (req, res) => {
+      assertBoard(req);
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+      const actor = getActorInfo(req);
+      const company = await svc.update(companyId, {
+        ...(req.body.provider !== undefined ? { agentDefaultProvider: req.body.provider ?? null } : {}),
+        ...(req.body.model !== undefined ? { agentDefaultModel: req.body.model ?? null } : {}),
+      });
+      if (!company) {
+        res.status(404).json({ error: "Company not found" });
+        return;
+      }
+
+      const companyAgents = await agents.list(companyId);
+      let affectedAgentCount = 0;
+      let resetSessionCount = 0;
+
+      for (const agent of companyAgents) {
+        const nextConfig = applyAgentRuntimeDefaultsToConfig(
+          (agent.adapterConfig as Record<string, unknown> | null | undefined) ?? null,
+          {
+            provider: req.body.provider,
+            model: req.body.model,
+          },
+        );
+        const updatedAgent = await agents.update(agent.id, { adapterConfig: nextConfig });
+        if (!updatedAgent) continue;
+        affectedAgentCount += 1;
+
+        await logActivity(db, {
+          companyId,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+          action: "agent.updated",
+          entityType: "agent",
+          entityId: updatedAgent.id,
+          details: {
+            source: "company.apply_runtime_defaults",
+            provider: req.body.provider ?? null,
+            model: req.body.model ?? null,
+          },
+        });
+
+        await heartbeat.resetRuntimeSession(updatedAgent.id);
+        resetSessionCount += 1;
+        await logActivity(db, {
+          companyId,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+          action: "agent.runtime_session_reset",
+          entityType: "agent",
+          entityId: updatedAgent.id,
+          details: {
+            source: "company.apply_runtime_defaults",
+            taskKey: null,
+          },
+        });
+      }
+
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "company.updated",
+        entityType: "company",
+        entityId: company.id,
+        details: {
+          source: "apply_runtime_defaults",
+          agentDefaultProvider: req.body.provider ?? null,
+          agentDefaultModel: req.body.model ?? null,
+          affectedAgentCount,
+          resetSessionCount,
+        },
+      });
+
+      res.json({
+        company,
+        affectedAgentCount,
+        resetSessionCount,
+      });
+    },
+  );
 
   router.post("/:companyId/archive", async (req, res) => {
     assertBoard(req);

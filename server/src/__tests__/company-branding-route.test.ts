@@ -18,6 +18,8 @@ const mockCompanyService = vi.hoisted(() => ({
 
 const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
+  list: vi.fn(),
+  update: vi.fn(),
 }));
 
 const mockAccessService = vi.hoisted(() => ({
@@ -30,6 +32,7 @@ const mockBudgetService = vi.hoisted(() => ({
 
 const mockHeartbeatService = vi.hoisted(() => ({
   cancelActiveForAgent: vi.fn(),
+  resetRuntimeSession: vi.fn(),
 }));
 
 const mockCompanyPortabilityService = vi.hoisted(() => ({
@@ -115,7 +118,10 @@ describe("PATCH /api/companies/:companyId/branding", () => {
     mockCompanyService.pauseAll.mockReset();
     mockCompanyService.resumeAll.mockReset();
     mockAgentService.getById.mockReset();
+    mockAgentService.list.mockReset();
+    mockAgentService.update.mockReset();
     mockHeartbeatService.cancelActiveForAgent.mockReset();
+    mockHeartbeatService.resetRuntimeSession.mockReset();
     mockLogActivity.mockReset();
   });
 
@@ -314,6 +320,92 @@ describe("PATCH /api/companies/:companyId/branding", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("Validation error");
     expect(mockCompanyService.update).not.toHaveBeenCalled();
+  });
+
+  it("applies the selected runtime defaults to all agents and resets their sessions", async () => {
+    const company = {
+      ...createCompany(),
+      agentDefaultProvider: "zai",
+      agentDefaultModel: "glm-5",
+    };
+    mockCompanyService.update.mockResolvedValue(company);
+    mockAgentService.list.mockResolvedValue([
+      {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "VP Technical",
+        adapterConfig: { provider: "openrouter", model: "minimax/minimax-m2.7", toolsets: "full,edit" },
+      },
+      {
+        id: "agent-2",
+        companyId: "company-1",
+        name: "VP Content Ops",
+        adapterConfig: { model: "deepseek/deepseek-r1" },
+      },
+    ]);
+    mockAgentService.update
+      .mockResolvedValueOnce({
+        id: "agent-1",
+        companyId: "company-1",
+        name: "VP Technical",
+      })
+      .mockResolvedValueOnce({
+        id: "agent-2",
+        companyId: "company-1",
+        name: "VP Content Ops",
+      });
+    mockHeartbeatService.resetRuntimeSession.mockResolvedValue(null);
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "local_implicit",
+    });
+
+    const res = await request(app)
+      .post("/api/companies/company-1/agents/apply-runtime-defaults")
+      .send({
+        provider: "zai",
+        model: "glm-5",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.affectedAgentCount).toBe(2);
+    expect(res.body.resetSessionCount).toBe(2);
+    expect(mockCompanyService.update).toHaveBeenCalledWith("company-1", {
+      agentDefaultProvider: "zai",
+      agentDefaultModel: "glm-5",
+    });
+    expect(mockAgentService.update).toHaveBeenNthCalledWith(1, "agent-1", {
+      adapterConfig: {
+        provider: "zai",
+        model: "glm-5",
+        toolsets: "full,edit",
+      },
+    });
+    expect(mockAgentService.update).toHaveBeenNthCalledWith(2, "agent-2", {
+      adapterConfig: {
+        provider: "zai",
+        model: "glm-5",
+      },
+    });
+    expect(mockHeartbeatService.resetRuntimeSession).toHaveBeenCalledTimes(2);
+    expect(mockHeartbeatService.resetRuntimeSession).toHaveBeenCalledWith("agent-1");
+    expect(mockHeartbeatService.resetRuntimeSession).toHaveBeenCalledWith("agent-2");
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "company.updated",
+        entityType: "company",
+        entityId: "company-1",
+        details: expect.objectContaining({
+          source: "apply_runtime_defaults",
+          agentDefaultProvider: "zai",
+          agentDefaultModel: "glm-5",
+          affectedAgentCount: 2,
+          resetSessionCount: 2,
+        }),
+      }),
+    );
   });
 
   it("rejects budget updates on the generic company patch route", async () => {

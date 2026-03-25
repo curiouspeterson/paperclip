@@ -88,6 +88,7 @@ import {
 } from "./hermes-local/mcp.js";
 import {
   finalizeHermesLocalEnvironmentTestResult,
+  normalizeHermesLocalExecutionSummary,
   prepareHermesLocalExecutionConfig,
   withHermesLocalProcessEnv,
 } from "./hermes-local/paperclip.js";
@@ -202,12 +203,35 @@ const hermesLocalAdapter: ServerAdapterModule = {
     });
     const result = await hermesExecute({
       ...ctx,
+      agent: {
+        ...ctx.agent,
+        adapterConfig: config,
+      },
       config,
     });
+    const normalizedSummary = normalizeHermesLocalExecutionSummary(result.summary);
+    const resolvedProvider =
+      (typeof materializedConfig.provider === "string" && materializedConfig.provider.trim().toLowerCase() === "nous")
+      || (
+        Array.isArray(materializedConfig.extraArgs)
+        && materializedConfig.extraArgs.some((value, index, values) =>
+          typeof value === "string"
+          && (
+            value === "--provider" && typeof values[index + 1] === "string" && String(values[index + 1]).trim().toLowerCase() === "nous"
+            || /^--provider=nous$/i.test(value)
+          ),
+        )
+      )
+        ? "nous"
+        : result.provider;
     return {
       ...result,
+      summary: normalizedSummary.summary,
+      provider: resolvedProvider,
+      clearSession: normalizedSummary.anomalyMessage ? true : result.clearSession,
       resultJson: {
         ...(result.resultJson ?? {}),
+        ...(normalizedSummary.anomalyMessage ? { message: normalizedSummary.anomalyMessage } : {}),
         _paperclipHermesAppliedRuntimePolicy: buildHermesAppliedRuntimePolicy(
           config,
           asHermesCompanyProfile(ctx.context?.paperclipCompanyProfile),

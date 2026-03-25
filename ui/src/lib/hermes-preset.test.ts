@@ -17,6 +17,19 @@ describe("buildHermesLocalPresetValues", () => {
         createdAt: new Date("2026-03-23T00:00:00.000Z"),
         updatedAt: new Date("2026-03-23T00:00:00.000Z"),
       },
+      {
+        id: "secret-2",
+        companyId: "company-1",
+        name: "nous_api_key",
+        provider: "local_encrypted",
+        externalRef: null,
+        description: null,
+        createdByAgentId: null,
+        createdByUserId: null,
+        latestVersion: 1,
+        createdAt: new Date("2026-03-23T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-23T00:00:00.000Z"),
+      },
     ], {
       agentDefaultHermesToolsets: "full,edit",
       agentDefaultHermesAllowedMcpServers: "github,filesystem",
@@ -37,6 +50,7 @@ describe("buildHermesLocalPresetValues", () => {
       hermesToolsets: "full,edit",
       hermesAllowedMcpServers: "github,filesystem",
       envBindings: {
+        NOUS_API_KEY: { type: "secret_ref", secretId: "secret-2", version: "latest" },
         ZAI_API_KEY: { type: "secret_ref", secretId: "secret-1", version: "latest" },
       },
     });

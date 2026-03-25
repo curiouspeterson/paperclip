@@ -17,6 +17,10 @@ export interface CompanyBulkActionResult {
   affectedAgentCount: number;
 }
 
+export interface CompanyApplyAgentRuntimeDefaultsResult extends CompanyBulkActionResult {
+  resetSessionCount: number;
+}
+
 export const companiesApi = {
   list: () => api.get<Company[]>("/companies"),
   get: (companyId: string) => api.get<Company>(`/companies/${companyId}`),
@@ -47,6 +51,14 @@ export const companiesApi = {
   ) => api.patch<Company>(`/companies/${companyId}`, data),
   updateBranding: (companyId: string, data: UpdateCompanyBranding) =>
     api.patch<Company>(`/companies/${companyId}/branding`, data),
+  applyAgentRuntimeDefaults: (
+    companyId: string,
+    data: { provider?: string | null; model?: string | null },
+  ) =>
+    api.post<CompanyApplyAgentRuntimeDefaultsResult>(
+      `/companies/${companyId}/agents/apply-runtime-defaults`,
+      data,
+    ),
   pause: (companyId: string) => api.post<CompanyBulkActionResult>(`/companies/${companyId}/pause`, {}),
   resume: (companyId: string) => api.post<CompanyBulkActionResult>(`/companies/${companyId}/resume`, {}),
   archive: (companyId: string) => api.post<Company>(`/companies/${companyId}/archive`, {}),

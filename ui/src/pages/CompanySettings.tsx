@@ -253,6 +253,34 @@ export function CompanySettings() {
     },
   });
 
+  const applyAgentRuntimeDefaultsMutation = useMutation({
+    mutationFn: () =>
+      companiesApi.applyAgentRuntimeDefaults(selectedCompanyId!, {
+        provider: agentDefaultProvider.trim() || null,
+        model: agentDefaultModel.trim() || null,
+      }),
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companies.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.org(selectedCompanyId!) }),
+      ]);
+      pushToast({
+        title: "Agent runtime defaults applied",
+        body:
+          `Updated ${result.affectedAgentCount} agent${result.affectedAgentCount === 1 ? "" : "s"} ` +
+          `and reset ${result.resetSessionCount} saved session${result.resetSessionCount === 1 ? "" : "s"}.`,
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        title: "Agent runtime defaults not applied",
+        body: error instanceof Error ? error.message : "Failed to apply the selected provider/model to agents.",
+        tone: "error",
+      });
+    },
+  });
+
   const inviteMutation = useMutation({
     mutationFn: () =>
       accessApi.createOpenClawInvitePrompt(selectedCompanyId!),
@@ -692,17 +720,30 @@ export function CompanySettings() {
             <div>
               <div className="text-sm font-medium">Default agent runtime policy</div>
               <p className="mt-1 text-xs text-muted-foreground">
-                New agents and Hermes preset creation inherit these values. Existing agents are unchanged.
+                New agents and Hermes preset creation inherit these values. Use Apply to all agents to push the selected provider/model across the company now.
               </p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => agentDefaultsMutation.mutate()}
-              disabled={!agentDefaultsDirty || agentDefaultsMutation.isPending}
-            >
-              {agentDefaultsMutation.isPending ? "Saving..." : "Save defaults"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => applyAgentRuntimeDefaultsMutation.mutate()}
+                disabled={
+                  applyAgentRuntimeDefaultsMutation.isPending
+                  || (!agentDefaultProvider.trim() && !agentDefaultModel.trim())
+                }
+              >
+                {applyAgentRuntimeDefaultsMutation.isPending ? "Applying..." : "Apply to all agents"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => agentDefaultsMutation.mutate()}
+                disabled={!agentDefaultsDirty || agentDefaultsMutation.isPending}
+              >
+                {agentDefaultsMutation.isPending ? "Saving..." : "Save defaults"}
+              </Button>
+            </div>
           </div>
           <Field
             label="Default adapter"
@@ -877,6 +918,13 @@ export function CompanySettings() {
               {agentDefaultsMutation.error instanceof Error
                 ? agentDefaultsMutation.error.message
                 : "Failed to save agent defaults"}
+            </p>
+          )}
+          {applyAgentRuntimeDefaultsMutation.isError && (
+            <p className="text-xs text-destructive">
+              {applyAgentRuntimeDefaultsMutation.error instanceof Error
+                ? applyAgentRuntimeDefaultsMutation.error.message
+                : "Failed to apply agent runtime defaults"}
             </p>
           )}
         </div>

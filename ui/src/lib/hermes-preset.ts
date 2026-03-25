@@ -7,6 +7,7 @@ export const HERMES_PRESET_PROMPT_TEMPLATE =
   "You are agent {{ agent.name }}.\n\nFollow the current task instructions. Keep outputs concise, concrete, and blocker-oriented.";
 
 const HERMES_PRESET_SECRET_BINDINGS: Record<string, string> = {
+  NOUS_API_KEY: "nous_api_key",
   ZAI_API_KEY: "zai_api_key",
 };
 

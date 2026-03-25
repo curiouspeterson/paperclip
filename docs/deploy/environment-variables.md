@@ -47,4 +47,5 @@ These are set automatically by the server when invoking agents:
 | Variable | Description |
 |----------|-------------|
 | `ANTHROPIC_API_KEY` | Anthropic API key (for Claude Local adapter) |
+| `NOUS_API_KEY` | Nous Research inference API key (for Hermes Local when using the Nous inference endpoint) |
 | `OPENAI_API_KEY` | OpenAI API key (for Codex Local adapter) |
