@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { hermesExecuteMock } = vi.hoisted(() => ({
   hermesExecuteMock: vi.fn(async () => ({
@@ -28,6 +28,10 @@ vi.mock("hermes-paperclip-adapter", () => ({
 import { getServerAdapter } from "../adapters/registry.js";
 
 describe("hermes_local registry wrapper", () => {
+  beforeEach(() => {
+    hermesExecuteMock.mockClear();
+  });
+
   it("drops tool-call-only summaries and clears the saved session for the next run", async () => {
     hermesExecuteMock.mockResolvedValueOnce({
       exitCode: 0,
