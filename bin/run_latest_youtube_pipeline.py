@@ -57,6 +57,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--paperclip-api-key", help="Pass through to build_episode_batch.sh")
     parser.add_argument("--paperclip-issue-id", help="Pass through to build_episode_batch.sh")
     parser.add_argument("--paperclip-company-id", help="Pass through to build_episode_batch.sh")
+    parser.add_argument(
+        "--homepage-deploy",
+        action="store_true",
+        help="Set RU_HOMEPAGE_DEPLOY=1 for the kicked-off batch",
+    )
     return parser.parse_args()
 
 
@@ -292,6 +297,8 @@ def main() -> int:
         cmd.extend(["--paperclip-company-id", args.paperclip_company_id])
 
     env = os.environ.copy()
+    if args.homepage_deploy:
+        env["RU_HOMEPAGE_DEPLOY"] = "1"
 
     return_code, combined_output = run_batch_and_stream(cmd, env)
     if return_code != 0:

@@ -10,6 +10,10 @@ so input, transcripts, metadata, manifests, and generated assets stay isolated p
 The shared runtime root keeps only transient download staging under `incoming/` and
 cross-run state under `state/`.
 
+The executable pipeline implementation now lives in the repo-root [bin/](/Users/adampeterson/GitHub/paperclip/bin) scripts.
+This `solutions/romance-unzipped/pipeline/` tree remains the branded solution surface and documentation anchor, while
+Paperclip's workflow wrappers resolve into the canonical root `bin/` entrypoints to avoid split-brain drift.
+
 ## Scripts
 
 ### Main Pipeline

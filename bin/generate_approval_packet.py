@@ -19,7 +19,14 @@ from pipeline_common import (
     write_text,
     finalize_stage_outputs,
 )
-from pipeline_llm import COPY_SYSTEM_PROMPT, chat_json, discover_llm_config, normalize_text, resolve_llm_timeout
+from pipeline_llm import (
+    COPY_SYSTEM_PROMPT,
+    ZAI_CODING_OPENAI_BASE_URL,
+    chat_json,
+    discover_llm_config,
+    normalize_text,
+    resolve_llm_timeout,
+)
 INSTAGRAM_HASHTAGS = [
     "#RomanceUnzipped",
     "#RomanceBooks",
@@ -70,27 +77,54 @@ LEAD_CLIP_BONUS_PATTERNS = (
 
 
 def parse_args() -> argparse.Namespace:
+    default_zai_key = os.environ.get("RU_COPY_ZAI_API_KEY") or os.environ.get("ZAI_API_KEY")
+    default_timeout_seconds = max(
+        10,
+        int(os.environ.get("RU_COPY_TIMEOUT_SECONDS", "90" if default_zai_key else "45")),
+    )
+    default_base_url = (
+        os.environ.get("RU_COPY_LLM_BASE_URL")
+        or os.environ.get("ZAI_API_BASE_URL")
+        or (ZAI_CODING_OPENAI_BASE_URL if default_zai_key else None)
+        or os.environ.get("RU_LLM_BASE_URL")
+        or os.environ.get("OPENAI_BASE_URL")
+    )
+    default_api_key = (
+        os.environ.get("RU_COPY_LLM_API_KEY")
+        or default_zai_key
+        or os.environ.get("RU_LLM_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+    )
+    default_model = (
+        os.environ.get("RU_COPY_LLM_MODEL")
+        or (os.environ.get("ZAI_MODEL") if default_zai_key else None)
+        or ("glm-4.7" if default_zai_key else None)
+        or os.environ.get("RU_LLM_MODEL")
+        or os.environ.get("LLM_MODEL")
+        or None
+    )
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, help="Path to handoff manifest json")
     parser.add_argument(
         "--llm-base-url",
-        default=None,
+        default=default_base_url,
         help="OpenAI-compatible base URL for copy generation",
     )
     parser.add_argument(
         "--llm-api-key",
-        default=os.environ.get("RU_COPY_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY"),
+        default=default_api_key,
         help="API key for the OpenAI-compatible endpoint",
     )
     parser.add_argument(
         "--llm-model",
-        default=None,
+        default=default_model,
         help="Model name for copy generation",
     )
     parser.add_argument(
         "--llm-timeout-seconds",
         type=int,
-        default=int(os.environ.get("RU_LLM_TIMEOUT_SECONDS", "90")),
+        default=default_timeout_seconds,
         help="Timeout for the optional OpenAI-compatible copy generation call",
     )
     parser.add_argument("--force", action="store_true", help="Overwrite existing draft files")

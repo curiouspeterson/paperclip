@@ -8,7 +8,7 @@ export async function main() {
   const wrapperPath = process.argv[1];
   const wrapperName = wrapperPath ? path.basename(wrapperPath) : "";
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-  const target = path.join(repoRoot, "solutions", "romance-unzipped", "pipeline", wrapperName);
+  const target = path.join(repoRoot, "bin", wrapperName);
 
   if (!wrapperName || !existsSync(target)) {
     console.error(`Podcast workflow entrypoint not found: ${target}`);

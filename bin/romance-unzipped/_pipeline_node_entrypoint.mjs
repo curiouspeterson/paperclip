@@ -8,10 +8,10 @@ export async function main() {
   const wrapperPath = process.argv[1];
   const wrapperName = wrapperPath ? path.basename(wrapperPath) : "";
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-  const target = path.join(repoRoot, "solutions", "romance-unzipped", "pipeline", wrapperName);
+  const target = path.join(repoRoot, "bin", wrapperName);
 
   if (!wrapperName || !existsSync(target)) {
-    console.error(`Romance Unzipped pipeline entrypoint not found: ${target}`);
+    console.error(`Romance Unzipped legacy wrapper could not find root pipeline entrypoint: ${target}`);
     process.exit(1);
   }
 
