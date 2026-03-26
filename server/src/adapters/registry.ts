@@ -73,8 +73,13 @@ import {
 } from "./hermes-local/index.js";
 import {
   agentConfigurationDoc as hermesAgentConfigurationDoc,
-  models as hermesModels,
+  models as hermesPackageModels,
 } from "hermes-paperclip-adapter";
+
+const hermesModels = [
+  { id: "gpt-5.4", label: "GPT-5.4 (Codex)" },
+  ...hermesPackageModels,
+];
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 

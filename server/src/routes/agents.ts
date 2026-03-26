@@ -56,11 +56,15 @@ import {
 } from "@paperclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
+
 import { ensureOpenCodeModelConfiguredAndAvailable } from "@paperclipai/adapter-opencode-local/server";
 import {
   loadDefaultAgentInstructionsBundle,
   resolveDefaultAgentInstructionsBundleRole,
 } from "../services/default-agent-instructions.js";
+
+const DEFAULT_HERMES_LOCAL_MODEL = "gpt-5.4";
+const DEFAULT_HERMES_LOCAL_PROVIDER = "codex";
 
 export function agentRoutes(db: Db) {
   const DEFAULT_INSTRUCTIONS_PATH_KEYS: Record<string, string> = {
@@ -396,6 +400,15 @@ export function agentRoutes(db: Db) {
     }
     if (adapterType === "gemini_local" && !asNonEmptyString(next.model)) {
       next.model = DEFAULT_GEMINI_LOCAL_MODEL;
+      return ensureGatewayDeviceKey(adapterType, next);
+    }
+    if (adapterType === "hermes_local") {
+      if (!asNonEmptyString(next.model)) {
+        next.model = DEFAULT_HERMES_LOCAL_MODEL;
+      }
+      if (!asNonEmptyString(next.provider)) {
+        next.provider = DEFAULT_HERMES_LOCAL_PROVIDER;
+      }
       return ensureGatewayDeviceKey(adapterType, next);
     }
     // OpenCode requires explicit model selection — no default
