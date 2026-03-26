@@ -64,7 +64,9 @@ Headers: X-Paperclip-Run-Id: {runId}
 
 The optional `comment` field adds a comment in the same call.
 
-Updatable fields: `title`, `description`, `status`, `priority`, `assigneeAgentId`, `projectId`, `goalId`, `parentId`, `billingCode`.
+Updatable fields: `title`, `description`, `status` (excluding `in_progress`), `priority`, `assigneeAgentId`, `projectId`, `goalId`, `parentId`, `billingCode`.
+
+`status` does not accept `in_progress` on generic PATCH. Use `POST /api/issues/{issueId}/checkout` to enter active work.
 
 ## Checkout (Claim Task)
 

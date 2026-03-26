@@ -134,7 +134,11 @@ export function issueRoutes(db: Db, storage: StorageService) {
       res.status(403).json({ error: "Agent authentication required" });
       return false;
     }
-    if (issue.status !== "in_progress" || issue.assigneeAgentId !== actorAgentId) {
+    if (issue.assigneeAgentId !== actorAgentId) {
+      res.status(403).json({ error: "Agent can only modify their assigned issue" });
+      return false;
+    }
+    if (issue.status !== "in_progress") {
       return true;
     }
     const runId = requireAgentRunId(req, res);
@@ -348,12 +352,14 @@ export function issueRoutes(db: Db, storage: StorageService) {
       ? await projectsSvc.listByIds(issue.companyId, mentionedProjectIds)
       : [];
     const currentExecutionWorkspace = issue.executionWorkspaceId
-      ? await executionWorkspacesSvc.getById(issue.executionWorkspaceId)
+      ? await executionWorkspacesSvc.getByIdForCompany(issue.companyId, issue.executionWorkspaceId)
       : null;
     const workProducts = await workProductsSvc.listForIssue(issue.id);
     res.json({
       ...issue,
-      goalId: goal?.id ?? issue.goalId,
+      projectId: project?.id ?? null,
+      goalId: goal?.id ?? null,
+      parentId: ancestors[0]?.id ?? null,
       ancestors,
       ...documentPayload,
       project: project ?? null,
@@ -393,9 +399,9 @@ export function issueRoutes(db: Db, storage: StorageService) {
         description: issue.description,
         status: issue.status,
         priority: issue.priority,
-        projectId: issue.projectId,
-        goalId: goal?.id ?? issue.goalId,
-        parentId: issue.parentId,
+        projectId: project?.id ?? null,
+        goalId: goal?.id ?? null,
+        parentId: ancestors[0]?.id ?? null,
         assigneeAgentId: issue.assigneeAgentId,
         assigneeUserId: issue.assigneeUserId,
         updatedAt: issue.updatedAt,
@@ -1073,7 +1079,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     assertCompanyAccess(req, issue.companyId);
 
     if (issue.projectId) {
-      const project = await projectsSvc.getById(issue.projectId);
+      const project = await projectsSvc.getByIdForCompany(issue.companyId, issue.projectId);
       if (project?.pausedAt) {
         res.status(409).json({
           error:

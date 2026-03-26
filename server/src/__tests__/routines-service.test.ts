@@ -168,9 +168,12 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
   }
 
   it("creates a fresh execution issue when the previous routine issue is open but idle", async () => {
-    const { companyId, issueSvc, routine, svc } = await seedFixture();
+    const { companyId, routine, svc } = await seedFixture();
     const previousRunId = randomUUID();
-    const previousIssue = await issueSvc.create(companyId, {
+    const previousIssueId = randomUUID();
+    await db.insert(issues).values({
+      id: previousIssueId,
+      companyId,
       projectId: routine.projectId,
       title: routine.title,
       description: routine.description,
@@ -180,7 +183,10 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
       originKind: "routine_execution",
       originId: routine.id,
       originRunId: previousRunId,
+      issueNumber: 2,
+      identifier: `${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}-2`,
     });
+    const previousIssue = { id: previousIssueId };
 
     await db.insert(routineRuns).values({
       id: previousRunId,
@@ -254,10 +260,22 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
   });
 
   it("coalesces only when the existing routine issue has a live execution run", async () => {
-    const { agentId, companyId, issueSvc, routine, svc } = await seedFixture();
+    const { agentId, companyId, routine, svc } = await seedFixture();
     const previousRunId = randomUUID();
     const liveHeartbeatRunId = randomUUID();
-    const previousIssue = await issueSvc.create(companyId, {
+    const previousIssueId = randomUUID();
+    await db.insert(heartbeatRuns).values({
+      id: liveHeartbeatRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      status: "running",
+      startedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(issues).values({
+      id: previousIssueId,
+      companyId,
       projectId: routine.projectId,
       title: routine.title,
       description: routine.description,
@@ -267,7 +285,12 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
       originKind: "routine_execution",
       originId: routine.id,
       originRunId: previousRunId,
+      executionRunId: liveHeartbeatRunId,
+      executionLockedAt: new Date(),
+      issueNumber: 3,
+      identifier: `${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}-3`,
     });
+    const previousIssue = { id: previousIssueId };
 
     await db.insert(routineRuns).values({
       id: previousRunId,
@@ -278,17 +301,6 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
       status: "issue_created",
       triggeredAt: new Date("2026-03-20T12:00:00.000Z"),
       linkedIssueId: previousIssue.id,
-    });
-
-    await db.insert(heartbeatRuns).values({
-      id: liveHeartbeatRunId,
-      companyId,
-      agentId,
-      invocationSource: "assignment",
-      triggerDetail: "system",
-      status: "running",
-      contextSnapshot: { issueId: previousIssue.id },
-      startedAt: new Date("2026-03-20T12:01:00.000Z"),
     });
 
     await db

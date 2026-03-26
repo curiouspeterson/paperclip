@@ -75,6 +75,15 @@ export function executionWorkspaceService(db: Db) {
       return row ? toExecutionWorkspace(row) : null;
     },
 
+    getByIdForCompany: async (companyId: string, id: string) => {
+      const row = await db
+        .select()
+        .from(executionWorkspaces)
+        .where(and(eq(executionWorkspaces.id, id), eq(executionWorkspaces.companyId, companyId)))
+        .then((rows) => rows[0] ?? null);
+      return row ? toExecutionWorkspace(row) : null;
+    },
+
     create: async (data: typeof executionWorkspaces.$inferInsert) => {
       const row = await db
         .insert(executionWorkspaces)
@@ -89,6 +98,20 @@ export function executionWorkspaceService(db: Db) {
         .update(executionWorkspaces)
         .set({ ...patch, updatedAt: new Date() })
         .where(eq(executionWorkspaces.id, id))
+        .returning()
+        .then((rows) => rows[0] ?? null);
+      return row ? toExecutionWorkspace(row) : null;
+    },
+
+    updateForCompany: async (
+      companyId: string,
+      id: string,
+      patch: Partial<typeof executionWorkspaces.$inferInsert>,
+    ) => {
+      const row = await db
+        .update(executionWorkspaces)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(and(eq(executionWorkspaces.id, id), eq(executionWorkspaces.companyId, companyId)))
         .returning()
         .then((rows) => rows[0] ?? null);
       return row ? toExecutionWorkspace(row) : null;
