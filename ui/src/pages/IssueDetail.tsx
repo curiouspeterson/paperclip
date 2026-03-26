@@ -60,7 +60,6 @@ import type { Agent, IssueAttachment } from "@paperclipai/shared";
 
 type CommentReassignment = {
   assigneeAgentId: string | null;
-  assigneeUserId: string | null;
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -375,11 +374,8 @@ export function IssueDetail() {
     for (const agent of activeAgents) {
       options.push({ id: `agent:${agent.id}`, label: agent.name });
     }
-    if (currentUserId) {
-      options.push({ id: `user:${currentUserId}`, label: "Me" });
-    }
     return options;
-  }, [agents, currentUserId]);
+  }, [agents]);
 
   const actualAssigneeValue = useMemo(
     () => assigneeValueFromSelection(issue ?? {}),
@@ -509,7 +505,6 @@ export function IssueDetail() {
       issuesApi.update(issueId!, {
         comment: body,
         assigneeAgentId: reassignment.assigneeAgentId,
-        assigneeUserId: reassignment.assigneeUserId,
         ...(reopen ? { status: "todo" } : {}),
       }),
     onSuccess: () => {

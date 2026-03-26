@@ -115,7 +115,7 @@ Paperclip’s core identity is a **control plane for autonomous AI companies**, 
 
 - Do not make the core product a general chat app. The current product definition is explicitly task/comment-centric and “not a chatbot,” and that boundary is valuable.
 - Do not build a complete Jira/GitHub replacement. The repo/docs already position Paperclip as organization orchestration, not focused on pull-request review.
-- Do not build enterprise-grade RBAC first. The current V1 spec still treats multi-board governance and fine-grained human permissions as out of scope, so the first multi-user version should be coarse and company-scoped.
+- Do not build enterprise-grade RBAC first. The repo now includes coarse company-scoped memberships and permission grants plus deployment-wide `instance_admin`; avoid expanding that into enterprise-style RBAC ahead of core workflow quality.
 - Do not lead with raw bash logs and transcripts. Default view should be human-readable intent/progress, with raw detail beneath.
 - Do not force users to understand provider/API-key plumbing unless absolutely necessary. There are active onboarding/auth issues already; friction here is clearly real.
 

@@ -9,6 +9,7 @@ import { MarkdownBody } from "./MarkdownBody";
 import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./MarkdownEditor";
 import { StatusBadge } from "./StatusBadge";
 import { AgentIcon } from "./AgentIconPicker";
+import { formatAssigneeUserLabel } from "../lib/assignees";
 import { formatDateTime } from "../lib/utils";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
@@ -27,7 +28,6 @@ interface LinkedRunItem {
 
 interface CommentReassignment {
   assigneeAgentId: string | null;
-  assigneeUserId: string | null;
 }
 
 interface CommentThreadProps {
@@ -82,15 +82,11 @@ function clearDraft(draftKey: string) {
 
 function parseReassignment(target: string): CommentReassignment | null {
   if (!target || target === "__none__") {
-    return { assigneeAgentId: null, assigneeUserId: null };
+    return { assigneeAgentId: null };
   }
   if (target.startsWith("agent:")) {
     const assigneeAgentId = target.slice("agent:".length);
-    return assigneeAgentId ? { assigneeAgentId, assigneeUserId: null } : null;
-  }
-  if (target.startsWith("user:")) {
-    const assigneeUserId = target.slice("user:".length);
-    return assigneeUserId ? { assigneeAgentId: null, assigneeUserId } : null;
+    return assigneeAgentId ? { assigneeAgentId } : null;
   }
   return null;
 }
@@ -465,7 +461,16 @@ export function CommentThread({
               onChange={setReassignTarget}
               className="text-xs h-8"
               renderTriggerValue={(option) => {
-                if (!option) return <span className="text-muted-foreground">Assignee</span>;
+                if (!option) {
+                  if (reassignTarget.startsWith("user:")) {
+                    return (
+                      <span className="truncate">
+                        {formatAssigneeUserLabel(reassignTarget.slice("user:".length), null) ?? "Legacy user"}
+                      </span>
+                    );
+                  }
+                  return <span className="text-muted-foreground">Assignee</span>;
+                }
                 const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
                 const agent = agentId ? agentMap?.get(agentId) : null;
                 return (

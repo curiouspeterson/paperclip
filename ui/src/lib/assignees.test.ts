@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   assigneeValueFromSelection,
-  currentUserAssigneeOption,
   formatAssigneeUserLabel,
   parseAssigneeValue,
   suggestedCommentAssigneeValue,
@@ -18,15 +17,8 @@ describe("assignee selection helpers", () => {
     });
   });
 
-  it("encodes and parses current-user assignees", () => {
-    const [option] = currentUserAssigneeOption("local-board");
-
-    expect(option).toEqual({
-      id: "user:local-board",
-      label: "Me",
-      searchText: "me board human local-board",
-    });
-    expect(parseAssigneeValue(option.id)).toEqual({
+  it("keeps legacy user assignee encodings readable", () => {
+    expect(parseAssigneeValue("user:local-board")).toEqual({
       assigneeAgentId: null,
       assigneeUserId: "local-board",
     });

@@ -61,6 +61,7 @@ const mockFinanceService = vi.hoisted(() => ({
   byKind: vi.fn().mockResolvedValue([]),
   list: vi.fn().mockResolvedValue([]),
 }));
+const mockEvaluateCostEvent = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockBudgetService = vi.hoisted(() => ({
   overview: vi.fn().mockResolvedValue({
     companyId: "company-1",
@@ -86,6 +87,12 @@ vi.mock("../services/index.js", () => ({
 
 vi.mock("../services/quota-windows.js", () => ({
   fetchAllQuotaWindows: mockFetchAllQuotaWindows,
+}));
+
+vi.mock("../services/budgets.js", () => ({
+  budgetService: () => ({
+    evaluateCostEvent: mockEvaluateCostEvent,
+  }),
 }));
 
 function createApp() {
@@ -250,7 +257,13 @@ describe("cost routes", () => {
   });
 });
 
-function createCostServiceDb(selectResults: unknown[]) {
+function createCostServiceDb(
+  selectResults: unknown[],
+  options: {
+    onInsert?: (values: Record<string, unknown>) => void;
+    insertReturning?: unknown[];
+  } = {},
+) {
   const pending = [...selectResults];
   const chain = {
     from: vi.fn(() => chain),
@@ -266,9 +279,12 @@ function createCostServiceDb(selectResults: unknown[]) {
   return {
     select: vi.fn(() => chain),
     insert: vi.fn(() => ({
-      values: vi.fn(() => ({
-        returning: vi.fn(async () => []),
-      })),
+      values: vi.fn((values: Record<string, unknown>) => {
+        options.onInsert?.(values);
+        return {
+          returning: vi.fn(async () => options.insertReturning ?? [values]),
+        };
+      }),
     })),
     update: vi.fn(() => ({
       set: vi.fn(() => ({
@@ -279,6 +295,27 @@ function createCostServiceDb(selectResults: unknown[]) {
 }
 
 describe("costService.createEvent", () => {
+  function createEventData(overrides: Record<string, unknown> = {}) {
+    return {
+      agentId: "agent-1",
+      issueId: null,
+      projectId: null,
+      goalId: null,
+      heartbeatRunId: null,
+      billingCode: null,
+      provider: "openai",
+      biller: "openai",
+      billingType: "unknown",
+      model: "gpt-test",
+      inputTokens: 1,
+      cachedInputTokens: 0,
+      outputTokens: 1,
+      costCents: 1,
+      occurredAt: new Date("2026-03-25T12:00:00.000Z"),
+      ...overrides,
+    };
+  }
+
   it("rejects issue links that point at another company", async () => {
     const db = createCostServiceDb([
       [{ id: "agent-1", companyId: "company-1" }],
@@ -366,6 +403,95 @@ describe("costService.createEvent", () => {
         occurredAt: new Date(),
       }),
     ).rejects.toThrow(/project must match linked issue/i);
+  });
+
+  it("rejects caller-supplied project attribution when the linked issue has no project", async () => {
+    const db = createCostServiceDb([
+      [{ id: "agent-1", companyId: "company-1" }],
+      [{ id: "issue-1", companyId: "company-1", projectId: null, goalId: null }],
+      [{ id: "project-2", companyId: "company-1" }],
+    ]);
+
+    const service = costService(db as any);
+
+    await expect(
+      service.createEvent(
+        "company-1",
+        createEventData({
+          issueId: "issue-1",
+          projectId: "project-2",
+        }),
+      ),
+    ).rejects.toThrow(/project must match linked issue/i);
+  });
+
+  it("rejects caller-supplied goal attribution when the linked issue has no goal", async () => {
+    const db = createCostServiceDb([
+      [{ id: "agent-1", companyId: "company-1" }],
+      [{ id: "issue-1", companyId: "company-1", projectId: null, goalId: null }],
+      [{ id: "goal-2", companyId: "company-1" }],
+    ]);
+
+    const service = costService(db as any);
+
+    await expect(
+      service.createEvent(
+        "company-1",
+        createEventData({
+          issueId: "issue-1",
+          goalId: "goal-2",
+        }),
+      ),
+    ).rejects.toThrow(/goal must match linked issue/i);
+  });
+
+  it("inherits linked issue project and goal attribution when omitted by the caller", async () => {
+    let insertedValues: Record<string, unknown> | null = null;
+    const db = createCostServiceDb(
+      [
+        [{ id: "agent-1", companyId: "company-1" }],
+        [{ id: "issue-1", companyId: "company-1", projectId: "project-1", goalId: "goal-1" }],
+        [{ companyId: "company-1" }],
+        [{ companyId: "company-1" }],
+        [{ total: 1 }],
+        [{ total: 1 }],
+      ],
+      {
+        onInsert: (values) => {
+          insertedValues = values;
+        },
+      },
+    );
+
+    const service = costService(db as any);
+
+    const event = await service.createEvent(
+      "company-1",
+      createEventData({
+        issueId: "issue-1",
+        projectId: null,
+        goalId: null,
+      }),
+    );
+
+    expect(insertedValues).toMatchObject({
+      companyId: "company-1",
+      issueId: "issue-1",
+      projectId: "project-1",
+      goalId: "goal-1",
+    });
+    expect(event).toMatchObject({
+      issueId: "issue-1",
+      projectId: "project-1",
+      goalId: "goal-1",
+    });
+    expect(mockEvaluateCostEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issueId: "issue-1",
+        projectId: "project-1",
+        goalId: "goal-1",
+      }),
+    );
   });
 
   it("rejects heartbeat run links that belong to another agent in the same company", async () => {

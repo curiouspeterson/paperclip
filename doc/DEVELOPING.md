@@ -286,6 +286,19 @@ curl http://localhost:3100/api/health
 curl http://localhost:3100/api/companies
 ```
 
+## Verification
+
+Run the maintainer verification gate from repo root before hand-off:
+
+```sh
+pnpm -r typecheck
+pnpm test:run
+pnpm test:e2e
+pnpm build
+```
+
+`pnpm test:e2e` starts a clean temporary Paperclip instance for browser smoke coverage. It does not reuse your existing dev server or persisted local state, so onboarding and first-run flows are checked against an isolated environment. The browser harness also suppresses automatic assignment wakeups, so onboarding smoke does not require local adapter CLIs such as `claude` to be installed.
+
 Expected:
 
 - `/api/health` returns `{"status":"ok"}`

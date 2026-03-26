@@ -322,6 +322,49 @@ describe("issue service contracts", () => {
     });
   });
 
+  it("clears a legacy user assignee when reassigning to an agent", async () => {
+    const companyId = await seedCompany("Alpha");
+    const agentId = await seedAgent(companyId);
+    const issueId = randomUUID();
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Legacy user-assigned issue",
+      status: "todo",
+      priority: "medium",
+      assigneeUserId: "user-1",
+    });
+
+    const updated = await issueService(db).update(issueId, {
+      assigneeAgentId: agentId,
+    } as any);
+
+    expect(updated?.assigneeAgentId).toBe(agentId);
+    expect(updated?.assigneeUserId).toBeNull();
+  });
+
+  it("clears a legacy user assignee when explicitly unassigning the issue", async () => {
+    const companyId = await seedCompany("Alpha");
+    const issueId = randomUUID();
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Legacy user-assigned issue",
+      status: "todo",
+      priority: "medium",
+      assigneeUserId: "user-1",
+    });
+
+    const updated = await issueService(db).update(issueId, {
+      assigneeAgentId: null,
+    } as any);
+
+    expect(updated?.assigneeAgentId).toBeNull();
+    expect(updated?.assigneeUserId).toBeNull();
+  });
+
   it("rejects a foreign parent issue on update", async () => {
     const companyId = await seedCompany("Alpha");
     const foreignCompanyId = await seedCompany("Beta");
@@ -445,7 +488,6 @@ describe("issue service contracts", () => {
 
     const updated = await issueService(db).update(issueId, {
       assigneeAgentId: nextAgentId,
-      assigneeUserId: null,
     } as any);
 
     expect(updated?.status).toBe("todo");

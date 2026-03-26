@@ -177,10 +177,6 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return rawId;
   }
 
-  function hasRequestedHumanAssignee(value: unknown) {
-    return typeof value === "string" && value.trim().length > 0;
-  }
-
   async function resolveIssueProjectAndGoal(issue: {
     companyId: string;
     projectId: string | null;
@@ -793,11 +789,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   router.post("/companies/:companyId/issues", validate(createIssueSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
-    if (hasRequestedHumanAssignee(req.body.assigneeUserId)) {
-      res.status(422).json({ error: "Human assignees are no longer supported for new issue assignments" });
-      return;
-    }
-    if (req.body.assigneeAgentId || req.body.assigneeUserId) {
+    if (req.body.assigneeAgentId) {
       await assertCanAssignTasks(req, companyId);
     }
 
@@ -841,27 +833,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, existing.companyId);
-    if (hasRequestedHumanAssignee(req.body.assigneeUserId)) {
-      res.status(422).json({ error: "Human assignees are no longer supported for new issue assignments" });
-      return;
-    }
+    const nextAssigneeAgentId =
+      req.body.assigneeAgentId !== undefined ? req.body.assigneeAgentId : existing.assigneeAgentId;
+    const nextAssigneeUserId = req.body.assigneeAgentId !== undefined ? null : existing.assigneeUserId;
     const assigneeWillChange =
-      (req.body.assigneeAgentId !== undefined && req.body.assigneeAgentId !== existing.assigneeAgentId) ||
-      (req.body.assigneeUserId !== undefined && req.body.assigneeUserId !== existing.assigneeUserId);
-
-    const isAgentReturningIssueToCreator =
-      req.actor.type === "agent" &&
-      !!req.actor.agentId &&
-      existing.assigneeAgentId === req.actor.agentId &&
-      req.body.assigneeAgentId === null &&
-      typeof req.body.assigneeUserId === "string" &&
-      !!existing.createdByUserId &&
-      req.body.assigneeUserId === existing.createdByUserId;
+      nextAssigneeAgentId !== existing.assigneeAgentId ||
+      nextAssigneeUserId !== existing.assigneeUserId;
 
     if (assigneeWillChange) {
-      if (!isAgentReturningIssueToCreator) {
-        await assertCanAssignTasks(req, existing.companyId);
-      }
+      await assertCanAssignTasks(req, existing.companyId);
     }
     if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
 
@@ -886,8 +866,6 @@ export function issueRoutes(db: Db, storage: StorageService) {
             assigneePatch: {
               assigneeAgentId:
                 req.body.assigneeAgentId === undefined ? "__omitted__" : req.body.assigneeAgentId,
-              assigneeUserId:
-                req.body.assigneeUserId === undefined ? "__omitted__" : req.body.assigneeUserId,
             },
             currentAssignee: {
               assigneeAgentId: existing.assigneeAgentId,

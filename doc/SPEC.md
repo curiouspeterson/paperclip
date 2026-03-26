@@ -289,6 +289,7 @@ Fully-instrumented Agents report token/API usage back to Paperclip. Costs are tr
 Costs should be denominated in both **tokens and dollars**.
 
 Billing codes on tasks (see Org Structure) enable cost attribution across teams — when Agent A requests work from Agent B, B's costs roll up to A's request.
+When a reported cost event links to a task, that task is also the authoritative source for project/goal attribution; callers should not be able to override those links independently.
 
 ### Budget Controls
 
@@ -396,15 +397,17 @@ No optimistic locking or CRDTs needed. The single-assignment model + atomic chec
 
 ### Human in the Loop
 
-Agents can create tasks assigned to humans. The board member (or any human with access) can complete these tasks through the UI.
+Long-horizon Paperclip should allow humans to participate in workflows through the same company-scoped control plane.
 
-When a human completes a task, if the requesting agent's adapter supports **pingbacks** (e.g. OpenClaw hooks), Paperclip sends a notification to wake that agent. This keeps humans rare but possible participants in the workflow.
+Current repo reality is more conservative:
 
-The agents are discouraged from assigning tasks to humans in the Paperclip SKILL, but sometimes it's unavoidable.
+- humans are first-class principals for auth, memberships, approvals, comments, and company access
+- the main issue mutation contract is currently agent-first, and new issue assignment is centered on `assigneeAgentId`; any legacy `assigneeUserId` rows are read-only compatibility state
+- human intervention still happens through board/company-member actions in the UI rather than a broad human-task-assignment model
 
 ### API Design
 
-**Single unified REST API.** The same API serves both the frontend UI and agents. Authentication determines permissions — board auth has full access, agent API keys have scoped access (their own tasks, cost reporting, company context).
+**Single unified REST API.** The same API serves both the frontend UI and agents. Authentication determines permissions — instance admin / board flows have full control, company members go through company-scoped grants, and agent API keys stay scoped to agent/company context.
 
 No separate "agent API" vs. "board API." Same endpoints, different authorization levels.
 

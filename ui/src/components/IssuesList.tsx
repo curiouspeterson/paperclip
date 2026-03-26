@@ -350,15 +350,14 @@ export function IssuesList({
       if (viewState.groupBy === "status") defaults.status = groupKey;
       else if (viewState.groupBy === "priority") defaults.priority = groupKey;
       else if (viewState.groupBy === "assignee" && groupKey !== "__unassigned") {
-        if (groupKey.startsWith("__user:")) defaults.assigneeUserId = groupKey.slice("__user:".length);
-        else defaults.assigneeAgentId = groupKey;
+        if (!groupKey.startsWith("__user:")) defaults.assigneeAgentId = groupKey;
       }
     }
     return defaults;
   };
 
-  const assignIssue = (issueId: string, assigneeAgentId: string | null, assigneeUserId: string | null = null) => {
-    onUpdateIssue(issueId, { assigneeAgentId, assigneeUserId });
+  const assignIssue = (issueId: string, assigneeAgentId: string | null) => {
+    onUpdateIssue(issueId, { assigneeAgentId });
     setAssigneePickerIssueId(null);
     setAssigneeSearch("");
   };
@@ -827,27 +826,11 @@ export function IssuesList({
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                assignIssue(issue.id, null, null);
+                                assignIssue(issue.id, null);
                               }}
                             >
                               No assignee
                             </button>
-                            {currentUserId && (
-                              <button
-                                className={cn(
-                                  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent/50",
-                                  issue.assigneeUserId === currentUserId && "bg-accent",
-                                )}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  assignIssue(issue.id, null, currentUserId);
-                                }}
-                              >
-                                <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                <span>Me</span>
-                              </button>
-                            )}
                             {(agents ?? [])
                               .filter((agent) => {
                                 if (!assigneeSearch.trim()) return true;
@@ -865,7 +848,7 @@ export function IssuesList({
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    assignIssue(issue.id, agent.id, null);
+                                    assignIssue(issue.id, agent.id);
                                   }}
                                 >
                                   <Identity name={agent.name} size="sm" className="min-w-0" />

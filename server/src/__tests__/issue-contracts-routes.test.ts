@@ -182,6 +182,49 @@ describe("issue contract routes", () => {
     expect(mockIssueService.update).not.toHaveBeenCalled();
   });
 
+  it("rejects create payloads that still send assigneeUserId", async () => {
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "board-user",
+        companyIds: [COMPANY_ID],
+        source: "local_implicit",
+        isInstanceAdmin: false,
+      }),
+    )
+      .post(`/api/companies/${COMPANY_ID}/issues`)
+      .send({
+        title: "Legacy human assignee payload",
+        status: "todo",
+        priority: "medium",
+        assigneeUserId: "user-1",
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Validation error");
+    expect(mockIssueService.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects patch payloads that still send assigneeUserId", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue());
+
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "board-user",
+        companyIds: [COMPANY_ID],
+        source: "local_implicit",
+        isInstanceAdmin: false,
+      }),
+    )
+      .patch("/api/issues/11111111-1111-4111-8111-111111111111")
+      .send({ assigneeUserId: "user-1" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Validation error");
+    expect(mockIssueService.update).not.toHaveBeenCalled();
+  });
+
   it("requires agent ownership for non-checkout issue patches", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       status: "todo",

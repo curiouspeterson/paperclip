@@ -29,6 +29,9 @@ export function queueIssueAssignmentWakeup(input: {
   rethrowOnError?: boolean;
 }) {
   if (!input.issue.assigneeAgentId || input.issue.status === "backlog") return;
+  if (process.env.PAPERCLIP_E2E_DISABLE_ASSIGNMENT_WAKEUPS === "true") {
+    return Promise.resolve(null);
+  }
 
   return input.heartbeat
     .wakeup(input.issue.assigneeAgentId, {

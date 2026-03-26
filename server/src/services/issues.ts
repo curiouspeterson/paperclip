@@ -153,10 +153,6 @@ async function getParentIssueGoalId(
   return getProjectDefaultGoalId(db, companyId, row.projectId);
 }
 
-function hasRequestedHumanAssignee(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
 function touchedByUserCondition(companyId: string, userId: string) {
   return sql<boolean>`
     (
@@ -836,17 +832,11 @@ export function issueService(db: Db) {
         delete issueData.executionWorkspacePreference;
         delete issueData.executionWorkspaceSettings;
       }
-      if (data.assigneeAgentId && data.assigneeUserId) {
-        throw unprocessable("Issue can only have one assignee");
-      }
-      if (hasRequestedHumanAssignee(data.assigneeUserId)) {
+      if ("assigneeUserId" in data) {
         throw unprocessable("Human assignees are no longer supported for new issue assignments");
       }
       if (data.assigneeAgentId) {
         await assertAssignableAgent(companyId, data.assigneeAgentId);
-      }
-      if (data.assigneeUserId) {
-        await assertAssignableUser(companyId, data.assigneeUserId);
       }
       if (data.projectId) {
         await assertProjectBelongsToCompany(companyId, data.projectId);
@@ -985,23 +975,20 @@ export function issueService(db: Db) {
       const nextAssigneeAgentId =
         issueData.assigneeAgentId !== undefined ? issueData.assigneeAgentId : existing.assigneeAgentId;
       const nextAssigneeUserId =
-        issueData.assigneeUserId !== undefined ? issueData.assigneeUserId : existing.assigneeUserId;
+        issueData.assigneeAgentId !== undefined ? null : existing.assigneeUserId;
       const assigneeChanged =
-        (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
-        (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId);
+        nextAssigneeAgentId !== existing.assigneeAgentId ||
+        nextAssigneeUserId !== existing.assigneeUserId;
       const nextStatus = issueData.status ?? (existing.status === "in_progress" && assigneeChanged ? "todo" : undefined);
 
+      if ("assigneeUserId" in issueData) {
+        throw unprocessable("Human assignees are no longer supported for new issue assignments");
+      }
       if (nextAssigneeAgentId && nextAssigneeUserId) {
         throw unprocessable("Issue can only have one assignee");
       }
-      if (hasRequestedHumanAssignee(issueData.assigneeUserId)) {
-        throw unprocessable("Human assignees are no longer supported for new issue assignments");
-      }
       if (issueData.assigneeAgentId) {
         await assertAssignableAgent(existing.companyId, issueData.assigneeAgentId);
-      }
-      if (issueData.assigneeUserId) {
-        await assertAssignableUser(existing.companyId, issueData.assigneeUserId);
       }
       if (issueData.projectId !== undefined && issueData.projectId) {
         await assertProjectBelongsToCompany(existing.companyId, issueData.projectId);
@@ -1031,6 +1018,9 @@ export function issueService(db: Db) {
 
       if (nextStatus !== undefined) {
         patch.status = nextStatus;
+      }
+      if (issueData.assigneeAgentId !== undefined) {
+        patch.assigneeUserId = null;
       }
 
       applyStatusSideEffects(nextStatus, patch);

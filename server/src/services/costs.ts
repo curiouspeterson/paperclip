@@ -72,6 +72,9 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         throw unprocessable("Agent does not belong to company");
       }
 
+      let effectiveProjectId = data.projectId ?? null;
+      let effectiveGoalId = data.goalId ?? null;
+
       if (data.issueId) {
         const issue = await db
           .select({
@@ -83,28 +86,32 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
           .where(eq(issues.id, data.issueId))
           .then((rows) => rows[0] ?? null);
         await assertLinkedRecordCompany(companyId, "Issue", issue?.companyId);
-        if (data.projectId && issue?.projectId && issue.projectId !== data.projectId) {
+
+        effectiveProjectId = issue?.projectId ?? null;
+        effectiveGoalId = issue?.goalId ?? null;
+
+        if (data.projectId != null && data.projectId !== effectiveProjectId) {
           throw unprocessable("Project must match linked issue");
         }
-        if (data.goalId && issue?.goalId && issue.goalId !== data.goalId) {
+        if (data.goalId != null && data.goalId !== effectiveGoalId) {
           throw unprocessable("Goal must match linked issue");
         }
       }
 
-      if (data.projectId) {
+      if (effectiveProjectId) {
         const project = await db
           .select({ companyId: projects.companyId })
           .from(projects)
-          .where(eq(projects.id, data.projectId))
+          .where(eq(projects.id, effectiveProjectId))
           .then((rows) => rows[0] ?? null);
         await assertLinkedRecordCompany(companyId, "Project", project?.companyId);
       }
 
-      if (data.goalId) {
+      if (effectiveGoalId) {
         const goal = await db
           .select({ companyId: goals.companyId })
           .from(goals)
-          .where(eq(goals.id, data.goalId))
+          .where(eq(goals.id, effectiveGoalId))
           .then((rows) => rows[0] ?? null);
         await assertLinkedRecordCompany(companyId, "Goal", goal?.companyId);
       }
@@ -126,6 +133,8 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         .values({
           ...data,
           companyId,
+          projectId: effectiveProjectId,
+          goalId: effectiveGoalId,
           biller: data.biller ?? data.provider,
           billingType: data.billingType ?? "unknown",
           cachedInputTokens: data.cachedInputTokens ?? 0,

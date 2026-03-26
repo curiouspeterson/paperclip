@@ -1,7 +1,7 @@
 # Paperclip V1 Implementation Spec
 
 Status: Implementation contract for first release (V1)
-Date: 2026-02-17
+Date: 2026-03-25
 Audience: Product, engineering, and agent-integration authors
 Source inputs: `GOAL.md`, `PRODUCT.md`, `SPEC.md`, `DATABASE.md`, current monorepo code
 
@@ -32,13 +32,13 @@ These decisions close open questions from `SPEC.md` for V1.
 |---|---|
 | Tenancy | Single-tenant deployment, multi-company data model |
 | Company model | Company is first-order; all business entities are company-scoped |
-| Board | Single human board operator per deployment |
+| Board and human access | Board remains the control-plane abstraction; the shipped repo supports an `instance_admin` plus company memberships and coarse company-scoped permission grants |
 | Org graph | Strict tree (`reports_to` nullable root); no multi-manager reporting |
 | Visibility | Full visibility to board and all agents in same company |
 | Communication | Tasks + comments only (no separate chat system) |
 | Task ownership | Single assignee; atomic checkout required for `in_progress` transition |
 | Recovery | No automatic reassignment; work recovery stays manual/explicit |
-| Agent adapters | Built-in `process` and `http` adapters |
+| Agent adapters | Canonical adapter enum is `process | http | claude_local | codex_local | opencode_local | pi_local | cursor | openclaw_gateway | hermes_local` |
 | Auth | Mode-dependent human auth (`local_trusted` implicit board in current code; authenticated mode uses sessions), API keys for agents |
 | Budget period | Monthly UTC calendar window |
 | Budget enforcement | Soft alerts + hard limit auto-pause |
@@ -46,11 +46,13 @@ These decisions close open questions from `SPEC.md` for V1.
 
 ## 4. Current Baseline (Repo Snapshot)
 
-As of 2026-02-17, the repo already includes:
+As of 2026-03-25, the repo already includes:
 
 - Node + TypeScript backend with REST CRUD for `agents`, `projects`, `goals`, `issues`, `activity`
 - React UI pages for dashboard/agents/projects/goals/issues lists
 - PostgreSQL schema via Drizzle with embedded PostgreSQL fallback when `DATABASE_URL` is unset
+- Better Auth-backed human access with instance admin, company memberships, invites, and coarse permission grants
+- Public plugin runtime and SDK surfaces under `packages/plugins/*`
 
 V1 implementation extends this baseline into a company-centric, governance-aware control plane.
 
@@ -67,17 +69,19 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 - Heartbeat invocation, status tracking, and cancellation
 - Cost event ingestion and rollups (agent/task/project/company)
 - Budget settings and hard-stop enforcement
+- Human membership/invite flows and coarse company-scoped permission grants
 - Board web UI for dashboard, org chart, tasks, agents, approvals, costs
 - Agent-facing API contract (task read/write, heartbeat report, cost report)
+- Plugin host/runtime and public plugin SDK
 - Auditable activity log for all mutating actions
 
 ## 5.2 Out of Scope (V1)
 
-- Plugin framework and third-party extension SDK
 - Revenue/expense accounting beyond model/token costs
 - Knowledge base subsystem
 - Public marketplace (ClipHub)
-- Multi-board governance or role-based human permission granularity
+- Multi-board governance and enterprise-grade RBAC beyond the current company-scoped grant model
+- Third-party plugin marketplace/distribution
 - Automatic self-healing orchestration (auto-reassign/retry planners)
 
 ## 6. Architecture
@@ -86,8 +90,10 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 
 - `server/`: REST API, auth, orchestration services
 - `ui/`: Board operator interface
+- `cli/`: operator CLI, onboarding, doctor, portability, and local workflows
 - `packages/db/`: Drizzle schema, migrations, DB clients (Postgres)
 - `packages/shared/`: Shared API types, validators, constants
+- `packages/plugins/*`: plugin SDK, protocol, examples, and host integration surface
 
 ## 6.2 Data Stores
 
@@ -117,6 +123,37 @@ All core tables include `id`, `created_at`, `updated_at` unless noted.
 
 Human auth tables (`users`, `sessions`, and provider-specific auth artifacts) are managed by the selected auth library. This spec treats them as required dependencies and references `users.id` where user attribution is needed.
 
+## 7.0a `instance_user_roles`
+
+- `id` uuid pk
+- `user_id` text not null
+- `role` enum-like text: currently `instance_admin`
+
+Invariant: `instance_admin` grants deployment-wide human admin authority above company-scoped memberships.
+
+## 7.0b `company_memberships`
+
+- `id` uuid pk
+- `company_id` uuid fk `companies.id` not null
+- `principal_type` enum-like text: `user | agent`
+- `principal_id` text not null
+- `status` enum-like text: `pending | active | suspended`
+- `membership_role` text null
+
+Invariant: company-scoped human/agent access checks resolve through active memberships.
+
+## 7.0c `principal_permission_grants`
+
+- `id` uuid pk
+- `company_id` uuid fk `companies.id` not null
+- `principal_type` enum-like text: `user | agent`
+- `principal_id` text not null
+- `permission_key` enum-like text from shared contract
+- `scope` jsonb null
+- `granted_by_user_id` text null
+
+Invariant: grants are company-scoped and layered on top of active company membership.
+
 ## 7.1 `companies`
 
 - `id` uuid pk
@@ -133,10 +170,10 @@ Invariant: every business record belongs to exactly one company.
 - `name` text not null
 - `role` text not null
 - `title` text null
-- `status` enum: `active | paused | idle | running | error | terminated`
+- `status` enum: `active | paused | idle | running | error | pending_approval | terminated`
 - `reports_to` uuid fk `agents.id` null
 - `capabilities` text null
-- `adapter_type` enum: `process | http`
+- `adapter_type` enum: `process | http | claude_local | codex_local | opencode_local | pi_local | cursor | openclaw_gateway | hermes_local`
 - `adapter_config` jsonb not null
 - `context_mode` enum: `thin | fat` default `thin`
 - `budget_monthly_cents` int not null default 0
@@ -208,6 +245,7 @@ Invariant: at least one root `company` level goal per company.
 Invariants:
 
 - single assignee only
+- new writes assign issues through `assignee_agent_id`; legacy user-assigned rows remain readable but are compatibility-only state
 - task must trace to company goal chain via `goal_id`, `parent_id`, or project-goal linkage
 - `in_progress` requires assignee
 - terminal states: `done | cancelled`
@@ -690,6 +728,9 @@ Validation:
 - non-negative token counts
 - `costCents >= 0`
 - company ownership checks for all linked entities
+- if `issueId` is present, the linked issue is the authoritative source for `projectId` and `goalId`
+- callers may omit `projectId` / `goalId` on issue-linked events and the server will inherit them from the issue
+- callers may not override issue-linked `projectId` / `goalId` with different values, including supplying a value when the linked issue has none
 
 ## 13.4 Rollups
 
@@ -722,7 +763,7 @@ Required UX behaviors:
 
 - Node 20+
 - `DATABASE_URL` optional
-- if unset, auto-use PGlite and push schema
+- if unset, auto-start embedded PostgreSQL and run/apply migrations per current startup policy
 
 ## 15.2 Migrations
 
@@ -835,7 +876,7 @@ V1 is complete only when all criteria are true:
 
 ## 20. Post-V1 Backlog (Explicitly Deferred)
 
-- plugin architecture
+- plugin marketplace/distribution hardening
 - richer workflow-state customization per team
 - milestones/labels/dependency graph depth beyond V1 minimum
 - realtime transport optimization (SSE/WebSockets)
