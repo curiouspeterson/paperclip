@@ -158,6 +158,7 @@ export function preparePlaywrightE2eRuntime(
     `PORT=${port}`,
     `PAPERCLIP_OPEN_ON_LISTEN=false`,
     `PAPERCLIP_DB_BACKUP_ENABLED=false`,
+    `PAPERCLIP_E2E_DISABLE_ASSIGNMENT_WAKEUPS=true`,
     `HEARTBEAT_SCHEDULER_ENABLED=false`,
     `PAPERCLIP_UI_DEV_MIDDLEWARE=true`,
     `pnpm paperclipai run --data-dir ${shellQuote(dataDir)} --instance ${instanceId}`,
