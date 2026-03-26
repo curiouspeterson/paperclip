@@ -23,6 +23,25 @@ GitHub Actions owns `pnpm-lock.yaml`.
 - Pull request CI validates dependency resolution when manifests change.
 - Pushes to `master` regenerate `pnpm-lock.yaml` with `pnpm install --lockfile-only --no-frozen-lockfile`, commit it back if needed, and then run verification with `--frozen-lockfile`.
 
+## Contributor Entry Points
+
+Before patching the repo, start with:
+
+- `AGENTS.md` for the mandatory maintainer and AI-agent instructions
+- `doc/GIT-WORKFLOW.md` for the fork branch, worktree, and upstream-sync policy
+- `doc/SPEC-implementation.md` for the concrete V1 behavior contract
+
+## Git Workflow
+
+For the maintainer branch/rebase policy used to keep a customized Paperclip fork close to upstream `master`, see `doc/GIT-WORKFLOW.md`.
+
+That workflow standardizes:
+
+- `master` as the clean upstream mirror
+- `instance/main` as the long-lived local integration branch
+- short-lived `codex/*` feature branches in isolated worktrees
+- `./scripts/git-sync-upstream.sh` as the supported upstream sync procedure
+
 ## Start Dev
 
 From repo root:

@@ -229,6 +229,7 @@ pnpm db:migrate       # Apply migrations
 ```
 
 See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full development guide.
+Maintainers and AI agents should also start with [AGENTS.md](AGENTS.md) and [doc/GIT-WORKFLOW.md](doc/GIT-WORKFLOW.md) before editing code.
 
 <br/>
 
