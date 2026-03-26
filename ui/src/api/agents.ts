@@ -54,6 +54,8 @@ export interface AgentPermissionUpdate {
   canAssignTasks: boolean;
 }
 
+export type HeartbeatInvokeResult = HeartbeatRun | { status: "skipped" };
+
 function withCompanyScope(path: string, companyId?: string) {
   if (!companyId) return path;
   const separator = path.includes("?") ? "&" : "?";
@@ -168,7 +170,8 @@ export const agentsApi = {
       `/companies/${companyId}/adapters/${type}/test-environment`,
       data,
     ),
-  invoke: (id: string, companyId?: string) => api.post<HeartbeatRun>(agentPath(id, companyId, "/heartbeat/invoke"), {}),
+  invoke: (id: string, companyId?: string) =>
+    api.post<HeartbeatInvokeResult>(agentPath(id, companyId, "/heartbeat/invoke"), {}),
   wakeup: (
     id: string,
     data: {

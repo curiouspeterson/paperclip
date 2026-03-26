@@ -115,6 +115,8 @@ POST /api/agents/{agentId}/heartbeat/invoke
 
 Manually triggers a heartbeat for the agent.
 
+Returns `202 Accepted` with either the queued run payload or `{ "status": "skipped" }` when the agent is paused, pending approval, or otherwise not eligible for a new run.
+
 ## Org Chart
 
 ```

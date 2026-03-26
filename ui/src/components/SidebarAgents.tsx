@@ -1,18 +1,27 @@
 import { useMemo, useState } from "react";
 import { NavLink, useLocation } from "@/lib/router";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Plus } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Activity, ChevronRight, Ghost, Plus } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
 import { useSidebar } from "../context/SidebarContext";
+import { useToast } from "../context/ToastContext";
 import { agentsApi } from "../api/agents";
 import { authApi } from "../api/auth";
 import { heartbeatsApi } from "../api/heartbeats";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, agentRouteRef, agentUrl } from "../lib/utils";
 import { useAgentOrder } from "../hooks/useAgentOrder";
+import {
+  formatBulkHeartbeatToast,
+  selectAgentsForBoo,
+  selectAgentsForBulkHeartbeat,
+  type BulkHeartbeatMode,
+  summarizeBulkHeartbeatResults,
+} from "../lib/sidebar-heartbeats";
 import { AgentIcon } from "./AgentIconPicker";
 import { BudgetSidebarMarker } from "./BudgetSidebarMarker";
+import { HeartbeatButton } from "./HeartbeatButton";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,10 +30,13 @@ import {
 import type { Agent } from "@paperclipai/shared";
 export function SidebarAgents() {
   const [open, setOpen] = useState(true);
+  const [bulkMode, setBulkMode] = useState<BulkHeartbeatMode | null>(null);
   const { selectedCompanyId } = useCompany();
   const { openNewAgent } = useDialog();
+  const { pushToast } = useToast();
   const { isMobile, setSidebarOpen } = useSidebar();
   const location = useLocation();
+  const queryClient = useQueryClient();
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -68,10 +80,84 @@ export function SidebarAgents() {
   const activeAgentId = agentMatch?.[1] ?? null;
   const activeTab = agentMatch?.[2] ?? null;
 
+  async function runBulkHeartbeats(mode: BulkHeartbeatMode) {
+    if (!selectedCompanyId || bulkMode) return;
+
+    const targets =
+      mode === "all-hands"
+        ? selectAgentsForBulkHeartbeat(orderedAgents)
+        : selectAgentsForBoo(orderedAgents);
+
+    if (targets.length === 0) {
+      pushToast({
+        title: mode === "all-hands" ? "No eligible agents" : "No agents to spook",
+        body:
+          mode === "all-hands"
+            ? "There are no eligible agents available for All Hands Heartbeat."
+            : "There are no non-terminated, approved agents available for BOO!.",
+        tone: "warn",
+      });
+      return;
+    }
+
+    setBulkMode(mode);
+    try {
+      const results = await Promise.allSettled(
+        targets.map((agent) => agentsApi.invoke(agent.id, selectedCompanyId)),
+      );
+      pushToast(
+        formatBulkHeartbeatToast(mode, summarizeBulkHeartbeatResults(results)),
+      );
+    } finally {
+      queryClient.invalidateQueries({ queryKey: queryKeys.liveRuns(selectedCompanyId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.heartbeats(selectedCompanyId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(selectedCompanyId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId) });
+      setBulkMode(null);
+    }
+  }
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="group">
+        <div className="px-3 pb-1">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void runBulkHeartbeats("all-hands")}
+              disabled={bulkMode !== null}
+              className={cn(
+                "inline-flex min-w-0 items-center gap-1.5 rounded-md border border-border/80 px-2 py-1 text-[11px] font-medium transition-colors",
+                bulkMode === "all-hands"
+                  ? "border-blue-500/40 bg-blue-500/10 text-blue-500"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                bulkMode !== null && "opacity-60",
+              )}
+              aria-label="Run all hands heartbeat"
+            >
+              <Activity className={cn("h-3 w-3", bulkMode === "all-hands" && "animate-pulse")} />
+              <span className="truncate">
+                {bulkMode === "all-hands" ? "Starting..." : "All Hands Heartbeat"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void runBulkHeartbeats("boo")}
+              disabled={bulkMode !== null}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md border border-border/80 px-2 py-1 text-[11px] font-medium transition-colors",
+                bulkMode === "boo"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                bulkMode !== null && "opacity-60",
+              )}
+              aria-label="Trigger boo heartbeat for all non-terminated agents"
+            >
+              <Ghost className={cn("h-3 w-3", bulkMode === "boo" && "animate-pulse")} />
+              <span>BOO!</span>
+            </button>
+          </div>
+        </div>
         <div className="flex items-center px-3 py-1.5">
           <CollapsibleTrigger className="flex items-center gap-1 flex-1 min-w-0">
             <ChevronRight
@@ -117,6 +203,11 @@ export function SidebarAgents() {
               >
                 <AgentIcon icon={agent.icon} className="shrink-0 h-3.5 w-3.5 text-muted-foreground" />
                 <span className="flex-1 truncate">{agent.name}</span>
+                <HeartbeatButton
+                  agentId={agent.id}
+                  companyId={selectedCompanyId}
+                  isAlive={runCount > 0}
+                />
                 {(agent.pauseReason === "budget" || runCount > 0) && (
                   <span className="ml-auto flex items-center gap-1.5 shrink-0">
                     {agent.pauseReason === "budget" ? (
