@@ -124,6 +124,14 @@ describe("issue service contracts", () => {
       issuePrefix: name.slice(0, 3).toUpperCase(),
       requireBoardApprovalForNewAgents: false,
     });
+    await db.insert(goals).values({
+      id: randomUUID(),
+      companyId: id,
+      title: `${name} goal`,
+      level: "company",
+      status: "active",
+      parentId: null,
+    });
     return id;
   }
 
@@ -167,6 +175,92 @@ describe("issue service contracts", () => {
     ).rejects.toMatchObject({ status: 422 });
   });
 
+  it("rejects creating a top-level issue when it cannot trace to a company goal", async () => {
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Alpha",
+      issuePrefix: "ALP",
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await expect(
+      issueService(db).create(companyId, {
+        title: "Untraceable issue",
+        status: "todo",
+        priority: "medium",
+      } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Issue must trace to a goal via goalId, parentId, projectId, or a company goal",
+    });
+  });
+
+  it("uses the default root company goal even when it is planned", async () => {
+    const companyId = randomUUID();
+    const rootGoalId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Alpha",
+      issuePrefix: "ALP",
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(goals).values({
+      id: rootGoalId,
+      companyId,
+      title: "Alpha mission",
+      level: "company",
+      status: "planned",
+      parentId: null,
+    });
+
+    const { issue } = await issueService(db).create(companyId, {
+      title: "Traceable via root goal",
+      status: "todo",
+      priority: "medium",
+    } as any);
+
+    expect(issue.goalId).toBe(rootGoalId);
+  });
+
+  it("inherits the parent issue goal when creating a child issue without an explicit goal", async () => {
+    const companyId = await seedCompany("Alpha");
+    const agentId = await seedAgent(companyId);
+    const parentGoalId = randomUUID();
+    const parentIssueId = randomUUID();
+
+    await db.insert(goals).values({
+      id: parentGoalId,
+      companyId,
+      title: "Parent goal",
+      level: "task",
+      status: "active",
+      parentId: null,
+    });
+    await db.insert(issues).values({
+      id: parentIssueId,
+      companyId,
+      title: "Parent issue",
+      status: "todo",
+      priority: "medium",
+      goalId: parentGoalId,
+      assigneeAgentId: agentId,
+      createdByAgentId: agentId,
+    });
+
+    const created = await issueService(db).create(companyId, {
+      title: "Child issue",
+      parentId: parentIssueId,
+      assigneeAgentId: agentId,
+      createdByAgentId: agentId,
+      status: "todo",
+      priority: "medium",
+    } as any);
+
+    expect(created.issue.goalId).toBe(parentGoalId);
+  });
+
   it("rejects a foreign goal on update", async () => {
     const companyId = await seedCompany("Alpha");
     const foreignCompanyId = await seedCompany("Beta");
@@ -188,6 +282,44 @@ describe("issue service contracts", () => {
     await expect(
       issueService(db).update(issue.id, { goalId: foreignGoalId } as any),
     ).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("rejects new human-assigned issues on create", async () => {
+    const companyId = await seedCompany("Alpha");
+
+    await expect(
+      issueService(db).create(companyId, {
+        title: "Human assignment",
+        status: "todo",
+        priority: "medium",
+        assigneeUserId: "user-1",
+      } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Human assignees are no longer supported for new issue assignments",
+    });
+  });
+
+  it("rejects assigning an issue to a user on update", async () => {
+    const companyId = await seedCompany("Alpha");
+    const issueId = randomUUID();
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Issue",
+      status: "todo",
+      priority: "medium",
+    });
+
+    await expect(
+      issueService(db).update(issueId, {
+        assigneeUserId: "user-1",
+      } as any),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: "Human assignees are no longer supported for new issue assignments",
+    });
   });
 
   it("rejects a foreign parent issue on update", async () => {

@@ -785,6 +785,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
   router.post("/companies/:companyId/issues", validate(createIssueSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    if (hasRequestedHumanAssignee(req.body.assigneeUserId)) {
+      res.status(422).json({ error: "Human assignees are no longer supported for new issue assignments" });
+      return;
+    }
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
       await assertCanAssignTasks(req, companyId);
     }
@@ -829,6 +833,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, existing.companyId);
+    if (hasRequestedHumanAssignee(req.body.assigneeUserId)) {
+      res.status(422).json({ error: "Human assignees are no longer supported for new issue assignments" });
+      return;
+    }
     const assigneeWillChange =
       (req.body.assigneeAgentId !== undefined && req.body.assigneeAgentId !== existing.assigneeAgentId) ||
       (req.body.assigneeUserId !== undefined && req.body.assigneeUserId !== existing.assigneeUserId);

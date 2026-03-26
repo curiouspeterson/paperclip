@@ -133,11 +133,23 @@ export function companyService(db: Db) {
     while (suffix < 10000) {
       const candidate = `${base}${suffixForAttempt(suffix)}`;
       try {
-        const rows = await db
-          .insert(companies)
-          .values({ ...data, issuePrefix: candidate })
-          .returning();
-        return rows[0];
+        const created = await db.transaction(async (tx) => {
+          const rows = await tx
+            .insert(companies)
+            .values({ ...data, issuePrefix: candidate })
+            .returning();
+          const company = rows[0];
+          await tx.insert(goals).values({
+            companyId: company.id,
+            title: company.name,
+            description: company.description ?? null,
+            level: "company",
+            status: "planned",
+            parentId: null,
+          });
+          return company;
+        });
+        return created;
       } catch (error) {
         if (!isIssuePrefixConflict(error)) throw error;
       }
