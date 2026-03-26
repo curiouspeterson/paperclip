@@ -16,6 +16,7 @@ import {
   companyMemberships,
   createDb,
   ensurePostgresDatabase,
+  goals,
   heartbeatRunEvents,
   heartbeatRuns,
   instanceSettings,
@@ -197,6 +198,7 @@ describe("routine routes end-to-end", () => {
     const companyId = randomUUID();
     const agentId = randomUUID();
     const projectId = randomUUID();
+    const rootGoalId = randomUUID();
     const userId = randomUUID();
     const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
@@ -205,6 +207,14 @@ describe("routine routes end-to-end", () => {
       name: "Paperclip",
       issuePrefix,
       requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(goals).values({
+      id: rootGoalId,
+      companyId,
+      title: "Paperclip mission",
+      level: "company",
+      status: "planned",
+      parentId: null,
     });
 
     await db.insert(agents).values({

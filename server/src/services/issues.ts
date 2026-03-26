@@ -263,6 +263,26 @@ async function getProjectDefaultGoalId(
   return row?.goalId ?? null;
 }
 
+async function getParentIssueGoalId(
+  db: ProjectGoalReader,
+  companyId: string,
+  parentId: string | null | undefined,
+) {
+  if (!parentId) return null;
+  const row = await db
+    .select({ goalId: issues.goalId, projectId: issues.projectId })
+    .from(issues)
+    .where(and(eq(issues.id, parentId), eq(issues.companyId, companyId)))
+    .then((rows) => rows[0] ?? null);
+  if (!row) return null;
+  if (row.goalId) return row.goalId;
+  return getProjectDefaultGoalId(db, companyId, row.projectId);
+}
+
+function hasRequestedHumanAssignee(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function touchedByUserCondition(companyId: string, userId: string) {
   return sql<boolean>`
     (
@@ -1126,6 +1146,9 @@ export function issueService(db: Db) {
       if (data.assigneeAgentId && data.assigneeUserId) {
         throw unprocessable("Issue can only have one assignee");
       }
+      if (hasRequestedHumanAssignee(data.assigneeUserId)) {
+        throw unprocessable("Human assignees are no longer supported for new issue assignments");
+      }
       if (data.parentId && data.createdByAgentId && !data.assigneeAgentId && !data.assigneeUserId) {
         throw unprocessable("Delegated child issues must include an assignee");
       }
@@ -1159,12 +1182,19 @@ export function issueService(db: Db) {
         return await db.transaction(async (tx) => {
           const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
           const projectGoalId = await getProjectDefaultGoalId(tx, companyId, issueData.projectId);
+          const parentGoalId = await getParentIssueGoalId(tx, companyId, issueData.parentId);
           const resolvedGoalId = resolveIssueGoalId({
             projectId: issueData.projectId,
             goalId: issueData.goalId,
             projectGoalId,
-            defaultGoalId: defaultCompanyGoal?.id ?? null,
+            parentGoalId,
+            defaultGoalId: defaultCompanyGoal?.status === "active" ? defaultCompanyGoal.id : null,
           });
+          if (!resolvedGoalId) {
+            throw unprocessable(
+              "Issue must trace to a goal via goalId, parentId, projectId, or an active company goal",
+            );
+          }
           const delegationKey = resolveDelegationKey({
             parentId: issueData.parentId ?? null,
             createdByAgentId: issueData.createdByAgentId ?? null,
@@ -1439,19 +1469,34 @@ export function issueService(db: Db) {
       const toTuple = (companyId: string, parentId: string, delegationKey: string) =>
         `${companyId}:${parentId}:${delegationKey}`;
 
-      const candidates = legacyRows.map((row) => ({
-        ...row,
-        delegationKey: resolveDelegationKey({
-          parentId: row.parentId,
-          createdByAgentId: row.createdByAgentId,
-          title: row.title,
-          assigneeAgentId: row.assigneeAgentId,
-          assigneeUserId: row.assigneeUserId,
+      const candidates = (await Promise.all(legacyRows.map(async (row) => {
+        const [projectGoalId, parentGoalId, defaultCompanyGoal] = await Promise.all([
+          getProjectDefaultGoalId(db, row.companyId, row.projectId),
+          getParentIssueGoalId(db, row.companyId, row.parentId),
+          getDefaultCompanyGoal(db, row.companyId),
+        ]);
+        const resolvedGoalId = resolveIssueGoalId({
           projectId: row.projectId,
           goalId: row.goalId,
-          requestDepth: row.requestDepth,
-        }),
-      })).filter((row): row is typeof legacyRows[number] & { delegationKey: string } => row.delegationKey != null);
+          projectGoalId,
+          parentGoalId,
+          defaultGoalId: defaultCompanyGoal?.status === "active" ? defaultCompanyGoal.id : null,
+        });
+        return {
+          ...row,
+          resolvedGoalId,
+          delegationKey: resolveDelegationKey({
+            parentId: row.parentId,
+            createdByAgentId: row.createdByAgentId,
+            title: row.title,
+            assigneeAgentId: row.assigneeAgentId,
+            assigneeUserId: row.assigneeUserId,
+            projectId: row.projectId,
+            goalId: resolvedGoalId,
+            requestDepth: row.requestDepth,
+          }),
+        };
+      }))).filter((row): row is typeof legacyRows[number] & { resolvedGoalId: string | null; delegationKey: string } => row.delegationKey != null);
 
       const candidateCounts = new Map<string, number>();
       for (const candidate of candidates) {
@@ -1559,6 +1604,9 @@ export function issueService(db: Db) {
       if (nextAssigneeAgentId && nextAssigneeUserId) {
         throw unprocessable("Issue can only have one assignee");
       }
+      if (hasRequestedHumanAssignee(issueData.assigneeUserId)) {
+        throw unprocessable("Human assignees are no longer supported for new issue assignments");
+      }
       if (issueData.assigneeAgentId) {
         await assertAssignableAgent(existing.companyId, issueData.assigneeAgentId);
       }
@@ -1614,24 +1662,45 @@ export function issueService(db: Db) {
       }
 
       return db.transaction(async (tx) => {
-        const defaultCompanyGoal = await getDefaultCompanyGoal(tx, existing.companyId);
-        const [currentProjectGoalId, nextProjectGoalId] = await Promise.all([
-          getProjectDefaultGoalId(tx, existing.companyId, existing.projectId),
-          getProjectDefaultGoalId(
+          const defaultCompanyGoal = await getDefaultCompanyGoal(tx, existing.companyId);
+          const [currentProjectGoalId, nextProjectGoalId] = await Promise.all([
+            getProjectDefaultGoalId(tx, existing.companyId, existing.projectId),
+            getProjectDefaultGoalId(
+              tx,
+            existing.companyId,
+              issueData.projectId !== undefined ? issueData.projectId : existing.projectId,
+            ),
+          ]);
+        const [currentParentGoalId, nextParentGoalId] = await Promise.all([
+          getParentIssueGoalId(tx, existing.companyId, existing.parentId),
+          getParentIssueGoalId(
             tx,
             existing.companyId,
-            issueData.projectId !== undefined ? issueData.projectId : existing.projectId,
+            issueData.parentId !== undefined ? issueData.parentId : existing.parentId,
           ),
         ]);
-        patch.goalId = resolveNextIssueGoalId({
+        const nextResolvedGoalId = resolveNextIssueGoalId({
           currentProjectId: existing.projectId,
           currentGoalId: existing.goalId,
           currentProjectGoalId,
+          currentParentGoalId,
           projectId: issueData.projectId,
           goalId: issueData.goalId,
           projectGoalId: nextProjectGoalId,
-          defaultGoalId: defaultCompanyGoal?.id ?? null,
+          parentId: issueData.parentId,
+          parentGoalId: nextParentGoalId,
+          defaultGoalId: defaultCompanyGoal?.status === "active" ? defaultCompanyGoal.id : null,
         });
+        const traceInputsChanged =
+          issueData.projectId !== undefined ||
+          issueData.goalId !== undefined ||
+          issueData.parentId !== undefined;
+        if (!nextResolvedGoalId && (traceInputsChanged || existing.goalId != null)) {
+          throw unprocessable(
+            "Issue must trace to a goal via goalId, parentId, projectId, or an active company goal",
+          );
+        }
+        patch.goalId = nextResolvedGoalId;
         const updated = await tx
           .update(issues)
           .set(patch)

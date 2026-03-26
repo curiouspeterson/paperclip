@@ -218,6 +218,55 @@ describe("issue contract routes", () => {
     expect(mockIssueService.update).not.toHaveBeenCalled();
   });
 
+  it("rejects creating a new issue assigned to a user", async () => {
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "board-user",
+        companyIds: [COMPANY_ID],
+        source: "local_implicit",
+        isInstanceAdmin: false,
+      }),
+    )
+      .post(`/api/companies/${COMPANY_ID}/issues`)
+      .send({
+        title: "Human-assigned issue",
+        assigneeUserId: "user-1",
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({
+      error: "Human assignees are no longer supported for new issue assignments",
+    });
+    expect(mockIssueService.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects reassigning an issue to a user", async () => {
+    mockIssueService.getById.mockResolvedValue(makeIssue({
+      status: "todo",
+      assigneeAgentId: AGENT_ONE_ID,
+      assigneeUserId: null,
+    }));
+
+    const res = await request(
+      createApp({
+        type: "board",
+        userId: "board-user",
+        companyIds: [COMPANY_ID],
+        source: "local_implicit",
+        isInstanceAdmin: false,
+      }),
+    )
+      .patch("/api/issues/11111111-1111-4111-8111-111111111111")
+      .send({ assigneeUserId: "user-1" });
+
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({
+      error: "Human assignees are no longer supported for new issue assignments",
+    });
+    expect(mockIssueService.update).not.toHaveBeenCalled();
+  });
+
   it("does not wake the assignee when the assignee agent comments on its own issue", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       status: "in_progress",

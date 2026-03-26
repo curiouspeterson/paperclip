@@ -14,6 +14,7 @@ import {
   companySecretVersions,
   createDb,
   ensurePostgresDatabase,
+  goals,
   heartbeatRuns,
   issues,
   projects,
@@ -140,6 +141,7 @@ describe("routine service live-execution coalescing", () => {
     const companyId = randomUUID();
     const agentId = randomUUID();
     const projectId = randomUUID();
+    const rootGoalId = randomUUID();
     const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
     const wakeups: Array<{
       agentId: string;
@@ -159,6 +161,14 @@ describe("routine service live-execution coalescing", () => {
       name: "Paperclip",
       issuePrefix,
       requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(goals).values({
+      id: rootGoalId,
+      companyId,
+      title: "Paperclip mission",
+      level: "company",
+      status: "planned",
+      parentId: null,
     });
 
     await db.insert(agents).values({
@@ -229,8 +239,14 @@ describe("routine service live-execution coalescing", () => {
       {},
     );
 
-    return { companyId, agentId, issueSvc, projectId, routine, svc, wakeups };
+    return { companyId, agentId, issueSvc, projectId, rootGoalId, routine, svc, wakeups };
   }
+
+  it("defaults a routine to the company root goal when no explicit goal is provided", async () => {
+    const { rootGoalId, routine } = await seedFixture();
+
+    expect(routine.goalId).toBe(rootGoalId);
+  });
 
   it("creates a fresh execution issue when the previous routine issue is open but idle", async () => {
     const { companyId, routine, svc } = await seedFixture();
