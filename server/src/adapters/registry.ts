@@ -70,7 +70,7 @@ import {
   execute as hermesExecute,
   testEnvironment as hermesTestEnvironment,
   sessionCodec as hermesSessionCodec,
-} from "hermes-paperclip-adapter/server";
+} from "./hermes-local/index.js";
 import {
   agentConfigurationDoc as hermesAgentConfigurationDoc,
   models as hermesModels,
