@@ -1,7 +1,8 @@
 import { defineConfig } from "@playwright/test";
+import { preparePlaywrightE2eRuntime } from "./runtime";
 
-const PORT = Number(process.env.PAPERCLIP_E2E_PORT ?? 3100);
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+const runtime = preparePlaywrightE2eRuntime();
+const BASE_URL = runtime.baseUrl;
 
 export default defineConfig({
   testDir: ".",
@@ -20,12 +21,10 @@ export default defineConfig({
       use: { browserName: "chromium" },
     },
   ],
-  // The webServer directive starts `paperclipai run` before tests.
-  // Expects `pnpm paperclipai` to be runnable from repo root.
   webServer: {
-    command: `pnpm paperclipai run`,
+    command: runtime.command,
     url: `${BASE_URL}/api/health`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
     stdout: "pipe",
     stderr: "pipe",
