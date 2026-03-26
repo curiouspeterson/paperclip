@@ -1,5 +1,7 @@
 import type { AdapterExecutionResult } from "../types.js";
 
+export const DEFAULT_HERMES_LOCAL_MODEL = "gpt-5.4";
+export const DEFAULT_HERMES_LOCAL_PROVIDER = "codex";
 export const HERMES_TOOL_ONLY_EXIT_MESSAGE =
   "Hermes returned tool-call transcript output without a final assistant completion.";
 
@@ -16,6 +18,15 @@ function stripHermesTranscriptNoise(text: string): string {
     .replace(/<tool_result>\s*[\s\S]*?(?:<\/tool_result>|$)/gi, "\n")
     .replace(/^\s*<\/?(?:tool_call|tool_response|tool_result)>\s*$/gim, "")
     .trim();
+}
+
+export function normalizeHermesLocalPaperclipConfig(
+  value: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const next = value && typeof value === "object" && !Array.isArray(value) ? { ...value } : {};
+  next.model = DEFAULT_HERMES_LOCAL_MODEL;
+  next.provider = DEFAULT_HERMES_LOCAL_PROVIDER;
+  return next;
 }
 
 export function normalizeHermesLocalExecutionSummary(value: unknown): {

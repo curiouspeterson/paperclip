@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockHermesExecute = vi.hoisted(() => vi.fn());
 
@@ -14,6 +14,10 @@ vi.mock("hermes-paperclip-adapter/server", () => ({
 import { execute } from "../adapters/hermes-local/index.js";
 
 describe("Hermes local Paperclip wrapper", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("treats transcript-only Hermes output as an incomplete assistant completion", async () => {
     mockHermesExecute.mockResolvedValueOnce({
       exitCode: 0,
@@ -58,5 +62,51 @@ describe("Hermes local Paperclip wrapper", () => {
     });
     expect(result.sessionParams).toEqual({ sessionId: "hermes-session-1" });
     expect(result.sessionDisplayId).toBe("hermes-session-1");
+  });
+
+  it("forces Hermes runs onto the codex provider and gpt-5.4 model", async () => {
+    mockHermesExecute.mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      summary: "Completed work.",
+      provider: "codex",
+      model: "gpt-5.4",
+    });
+
+    await execute({
+      runId: "run-2",
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Hermes Agent",
+        adapterType: "hermes_local",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {
+        provider: "nous",
+        model: "Hermes-4-405B",
+        promptTemplate: "Work the issue.",
+      },
+      context: {},
+      onLog: async () => {},
+    });
+
+    expect(mockHermesExecute).toHaveBeenCalledTimes(1);
+    expect(mockHermesExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          provider: "codex",
+          model: "gpt-5.4",
+          promptTemplate: "Work the issue.",
+        }),
+      }),
+    );
   });
 });

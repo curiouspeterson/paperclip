@@ -10,10 +10,16 @@ import type {
   AdapterExecutionResult,
   AdapterSessionCodec,
 } from "../types.js";
-import { normalizeHermesLocalExecutionResult } from "./paperclip.js";
+import {
+  normalizeHermesLocalExecutionResult,
+  normalizeHermesLocalPaperclipConfig,
+} from "./paperclip.js";
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
-  const result = await hermesExecute(ctx);
+  const result = await hermesExecute({
+    ...ctx,
+    config: normalizeHermesLocalPaperclipConfig(ctx.config),
+  });
   return normalizeHermesLocalExecutionResult(result);
 }
 

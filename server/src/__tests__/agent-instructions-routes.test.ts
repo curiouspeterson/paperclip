@@ -315,4 +315,38 @@ describe("agent instructions bundle routes", () => {
     expect(res.body.adapterConfig.instructionsEntryFile).toBeUndefined();
     expect(res.body.adapterConfig.instructionsFilePath).toBeUndefined();
   });
+
+  it("forces Hermes agents onto the codex provider and gpt-5.4 model on patch", async () => {
+    mockAgentService.getById.mockResolvedValue({
+      ...makeAgent(),
+      adapterType: "hermes_local",
+      adapterConfig: {
+        provider: "nous",
+        model: "Hermes-4-405B",
+      },
+    });
+
+    const res = await request(await createApp())
+      .patch("/api/agents/11111111-1111-4111-8111-111111111111?companyId=company-1")
+      .send({
+        adapterConfig: {
+          provider: "nous",
+          model: "Hermes-4-405B",
+          promptTemplate: "Keep working.",
+        },
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(mockAgentService.update).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      expect.objectContaining({
+        adapterConfig: expect.objectContaining({
+          provider: "codex",
+          model: "gpt-5.4",
+          promptTemplate: "Keep working.",
+        }),
+      }),
+      expect.any(Object),
+    );
+  });
 });

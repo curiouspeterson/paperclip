@@ -16,6 +16,7 @@ import { isUuidLike, normalizeAgentUrlKey } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import { normalizeAgentPermissions } from "./agent-permissions.js";
 import { REDACTED_EVENT_VALUE, sanitizeRecord } from "../redaction.js";
+import { normalizeHermesLocalPaperclipConfig } from "../adapters/hermes-local/paperclip.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -199,12 +200,21 @@ export function agentService(db: Db) {
     };
   }
 
-  function normalizeAgentRow(row: typeof agents.$inferSelect) {
-    return withUrlKey({
-      ...row,
-      permissions: normalizeAgentPermissions(row.permissions, row.role),
-    });
-  }
+function normalizeAgentRow(row: typeof agents.$inferSelect) {
+  const adapterConfig =
+    row.adapterType === "hermes_local"
+      ? normalizeHermesLocalPaperclipConfig(
+          typeof row.adapterConfig === "object" && row.adapterConfig !== null && !Array.isArray(row.adapterConfig)
+            ? sanitizeRecord(row.adapterConfig as Record<string, unknown>)
+            : {},
+        )
+      : row.adapterConfig;
+  return withUrlKey({
+    ...row,
+    adapterConfig,
+    permissions: normalizeAgentPermissions(row.permissions, row.role),
+  });
+}
 
   async function getMonthlySpendByAgentIds(companyId: string, agentIds: string[]) {
     if (agentIds.length === 0) return new Map<string, number>();
