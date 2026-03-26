@@ -2,12 +2,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyDataDirOverride } from "../config/data-dir.js";
+import { restoreProcessEnv } from "./env-test-helpers.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
 describe("applyDataDirOverride", () => {
   beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
     delete process.env.PAPERCLIP_HOME;
     delete process.env.PAPERCLIP_CONFIG;
     delete process.env.PAPERCLIP_CONTEXT;
@@ -15,7 +16,7 @@ describe("applyDataDirOverride", () => {
   });
 
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
   });
 
   it("sets PAPERCLIP_HOME and isolated default config/context paths", () => {

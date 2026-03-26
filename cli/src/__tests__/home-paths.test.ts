@@ -7,12 +7,13 @@ import {
   resolvePaperclipHomeDir,
   resolvePaperclipInstanceId,
 } from "../config/home.js";
+import { restoreProcessEnv } from "./env-test-helpers.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
 describe("home path resolution", () => {
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
   });
 
   it("defaults to ~/.paperclip and default instance", () => {

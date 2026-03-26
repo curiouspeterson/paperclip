@@ -84,9 +84,9 @@ Required integration points:
 
 - real user row in `authUsers` for Board identity
 - `instance_user_roles` entry for Board admin authority
-- `company_memberships` integration for user-level task assignment and access
+- `company_memberships` integration for company-scoped board access, comments, and user-scoped task views
 
-This is required because user assignment paths validate active membership for `assigneeUserId`.
+This is required because authenticated board/user flows resolve real user principals for membership checks, read state, and other user-scoped surfaces even though new task assignment is agent-first.
 
 ## 7. Local Trusted -> Authenticated Claim Flow
 

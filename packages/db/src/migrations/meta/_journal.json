@@ -323,6 +323,13 @@
       "when": 1774209600000,
       "tag": "0045_cost_event_company_link_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1774483200000,
+      "tag": "0046_root_company_goal_backfill",
+      "breakpoints": true
     }
   ]
 }

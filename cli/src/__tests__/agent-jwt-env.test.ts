@@ -10,6 +10,7 @@ import {
   resolveAgentJwtEnvFile,
 } from "../config/env.js";
 import { agentJwtSecretCheck } from "../checks/agent-jwt-secret-check.js";
+import { restoreProcessEnv } from "./env-test-helpers.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -22,12 +23,12 @@ function tempConfigPath(): string {
 
 describe("agent jwt env helpers", () => {
   beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
     delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
   });
 
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
   });
 
   it("writes .env next to explicit config path", () => {

@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeContext } from "../client/context.js";
 import { resolveCommandContext } from "../commands/client/common.js";
+import { restoreProcessEnv } from "./env-test-helpers.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -14,14 +15,14 @@ function createTempPath(name: string): string {
 
 describe("resolveCommandContext", () => {
   beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
     delete process.env.PAPERCLIP_API_URL;
     delete process.env.PAPERCLIP_API_KEY;
     delete process.env.PAPERCLIP_COMPANY_ID;
   });
 
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
   });
 
   it("uses profile defaults when options/env are not provided", () => {

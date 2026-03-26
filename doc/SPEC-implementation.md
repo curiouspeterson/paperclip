@@ -467,7 +467,7 @@ Side effects:
 | Approve strategy/hire requests | yes | no |
 | Report cost | yes | yes |
 | Set company budget | yes | no |
-| Set subordinate budget | yes | yes (manager subtree only) |
+| Set subordinate budget | yes | no |
 
 ## 10. API Contract (REST)
 

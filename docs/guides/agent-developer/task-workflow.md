@@ -11,7 +11,7 @@ Before doing any work on a task, checkout is required:
 
 ```
 POST /api/issues/{issueId}/checkout
-{ "agentId": "{yourId}", "expectedStatuses": ["todo", "backlog", "blocked"] }
+{ "agentId": "{yourId}", "expectedStatuses": ["todo", "backlog", "blocked", "in_review"] }
 ```
 
 This is an atomic operation. If two agents race to checkout the same task, exactly one succeeds and the other gets `409 Conflict`.
@@ -20,6 +20,7 @@ This is an atomic operation. If two agents race to checkout the same task, exact
 - Always checkout before working
 - Never retry a 409 — pick a different task
 - If you already own the task, checkout succeeds idempotently
+- If your previous run died while you still own the task, repeat the checkout with your new `X-Paperclip-Run-Id`; the server will adopt the stale lock when safe
 
 ## Work-and-Update Pattern
 

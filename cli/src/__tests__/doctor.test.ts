@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { doctor } from "../commands/doctor.js";
 import { writeConfig } from "../config/store.js";
 import type { PaperclipConfig } from "../config/schema.js";
+import { restoreProcessEnv } from "./env-test-helpers.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -73,14 +74,14 @@ function createTempConfig(): string {
 
 describe("doctor", () => {
   beforeEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
     delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
     delete process.env.PAPERCLIP_SECRETS_MASTER_KEY;
     delete process.env.PAPERCLIP_SECRETS_MASTER_KEY_FILE;
   });
 
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreProcessEnv(ORIGINAL_ENV);
   });
 
   it("re-runs repairable checks so repaired failures do not remain blocking", async () => {

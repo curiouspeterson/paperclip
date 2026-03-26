@@ -169,4 +169,81 @@ describeEmbeddedPostgres("applyPendingMigrations", () => {
     },
     20_000,
   );
+
+  it(
+    "backfills a root company goal for legacy companies when migration 0046 is applied",
+    async () => {
+      const connectionString = await createTempDatabase();
+
+      await applyPendingMigrations(connectionString);
+
+      const legacyCompanyId = "11111111-1111-4111-8111-111111111111";
+      const sql = postgres(connectionString, { max: 1, onnotice: () => {} });
+      try {
+        await sql.unsafe(`
+          INSERT INTO "companies" (
+            "id",
+            "name",
+            "description",
+            "issue_prefix",
+            "require_board_approval_for_new_agents"
+          )
+          VALUES (
+            '${legacyCompanyId}',
+            'Legacy Company',
+            'Legacy company description',
+            'LEG',
+            false
+          )
+        `);
+
+        const migration0046Hash = await migrationHash("0046_root_company_goal_backfill.sql");
+        await sql.unsafe(
+          `DELETE FROM "drizzle"."__drizzle_migrations" WHERE hash = '${migration0046Hash}'`,
+        );
+      } finally {
+        await sql.end();
+      }
+
+      const pendingState = await inspectMigrations(connectionString);
+      expect(pendingState).toMatchObject({
+        status: "needsMigrations",
+        pendingMigrations: ["0046_root_company_goal_backfill.sql"],
+        reason: "pending-migrations",
+      });
+
+      await applyPendingMigrations(connectionString);
+
+      const verifySql = postgres(connectionString, { max: 1, onnotice: () => {} });
+      try {
+        const goals = await verifySql.unsafe<
+          Array<{
+            title: string;
+            description: string | null;
+            level: string;
+            status: string;
+            parent_id: string | null;
+          }>
+        >(
+          `
+            SELECT title, description, level, status, parent_id
+            FROM goals
+            WHERE company_id = '${legacyCompanyId}'
+          `,
+        );
+
+        expect(goals).toHaveLength(1);
+        expect(goals[0]).toMatchObject({
+          title: "Legacy Company",
+          description: "Legacy company description",
+          level: "company",
+          status: "planned",
+          parent_id: null,
+        });
+      } finally {
+        await verifySql.end();
+      }
+    },
+    20_000,
+  );
 });
