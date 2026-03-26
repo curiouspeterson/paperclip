@@ -177,13 +177,21 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return rawId;
   }
 
+  function hasRequestedHumanAssignee(value: unknown) {
+    return typeof value === "string" && value.trim().length > 0;
+  }
+
   async function resolveIssueProjectAndGoal(issue: {
     companyId: string;
     projectId: string | null;
     goalId: string | null;
   }) {
-    const projectPromise = issue.projectId ? projectsSvc.getById(issue.projectId) : Promise.resolve(null);
-    const directGoalPromise = issue.goalId ? goalsSvc.getById(issue.goalId) : Promise.resolve(null);
+    const projectPromise = issue.projectId
+      ? projectsSvc.getByIdForCompany(issue.companyId, issue.projectId)
+      : Promise.resolve(null);
+    const directGoalPromise = issue.goalId
+      ? goalsSvc.getByIdForCompany(issue.companyId, issue.goalId)
+      : Promise.resolve(null);
     const [project, directGoal] = await Promise.all([projectPromise, directGoalPromise]);
 
     if (directGoal) {
@@ -192,7 +200,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     const projectGoalId = project?.goalId ?? project?.goalIds[0] ?? null;
     if (projectGoalId) {
-      const projectGoal = await goalsSvc.getById(projectGoalId);
+      const projectGoal = await goalsSvc.getByIdForCompany(issue.companyId, projectGoalId);
       return { project, goal: projectGoal };
     }
 
@@ -346,7 +354,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     assertCompanyAccess(req, issue.companyId);
     const [{ project, goal }, ancestors, mentionedProjectIds, documentPayload] = await Promise.all([
       resolveIssueProjectAndGoal(issue),
-      svc.getAncestors(issue.id),
+      svc.getAncestors(issue.companyId, issue.id),
       svc.findMentionedProjectIds(issue.id),
       documentsSvc.getIssueDocumentPayload(issue),
     ]);
@@ -388,7 +396,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
 
     const [{ project, goal }, ancestors, commentCursor, wakeComment] = await Promise.all([
       resolveIssueProjectAndGoal(issue),
-      svc.getAncestors(issue.id),
+      svc.getAncestors(issue.companyId, issue.id),
       svc.getCommentCursor(issue.id),
       wakeCommentId ? svc.getComment(wakeCommentId) : null,
     ]);

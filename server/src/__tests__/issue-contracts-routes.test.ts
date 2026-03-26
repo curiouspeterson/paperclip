@@ -6,10 +6,13 @@ import { issueRoutes } from "../routes/issues.js";
 
 const mockIssueService = vi.hoisted(() => ({
   getById: vi.fn(),
+  create: vi.fn(),
   update: vi.fn(),
   checkout: vi.fn(),
   release: vi.fn(),
+  assertCheckoutOwner: vi.fn(),
   getAncestors: vi.fn(),
+  findMentionedAgents: vi.fn(),
   findMentionedProjectIds: vi.fn(),
   getCommentCursor: vi.fn(),
   addComment: vi.fn(),
@@ -33,13 +36,28 @@ const mockAgentService = vi.hoisted(() => ({
 }));
 
 const mockProjectService = vi.hoisted(() => ({
+  getById: vi.fn(),
   getByIdForCompany: vi.fn(),
   listByIds: vi.fn(),
 }));
 
 const mockGoalService = vi.hoisted(() => ({
+  getById: vi.fn(),
   getByIdForCompany: vi.fn(),
   getDefaultCompanyGoal: vi.fn(),
+}));
+
+const mockDocumentService = vi.hoisted(() => ({
+  getIssueDocumentPayload: vi.fn(),
+  upsertIssueDocument: vi.fn(),
+}));
+
+const mockWorkProductService = vi.hoisted(() => ({
+  listForIssue: vi.fn(),
+  getById: vi.fn(),
+  createForIssue: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
 }));
 
 const mockExecutionWorkspaceService = vi.hoisted(() => ({
@@ -60,7 +78,8 @@ const RUN_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 vi.mock("../services/index.js", () => ({
   accessService: () => mockAccessService,
   agentService: () => mockAgentService,
-  documentService: () => ({ getIssueDocumentPayload: vi.fn(async () => ({})) }),
+  budgetService: () => mockBudgetService,
+  documentService: () => mockDocumentService,
   executionWorkspaceService: () => mockExecutionWorkspaceService,
   goalService: () => mockGoalService,
   heartbeatService: () => mockHeartbeatService,
@@ -69,7 +88,7 @@ vi.mock("../services/index.js", () => ({
   logActivity: mockLogActivity,
   projectService: () => mockProjectService,
   routineService: () => ({ syncRunStatusForIssue: vi.fn(async () => undefined) }),
-  workProductService: () => ({ listForIssue: vi.fn(async () => []) }),
+  workProductService: () => mockWorkProductService,
 }));
 
 function createApp(actor: Record<string, unknown>) {
@@ -103,14 +122,37 @@ function makeIssue(overrides?: Partial<Record<string, unknown>>) {
 
 describe("issue contract routes", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockIssueService.create.mockResolvedValue(makeIssue());
+    mockIssueService.assertCheckoutOwner.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      status: "in_progress",
+      assigneeAgentId: AGENT_ONE_ID,
+      checkoutRunId: RUN_ID,
+      adoptedFromRunId: null,
+    });
+    mockIssueService.findMentionedAgents.mockResolvedValue([]);
     mockIssueService.findMentionedProjectIds.mockResolvedValue([]);
     mockIssueService.getCommentCursor.mockResolvedValue(null);
     mockIssueService.getAncestors.mockResolvedValue([]);
+    mockHeartbeatService.wakeup.mockResolvedValue(undefined);
+    mockHeartbeatService.reportRunActivity.mockResolvedValue(undefined);
+    mockHeartbeatService.cancelRun.mockResolvedValue(null);
+    mockHeartbeatService.getRun.mockResolvedValue(null);
+    mockHeartbeatService.getActiveRunForAgent.mockResolvedValue(null);
     mockProjectService.listByIds.mockResolvedValue([]);
+    mockProjectService.getById.mockResolvedValue(null);
     mockProjectService.getByIdForCompany.mockResolvedValue(null);
+    mockGoalService.getById.mockResolvedValue(null);
     mockGoalService.getByIdForCompany.mockResolvedValue(null);
     mockGoalService.getDefaultCompanyGoal.mockResolvedValue(null);
+    mockDocumentService.getIssueDocumentPayload.mockResolvedValue({});
+    mockDocumentService.upsertIssueDocument.mockResolvedValue(null);
+    mockWorkProductService.listForIssue.mockResolvedValue([]);
+    mockWorkProductService.getById.mockResolvedValue(null);
+    mockWorkProductService.createForIssue.mockResolvedValue(null);
+    mockWorkProductService.update.mockResolvedValue(null);
+    mockWorkProductService.remove.mockResolvedValue(null);
     mockExecutionWorkspaceService.getByIdForCompany.mockResolvedValue(null);
     mockBudgetService.getInvocationBlock.mockResolvedValue(null);
     mockAgentService.getById.mockResolvedValue({
@@ -184,7 +226,9 @@ describe("issue contract routes", () => {
       .send({ title: "Updated title" });
 
     expect(res.status).toBe(200);
-    expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", { title: "Updated title" });
+    expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", {
+      title: "Updated title",
+    });
   });
 
   it("scopes issue detail hydration to the issue company", async () => {

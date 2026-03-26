@@ -20,7 +20,11 @@ import {
   projectWorkspaces,
   projects,
 } from "@paperclipai/db";
-import { extractAgentMentionIds, extractProjectMentionIds } from "@paperclipai/shared";
+import {
+  extractAgentMentionIds,
+  extractProjectMentionIds,
+  ISSUE_CHECKOUT_EXPECTED_STATUSES,
+} from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import {
   defaultIssueExecutionWorkspaceSettingsForProject,
@@ -35,6 +39,7 @@ import { getDefaultCompanyGoal } from "./goals.js";
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const ISSUE_CHECKOUT_ALLOWED_STATUS_SET = new Set<string>(ISSUE_CHECKOUT_EXPECTED_STATUSES);
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
+const ISSUE_GOAL_TRACE_ERROR = "Issue must trace to a goal via goalId, parentId, projectId, or a company goal";
 
 function assertTransition(from: string, to: string) {
   if (!ALL_ISSUE_STATUSES.includes(to)) {
@@ -834,6 +839,9 @@ export function issueService(db: Db) {
       if (data.assigneeAgentId && data.assigneeUserId) {
         throw unprocessable("Issue can only have one assignee");
       }
+      if (hasRequestedHumanAssignee(data.assigneeUserId)) {
+        throw unprocessable("Human assignees are no longer supported for new issue assignments");
+      }
       if (data.assigneeAgentId) {
         await assertAssignableAgent(companyId, data.assigneeAgentId);
       }
@@ -860,7 +868,10 @@ export function issueService(db: Db) {
       }
       return db.transaction(async (tx) => {
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, companyId);
-        const projectGoalId = await getProjectDefaultGoalId(tx, companyId, issueData.projectId);
+        const [projectGoalId, parentGoalId] = await Promise.all([
+          getProjectDefaultGoalId(tx, companyId, issueData.projectId),
+          getParentIssueGoalId(tx, companyId, issueData.parentId),
+        ]);
         let executionWorkspaceSettings =
           (issueData.executionWorkspaceSettings as Record<string, unknown> | null | undefined) ?? null;
         if (executionWorkspaceSettings == null && issueData.projectId) {
@@ -906,15 +917,21 @@ export function issueService(db: Db) {
         const issueNumber = company.issueCounter;
         const identifier = `${company.issuePrefix}-${issueNumber}`;
 
+        const resolvedGoalId = resolveIssueGoalId({
+          projectId: issueData.projectId,
+          goalId: issueData.goalId,
+          projectGoalId,
+          parentGoalId,
+          defaultGoalId: defaultCompanyGoal?.id ?? null,
+        });
+        if (!resolvedGoalId) {
+          throw unprocessable(ISSUE_GOAL_TRACE_ERROR);
+        }
+
         const values = {
           ...issueData,
           originKind: issueData.originKind ?? "manual",
-          goalId: resolveIssueGoalId({
-            projectId: issueData.projectId,
-            goalId: issueData.goalId,
-            projectGoalId,
-            defaultGoalId: defaultCompanyGoal?.id ?? null,
-          }),
+          goalId: resolvedGoalId,
           ...(projectWorkspaceId ? { projectWorkspaceId } : {}),
           ...(executionWorkspaceSettings ? { executionWorkspaceSettings } : {}),
           companyId,
@@ -969,6 +986,10 @@ export function issueService(db: Db) {
         issueData.assigneeAgentId !== undefined ? issueData.assigneeAgentId : existing.assigneeAgentId;
       const nextAssigneeUserId =
         issueData.assigneeUserId !== undefined ? issueData.assigneeUserId : existing.assigneeUserId;
+      const assigneeChanged =
+        (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
+        (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId);
+      const nextStatus = issueData.status ?? (existing.status === "in_progress" && assigneeChanged ? "todo" : undefined);
 
       if (nextAssigneeAgentId && nextAssigneeUserId) {
         throw unprocessable("Issue can only have one assignee");
@@ -1008,25 +1029,26 @@ export function issueService(db: Db) {
         }
       }
 
-      applyStatusSideEffects(issueData.status, patch);
-      if (issueData.status && issueData.status !== "done") {
+      if (nextStatus !== undefined) {
+        patch.status = nextStatus;
+      }
+
+      applyStatusSideEffects(nextStatus, patch);
+      if (nextStatus && nextStatus !== "done") {
         patch.completedAt = null;
       }
-      if (issueData.status && issueData.status !== "cancelled") {
+      if (nextStatus && nextStatus !== "cancelled") {
         patch.cancelledAt = null;
       }
-      if (issueData.status && issueData.status !== "in_progress") {
+      if (nextStatus && nextStatus !== "in_progress") {
         patch.checkoutRunId = null;
         patch.executionRunId = null;
         patch.executionLockedAt = null;
         patch.executionAgentNameKey = null;
       }
-      if (
-        (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
-        (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId)
-      ) {
+      if (assigneeChanged) {
         patch.checkoutRunId = null;
-        if (issueData.status === undefined || issueData.status !== "in_progress") {
+        if (nextStatus === undefined || nextStatus !== "in_progress") {
           patch.executionRunId = null;
           patch.executionLockedAt = null;
           patch.executionAgentNameKey = null;

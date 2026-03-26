@@ -119,6 +119,13 @@ export const ISSUE_STATUSES = [
 ] as const;
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
 
+export const ISSUE_CHECKOUT_EXPECTED_STATUSES = [
+  "todo",
+  "backlog",
+  "blocked",
+  "in_review",
+] as const satisfies readonly IssueStatus[];
+
 export const ISSUE_PRIORITIES = ["critical", "high", "medium", "low"] as const;
 export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
 

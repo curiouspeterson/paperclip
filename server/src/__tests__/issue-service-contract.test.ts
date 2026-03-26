@@ -215,7 +215,7 @@ describe("issue service contracts", () => {
       parentId: null,
     });
 
-    const { issue } = await issueService(db).create(companyId, {
+    const issue = await issueService(db).create(companyId, {
       title: "Traceable via root goal",
       status: "todo",
       priority: "medium",
@@ -258,7 +258,7 @@ describe("issue service contracts", () => {
       priority: "medium",
     } as any);
 
-    expect(created.issue.goalId).toBe(parentGoalId);
+    expect(created.goalId).toBe(parentGoalId);
   });
 
   it("rejects a foreign goal on update", async () => {
