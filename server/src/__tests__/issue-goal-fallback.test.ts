@@ -37,7 +37,7 @@ describe("issue goal fallback", () => {
     ).toBe("goal-2");
   });
 
-  it("does not force a company goal when the project has no goal", () => {
+  it("falls back to the company goal when the project has no goal", () => {
     expect(
       resolveIssueGoalId({
         projectId: "project-1",
@@ -45,7 +45,19 @@ describe("issue goal fallback", () => {
         projectGoalId: null,
         defaultGoalId: "goal-1",
       }),
-    ).toBeNull();
+    ).toBe("goal-1");
+  });
+
+  it("falls back to the parent goal before the company goal when the project has no goal", () => {
+    expect(
+      resolveIssueGoalId({
+        projectId: "project-1",
+        goalId: null,
+        projectGoalId: null,
+        parentGoalId: "goal-parent",
+        defaultGoalId: "goal-1",
+      }),
+    ).toBe("goal-parent");
   });
 
   it("backfills the company goal on update for legacy no-project issues", () => {

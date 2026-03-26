@@ -224,6 +224,30 @@ describe("cost routes", () => {
     expect(res.status).toBe(403);
     expect(mockAgentService.update).not.toHaveBeenCalled();
   });
+
+  it("rejects agent budget updates from the agent actor, including self-service changes", async () => {
+    mockAgentService.getById.mockResolvedValue({
+      id: "agent-1",
+      companyId: "company-1",
+      name: "Budget Agent",
+      budgetMonthlyCents: 100,
+      spentMonthlyCents: 0,
+    });
+    const app = createAppWithActor({
+      type: "agent",
+      agentId: "agent-1",
+      companyId: "company-1",
+      source: "api_key",
+    });
+
+    const res = await request(app)
+      .patch("/api/agents/agent-1/budgets")
+      .send({ budgetMonthlyCents: 2500 });
+
+    expect(res.status).toBe(403);
+    expect(mockAgentService.update).not.toHaveBeenCalled();
+    expect(mockBudgetService.upsertPolicy).not.toHaveBeenCalled();
+  });
 });
 
 function createCostServiceDb(selectResults: unknown[]) {
@@ -311,5 +335,65 @@ describe("costService.createEvent", () => {
         occurredAt: new Date(),
       }),
     ).rejects.toThrow(/project does not belong to company/i);
+  });
+
+  it("rejects same-company issue links whose project and goal do not match the provided attribution", async () => {
+    const db = createCostServiceDb([
+      [{ id: "agent-1", companyId: "company-1" }],
+      [{ id: "issue-1", companyId: "company-1", projectId: "project-1", goalId: "goal-1" }],
+      [{ id: "project-2", companyId: "company-1" }],
+      [{ id: "goal-2", companyId: "company-1" }],
+    ]);
+
+    const service = costService(db as any);
+
+    await expect(
+      service.createEvent("company-1", {
+        agentId: "agent-1",
+        issueId: "issue-1",
+        projectId: "project-2",
+        goalId: "goal-2",
+        heartbeatRunId: null,
+        billingCode: null,
+        provider: "openai",
+        biller: "openai",
+        billingType: "unknown",
+        model: "gpt-test",
+        inputTokens: 1,
+        cachedInputTokens: 0,
+        outputTokens: 1,
+        costCents: 1,
+        occurredAt: new Date(),
+      }),
+    ).rejects.toThrow(/project must match linked issue/i);
+  });
+
+  it("rejects heartbeat run links that belong to another agent in the same company", async () => {
+    const db = createCostServiceDb([
+      [{ id: "agent-1", companyId: "company-1" }],
+      [{ id: "run-1", companyId: "company-1", agentId: "agent-2" }],
+    ]);
+
+    const service = costService(db as any);
+
+    await expect(
+      service.createEvent("company-1", {
+        agentId: "agent-1",
+        issueId: null,
+        projectId: null,
+        goalId: null,
+        heartbeatRunId: "run-1",
+        billingCode: null,
+        provider: "openai",
+        biller: "openai",
+        billingType: "unknown",
+        model: "gpt-test",
+        inputTokens: 1,
+        cachedInputTokens: 0,
+        outputTokens: 1,
+        costCents: 1,
+        occurredAt: new Date(),
+      }),
+    ).rejects.toThrow(/heartbeat run must belong to the same agent/i);
   });
 });

@@ -106,6 +106,7 @@ describeEmbeddedPostgres("routine routes end-to-end", () => {
     await db.delete(principalPermissionGrants);
     await db.delete(companyMemberships);
     await db.delete(routines);
+    await db.delete(goals);
     await db.delete(projects);
     await db.delete(agents);
     await db.delete(companies);

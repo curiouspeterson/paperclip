@@ -8,7 +8,7 @@ export function resolveIssueGoalId(input: {
   defaultGoalId: MaybeId;
 }): string | null {
   if (input.goalId) return input.goalId;
-  if (input.projectId) return input.projectGoalId ?? null;
+  if (input.projectId && input.projectGoalId) return input.projectGoalId;
   if (input.parentGoalId) return input.parentGoalId;
   return input.defaultGoalId ?? null;
 }
@@ -47,7 +47,7 @@ export function resolveNextIssueGoalId(input: {
     targetProjectGoalId: MaybeId,
     targetParentGoalId: MaybeId,
   ) => {
-    if (targetProjectId) return targetProjectGoalId ?? null;
+    if (targetProjectId && targetProjectGoalId) return targetProjectGoalId;
     if (targetParentGoalId) return targetParentGoalId ?? null;
     return input.defaultGoalId ?? null;
   };

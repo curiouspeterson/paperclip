@@ -1061,16 +1061,14 @@ export function issueService(db: Db) {
           projectGoalId: nextProjectGoalId,
           parentId: issueData.parentId,
           parentGoalId: nextParentGoalId,
-          defaultGoalId: defaultCompanyGoal?.status === "active" ? defaultCompanyGoal.id : null,
+          defaultGoalId: defaultCompanyGoal?.id ?? null,
         });
         const traceInputsChanged =
           issueData.projectId !== undefined ||
           issueData.goalId !== undefined ||
           issueData.parentId !== undefined;
         if (!nextResolvedGoalId && (traceInputsChanged || existing.goalId != null)) {
-          throw unprocessable(
-            "Issue must trace to a goal via goalId, parentId, projectId, or an active company goal",
-          );
+          throw unprocessable(ISSUE_GOAL_TRACE_ERROR);
         }
         patch.goalId = nextResolvedGoalId;
         const updated = await tx
@@ -1168,6 +1166,7 @@ export function issueService(db: Db) {
           and(
             eq(issues.id, id),
             inArray(issues.status, expectedStatuses),
+            isNull(issues.assigneeUserId),
             or(isNull(issues.assigneeAgentId), sameRunAssigneeCondition),
             executionLockCondition,
           ),
@@ -1185,6 +1184,7 @@ export function issueService(db: Db) {
           id: issues.id,
           status: issues.status,
           assigneeAgentId: issues.assigneeAgentId,
+          assigneeUserId: issues.assigneeUserId,
           checkoutRunId: issues.checkoutRunId,
           executionRunId: issues.executionRunId,
         })
@@ -1257,6 +1257,7 @@ export function issueService(db: Db) {
         issueId: current.id,
         status: current.status,
         assigneeAgentId: current.assigneeAgentId,
+        assigneeUserId: current.assigneeUserId,
         checkoutRunId: current.checkoutRunId,
         executionRunId: current.executionRunId,
       });

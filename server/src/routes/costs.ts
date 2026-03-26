@@ -290,12 +290,9 @@ export function costRoutes(db: Db) {
     }
 
     assertCompanyAccess(req, agent.companyId);
-
-    if (req.actor.type === "agent") {
-      if (req.actor.agentId !== agentId) {
-        res.status(403).json({ error: "Agent can only change its own budget" });
-        return;
-      }
+    if (req.actor.type !== "board") {
+      res.status(403).json({ error: "Only board can change agent budgets" });
+      return;
     }
 
     const updated = await agents.update(agentId, { budgetMonthlyCents: req.body.budgetMonthlyCents });
