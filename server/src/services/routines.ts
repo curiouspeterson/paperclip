@@ -27,6 +27,8 @@ import type {
 } from "@paperclipai/shared";
 import { conflict, forbidden, notFound, unauthorized, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
+import { getDefaultCompanyGoal } from "./goals.js";
+import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallback.js";
 import { issueService } from "./issues.js";
 import { secretService } from "./secrets.js";
 import { parseCron, validateCron } from "./cron.js";
@@ -38,6 +40,7 @@ const OPEN_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blo
 const LIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running"];
 const TERMINAL_ISSUE_STATUSES = new Set(["done", "cancelled"]);
 const MAX_CATCH_UP_RUNS = 25;
+const ROUTINE_GOAL_TRACE_ERROR = "Routine must trace to a goal via goalId, parentIssueId, projectId, or a company goal";
 const WEEKDAY_INDEX: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -206,6 +209,36 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
       .then((rows) => rows[0] ?? null);
     if (!parentIssue) throw notFound("Parent issue not found");
     if (parentIssue.companyId !== companyId) throw unprocessable("Parent issue must belong to same company");
+  }
+
+  async function getProjectDefaultGoalId(
+    reader: Pick<Db, "select">,
+    companyId: string,
+    projectId: string | null | undefined,
+  ) {
+    if (!projectId) return null;
+    const row = await reader
+      .select({ goalId: projects.goalId })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.companyId, companyId)))
+      .then((rows) => rows[0] ?? null);
+    return row?.goalId ?? null;
+  }
+
+  async function getParentIssueGoalId(
+    reader: Pick<Db, "select">,
+    companyId: string,
+    parentIssueId: string | null | undefined,
+  ) {
+    if (!parentIssueId) return null;
+    const row = await reader
+      .select({ goalId: issues.goalId, projectId: issues.projectId })
+      .from(issues)
+      .where(and(eq(issues.id, parentIssueId), eq(issues.companyId, companyId)))
+      .then((rows) => rows[0] ?? null);
+    if (!row) return null;
+    if (row.goalId) return row.goalId;
+    return getProjectDefaultGoalId(reader, companyId, row.projectId);
   }
 
   async function listTriggersForRoutineIds(companyId: string, routineIds: string[]) {
@@ -825,12 +858,27 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
       await assertAssignableAgent(companyId, input.assigneeAgentId);
       if (input.goalId) await assertGoal(companyId, input.goalId);
       if (input.parentIssueId) await assertParentIssue(companyId, input.parentIssueId);
+      const defaultCompanyGoal = await getDefaultCompanyGoal(db, companyId);
+      const [projectGoalId, parentGoalId] = await Promise.all([
+        getProjectDefaultGoalId(db, companyId, input.projectId),
+        getParentIssueGoalId(db, companyId, input.parentIssueId),
+      ]);
+      const resolvedGoalId = resolveIssueGoalId({
+        projectId: input.projectId,
+        goalId: input.goalId,
+        projectGoalId,
+        parentGoalId,
+        defaultGoalId: defaultCompanyGoal?.id ?? null,
+      });
+      if (!resolvedGoalId) {
+        throw unprocessable(ROUTINE_GOAL_TRACE_ERROR);
+      }
       const [created] = await db
         .insert(routines)
         .values({
           companyId,
           projectId: input.projectId,
-          goalId: input.goalId ?? null,
+          goalId: resolvedGoalId,
           parentIssueId: input.parentIssueId ?? null,
           title: input.title,
           description: input.description ?? null,
@@ -857,11 +905,43 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
       if (patch.assigneeAgentId) await assertAssignableAgent(existing.companyId, nextAssigneeAgentId);
       if (patch.goalId) await assertGoal(existing.companyId, patch.goalId);
       if (patch.parentIssueId) await assertParentIssue(existing.companyId, patch.parentIssueId);
+      const defaultCompanyGoal = await getDefaultCompanyGoal(db, existing.companyId);
+      const [currentProjectGoalId, nextProjectGoalId] = await Promise.all([
+        getProjectDefaultGoalId(db, existing.companyId, existing.projectId),
+        getProjectDefaultGoalId(db, existing.companyId, nextProjectId),
+      ]);
+      const [currentParentGoalId, nextParentGoalId] = await Promise.all([
+        getParentIssueGoalId(db, existing.companyId, existing.parentIssueId),
+        getParentIssueGoalId(
+          db,
+          existing.companyId,
+          patch.parentIssueId !== undefined ? patch.parentIssueId : existing.parentIssueId,
+        ),
+      ]);
+      const nextResolvedGoalId = resolveNextIssueGoalId({
+        currentProjectId: existing.projectId,
+        currentGoalId: existing.goalId,
+        currentProjectGoalId,
+        currentParentGoalId,
+        projectId: patch.projectId,
+        goalId: patch.goalId,
+        projectGoalId: nextProjectGoalId,
+        parentId: patch.parentIssueId,
+        parentGoalId: nextParentGoalId,
+        defaultGoalId: defaultCompanyGoal?.id ?? null,
+      });
+      const traceInputsChanged =
+        patch.projectId !== undefined ||
+        patch.goalId !== undefined ||
+        patch.parentIssueId !== undefined;
+      if (!nextResolvedGoalId && (traceInputsChanged || existing.goalId != null)) {
+        throw unprocessable(ROUTINE_GOAL_TRACE_ERROR);
+      }
       const [updated] = await db
         .update(routines)
         .set({
           projectId: nextProjectId,
-          goalId: patch.goalId === undefined ? existing.goalId : patch.goalId,
+          goalId: nextResolvedGoalId,
           parentIssueId: patch.parentIssueId === undefined ? existing.parentIssueId : patch.parentIssueId,
           title: patch.title ?? existing.title,
           description: patch.description === undefined ? existing.description : patch.description,

@@ -74,11 +74,21 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
 
       if (data.issueId) {
         const issue = await db
-          .select({ companyId: issues.companyId })
+          .select({
+            companyId: issues.companyId,
+            projectId: issues.projectId,
+            goalId: issues.goalId,
+          })
           .from(issues)
           .where(eq(issues.id, data.issueId))
           .then((rows) => rows[0] ?? null);
         await assertLinkedRecordCompany(companyId, "Issue", issue?.companyId);
+        if (data.projectId && issue?.projectId && issue.projectId !== data.projectId) {
+          throw unprocessable("Project must match linked issue");
+        }
+        if (data.goalId && issue?.goalId && issue.goalId !== data.goalId) {
+          throw unprocessable("Goal must match linked issue");
+        }
       }
 
       if (data.projectId) {
@@ -101,11 +111,14 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
 
       if (data.heartbeatRunId) {
         const run = await db
-          .select({ companyId: heartbeatRuns.companyId })
+          .select({ companyId: heartbeatRuns.companyId, agentId: heartbeatRuns.agentId })
           .from(heartbeatRuns)
           .where(eq(heartbeatRuns.id, data.heartbeatRunId))
           .then((rows) => rows[0] ?? null);
         await assertLinkedRecordCompany(companyId, "Heartbeat run", run?.companyId);
+        if (run?.agentId && run.agentId !== data.agentId) {
+          throw unprocessable("Heartbeat run must belong to the same agent");
+        }
       }
 
       const event = await db
@@ -387,7 +400,7 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         .orderBy(activityLog.runId, issues.projectId, desc(activityLog.createdAt))
         .as("run_project_links");
 
-      const effectiveProjectId = sql<string | null>`coalesce(${costEvents.projectId}, ${runProjectLinks.projectId})`;
+      const effectiveProjectId = sql<string | null>`coalesce(${runProjectLinks.projectId}, ${costEvents.projectId})`;
       const conditions: ReturnType<typeof eq>[] = [eq(costEvents.companyId, companyId)];
       if (range?.from) conditions.push(gte(costEvents.occurredAt, range.from));
       if (range?.to) conditions.push(lte(costEvents.occurredAt, range.to));

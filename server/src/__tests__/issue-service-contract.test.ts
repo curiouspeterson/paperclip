@@ -983,6 +983,37 @@ describe("issue service contracts", () => {
     expect(checkedOut?.blockerDetails).toBeNull();
   });
 
+  it("rejects checkout when the issue is assigned to a user", async () => {
+    const companyId = await seedCompany("Alpha");
+    const agentId = await seedAgent(companyId);
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const now = new Date("2026-03-23T12:00:00.000Z");
+
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      status: "running",
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Human-owned issue",
+      status: "todo",
+      priority: "medium",
+      assigneeUserId: "user-1",
+    });
+
+    await expect(
+      issueService(db).checkout(issueId, agentId, ["todo"], runId),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
   it.each([
     { status: "done", timestampField: "completedAt" as const },
     { status: "cancelled", timestampField: "cancelledAt" as const },

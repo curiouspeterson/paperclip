@@ -112,6 +112,7 @@ describe("routine service live-execution coalescing", () => {
     await db.delete(companySecrets);
     await db.delete(heartbeatRuns);
     await db.delete(issues);
+    await db.delete(goals);
     await db.delete(projects);
     await db.delete(agents);
     await db.delete(companies);

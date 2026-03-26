@@ -46,6 +46,7 @@ const MAX_OPEN_DELEGATED_CHILDREN_PER_PARENT = 20;
 const MAX_RECENT_DELEGATED_CHILDREN_PER_PARENT = 5;
 const DELEGATED_CHILD_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const DELEGATED_CHILD_EXECUTION_BLOCKER_TYPE = "delegated_child_execution";
+const ISSUE_GOAL_TRACE_ERROR = "Issue must trace to a goal via goalId, parentId, projectId, or a company goal";
 
 function normalizeDelegatedIssueTitle(value: string | null | undefined) {
   return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -1188,12 +1189,10 @@ export function issueService(db: Db) {
             goalId: issueData.goalId,
             projectGoalId,
             parentGoalId,
-            defaultGoalId: defaultCompanyGoal?.status === "active" ? defaultCompanyGoal.id : null,
+            defaultGoalId: defaultCompanyGoal?.id ?? null,
           });
           if (!resolvedGoalId) {
-            throw unprocessable(
-              "Issue must trace to a goal via goalId, parentId, projectId, or an active company goal",
-            );
+            throw unprocessable(ISSUE_GOAL_TRACE_ERROR);
           }
           const delegationKey = resolveDelegationKey({
             parentId: issueData.parentId ?? null,
@@ -1475,13 +1474,13 @@ export function issueService(db: Db) {
           getParentIssueGoalId(db, row.companyId, row.parentId),
           getDefaultCompanyGoal(db, row.companyId),
         ]);
-        const resolvedGoalId = resolveIssueGoalId({
-          projectId: row.projectId,
-          goalId: row.goalId,
-          projectGoalId,
-          parentGoalId,
-          defaultGoalId: defaultCompanyGoal?.status === "active" ? defaultCompanyGoal.id : null,
-        });
+          const resolvedGoalId = resolveIssueGoalId({
+            projectId: row.projectId,
+            goalId: row.goalId,
+            projectGoalId,
+            parentGoalId,
+            defaultGoalId: defaultCompanyGoal?.id ?? null,
+          });
         return {
           ...row,
           resolvedGoalId,
@@ -1689,16 +1688,14 @@ export function issueService(db: Db) {
           projectGoalId: nextProjectGoalId,
           parentId: issueData.parentId,
           parentGoalId: nextParentGoalId,
-          defaultGoalId: defaultCompanyGoal?.status === "active" ? defaultCompanyGoal.id : null,
+          defaultGoalId: defaultCompanyGoal?.id ?? null,
         });
         const traceInputsChanged =
           issueData.projectId !== undefined ||
           issueData.goalId !== undefined ||
           issueData.parentId !== undefined;
         if (!nextResolvedGoalId && (traceInputsChanged || existing.goalId != null)) {
-          throw unprocessable(
-            "Issue must trace to a goal via goalId, parentId, projectId, or an active company goal",
-          );
+          throw unprocessable(ISSUE_GOAL_TRACE_ERROR);
         }
         patch.goalId = nextResolvedGoalId;
         const updated = await tx
@@ -1824,6 +1821,7 @@ export function issueService(db: Db) {
           and(
             eq(issues.id, id),
             inArray(issues.status, expectedStatuses),
+            isNull(issues.assigneeUserId),
             or(isNull(issues.assigneeAgentId), sameRunAssigneeCondition),
             executionLockCondition,
           ),
@@ -1841,6 +1839,7 @@ export function issueService(db: Db) {
           id: issues.id,
           status: issues.status,
           assigneeAgentId: issues.assigneeAgentId,
+          assigneeUserId: issues.assigneeUserId,
           checkoutRunId: issues.checkoutRunId,
           executionRunId: issues.executionRunId,
         })
@@ -1913,6 +1912,7 @@ export function issueService(db: Db) {
         issueId: current.id,
         status: current.status,
         assigneeAgentId: current.assigneeAgentId,
+        assigneeUserId: current.assigneeUserId,
         checkoutRunId: current.checkoutRunId,
         executionRunId: current.executionRunId,
       });

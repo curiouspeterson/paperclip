@@ -1351,6 +1351,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
     if (req.actor.type === "board") {
       await assertCanAssignTasks(req, issue.companyId);
     }
+    if (issue.assigneeUserId) {
+      res.status(409).json({ error: "User-assigned issues cannot be checked out by agents" });
+      return;
+    }
 
     const invocationBlock = await budgets.getInvocationBlock(issue.companyId, req.body.agentId, {
       issueId: issue.id,
