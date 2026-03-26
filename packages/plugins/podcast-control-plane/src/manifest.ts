@@ -10,6 +10,8 @@ const manifest: PaperclipPluginManifestV1 = {
   author: "Paperclip",
   categories: ["ui", "automation"],
   capabilities: [
+    "plugin.state.read",
+    "plugin.state.write",
     "instance.settings.register",
     "ui.page.register",
     "ui.detailTab.register",

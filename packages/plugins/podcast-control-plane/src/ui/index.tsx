@@ -1,9 +1,20 @@
-import type {
-  PluginDetailTabProps,
-  PluginPageProps,
-  PluginSettingsPageProps,
-  PluginWidgetProps,
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  usePluginAction,
+  usePluginData,
+  usePluginToast,
+  type PluginDetailTabProps,
+  type PluginPageProps,
+  type PluginSettingsPageProps,
+  type PluginWidgetProps,
 } from "@paperclipai/plugin-sdk/ui";
+import { ACTION_KEYS, DATA_KEYS } from "../constants.js";
+import {
+  WORKFLOW_STATUSES,
+  WORKFLOW_TEMPLATES,
+  type PodcastWorkflowStatus,
+  type PodcastWorkflowSummary,
+} from "../workflows.js";
 
 const panelStyle = {
   display: "grid",
@@ -18,6 +29,122 @@ const metaGridStyle = {
   display: "grid",
   gap: "0.5rem",
 } as const;
+
+const formGridStyle = {
+  display: "grid",
+  gap: "0.75rem",
+} as const;
+
+const cardListStyle = {
+  display: "grid",
+  gap: "0.75rem",
+} as const;
+
+const rowStyle = {
+  display: "flex",
+  gap: "0.5rem",
+  alignItems: "center",
+  flexWrap: "wrap",
+} as const;
+
+const fieldStyle = {
+  display: "grid",
+  gap: "0.35rem",
+} as const;
+
+const inputStyle = {
+  width: "100%",
+  borderRadius: "0.65rem",
+  border: "1px solid rgba(15, 23, 42, 0.16)",
+  padding: "0.65rem 0.8rem",
+  font: "inherit",
+  background: "rgba(255, 255, 255, 0.96)",
+} as const;
+
+const textareaStyle = {
+  ...inputStyle,
+  minHeight: "5.5rem",
+  resize: "vertical" as const,
+} as const;
+
+const buttonStyle = {
+  borderRadius: "0.65rem",
+  border: "1px solid rgba(15, 23, 42, 0.16)",
+  padding: "0.65rem 0.9rem",
+  font: "inherit",
+  background: "rgba(15, 23, 42, 0.06)",
+  cursor: "pointer",
+} as const;
+
+const primaryButtonStyle = {
+  ...buttonStyle,
+  background: "rgba(15, 118, 110, 0.12)",
+  border: "1px solid rgba(13, 148, 136, 0.35)",
+} as const;
+
+const dangerButtonStyle = {
+  ...buttonStyle,
+  background: "rgba(239, 68, 68, 0.08)",
+  border: "1px solid rgba(239, 68, 68, 0.24)",
+} as const;
+
+type WorkflowTemplatesData = {
+  templates: Array<{
+    key: string;
+    displayName: string;
+    description: string;
+  }>;
+};
+
+type WorkflowListData = {
+  workflows: PodcastWorkflowSummary[];
+  total: number;
+};
+
+type WorkflowDetailResult = {
+  workflow: PodcastWorkflowSummary | null;
+};
+
+type WorkflowActionResult = {
+  workflow: PodcastWorkflowSummary;
+};
+
+type WorkflowFormState = {
+  workflowId: string | null;
+  name: string;
+  templateKey: string;
+  status: PodcastWorkflowStatus;
+  description: string;
+  projectId: string;
+};
+
+function emptyWorkflowForm(projectId?: string | null): WorkflowFormState {
+  return {
+    workflowId: null,
+    name: "",
+    templateKey: WORKFLOW_TEMPLATES[0].key,
+    status: "draft",
+    description: "",
+    projectId: projectId ?? "",
+  };
+}
+
+function workflowToForm(workflow: PodcastWorkflowSummary): WorkflowFormState {
+  return {
+    workflowId: workflow.id,
+    name: workflow.name,
+    templateKey: workflow.templateKey,
+    status: workflow.status,
+    description: workflow.description,
+    projectId: workflow.projectId ?? "",
+  };
+}
+
+function toneColor(status: PodcastWorkflowStatus) {
+  if (status === "active") return "rgba(13, 148, 136, 0.75)";
+  if (status === "archived") return "rgba(100, 116, 139, 0.75)";
+  return "rgba(245, 158, 11, 0.82)";
+}
 
 function ScaffoldPanel(props: {
   title: string;
@@ -41,41 +168,363 @@ function ScaffoldPanel(props: {
   );
 }
 
+function WorkflowForm(props: {
+  companyId: string;
+  projectId?: string | null;
+  form: WorkflowFormState;
+  templates: WorkflowTemplatesData["templates"];
+  saving: boolean;
+  onChange(next: WorkflowFormState): void;
+  onSubmit(event: FormEvent): void;
+  onCancel(): void;
+}) {
+  return (
+    <form onSubmit={props.onSubmit} style={formGridStyle}>
+      <div style={fieldStyle}>
+        <label htmlFor="podcast-workflow-name">Workflow name</label>
+        <input
+          id="podcast-workflow-name"
+          style={inputStyle}
+          value={props.form.name}
+          onChange={(event) => props.onChange({ ...props.form, name: event.target.value })}
+          placeholder="Episode Pipeline"
+        />
+      </div>
+
+      <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+        <div style={fieldStyle}>
+          <label htmlFor="podcast-workflow-template">Template</label>
+          <select
+            id="podcast-workflow-template"
+            style={inputStyle}
+            value={props.form.templateKey}
+            onChange={(event) => props.onChange({ ...props.form, templateKey: event.target.value })}
+          >
+            {props.templates.map((template) => (
+              <option key={template.key} value={template.key}>
+                {template.displayName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={fieldStyle}>
+          <label htmlFor="podcast-workflow-status">Status</label>
+          <select
+            id="podcast-workflow-status"
+            style={inputStyle}
+            value={props.form.status}
+            onChange={(event) => props.onChange({ ...props.form, status: event.target.value as PodcastWorkflowStatus })}
+          >
+            {WORKFLOW_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div style={fieldStyle}>
+        <label htmlFor="podcast-workflow-project">Project binding</label>
+        <input
+          id="podcast-workflow-project"
+          style={inputStyle}
+          value={props.form.projectId}
+          onChange={(event) => props.onChange({ ...props.form, projectId: event.target.value })}
+          placeholder={props.projectId ?? "Optional project id"}
+        />
+      </div>
+
+      <div style={fieldStyle}>
+        <label htmlFor="podcast-workflow-description">Description</label>
+        <textarea
+          id="podcast-workflow-description"
+          style={textareaStyle}
+          value={props.form.description}
+          onChange={(event) => props.onChange({ ...props.form, description: event.target.value })}
+          placeholder="Describe what this workflow coordinates."
+        />
+      </div>
+
+      <div style={rowStyle}>
+        <button type="submit" style={primaryButtonStyle} disabled={props.saving || !props.companyId}>
+          {props.saving ? "Saving…" : props.form.workflowId ? "Update workflow" : "Create workflow"}
+        </button>
+        <button type="button" style={buttonStyle} disabled={props.saving} onClick={props.onCancel}>
+          Reset
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function WorkflowList(props: {
+  workflows: PodcastWorkflowSummary[];
+  onEdit(workflow: PodcastWorkflowSummary): void;
+  onDelete(workflowId: string): void;
+  deletingId: string | null;
+  emptyMessage: string;
+}) {
+  if (props.workflows.length === 0) {
+    return <div style={{ fontSize: "0.95rem", color: "rgba(15, 23, 42, 0.64)" }}>{props.emptyMessage}</div>;
+  }
+
+  return (
+    <div style={cardListStyle}>
+      {props.workflows.map((workflow) => (
+        <section key={workflow.id} style={panelStyle}>
+          <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: "1rem" }}>{workflow.name}</h3>
+              <div style={{ fontSize: "0.82rem", color: "rgba(15, 23, 42, 0.62)" }}>{workflow.slug}</div>
+            </div>
+            <div
+              style={{
+                borderRadius: "999px",
+                padding: "0.2rem 0.65rem",
+                fontSize: "0.8rem",
+                background: toneColor(workflow.status),
+                color: "#fff",
+                textTransform: "capitalize",
+              }}
+            >
+              {workflow.status}
+            </div>
+          </div>
+          <div style={metaGridStyle}>
+            <div><strong>Template:</strong> {workflow.templateKey}</div>
+            <div><strong>Project:</strong> {workflow.projectId ?? "Unbound"}</div>
+            <div><strong>Updated:</strong> {new Date(workflow.updatedAt).toLocaleString()}</div>
+          </div>
+          <div style={{ color: "rgba(15, 23, 42, 0.74)" }}>
+            {workflow.description || "No description yet."}
+          </div>
+          <div style={rowStyle}>
+            <button type="button" style={buttonStyle} onClick={() => props.onEdit(workflow)}>
+              Edit
+            </button>
+            <button
+              type="button"
+              style={dangerButtonStyle}
+              disabled={props.deletingId === workflow.id}
+              onClick={() => props.onDelete(workflow.id)}
+            >
+              {props.deletingId === workflow.id ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function PodcastWorkflowManager(props: {
+  companyId: string | null | undefined;
+  projectId?: string | null;
+  title: string;
+  summary: string;
+  emptyMessage: string;
+}) {
+  const companyId = props.companyId ?? "";
+  const toast = usePluginToast();
+  const upsertWorkflow = usePluginAction(ACTION_KEYS.upsertWorkflow);
+  const deleteWorkflow = usePluginAction(ACTION_KEYS.deleteWorkflow);
+  const listParams = useMemo(
+    () => (props.projectId ? { companyId, projectId: props.projectId } : { companyId }),
+    [companyId, props.projectId],
+  );
+  const workflowsQuery = usePluginData<WorkflowListData>(DATA_KEYS.workflowList, listParams);
+  const templatesQuery = usePluginData<WorkflowTemplatesData>(DATA_KEYS.workflowTemplates, {});
+  const [form, setForm] = useState<WorkflowFormState>(() => emptyWorkflowForm(props.projectId));
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+  const detailParams = useMemo(
+    () => (companyId && selectedWorkflowId ? { companyId, workflowId: selectedWorkflowId } : { companyId }),
+    [companyId, selectedWorkflowId],
+  );
+  const workflowDetailQuery = usePluginData<WorkflowDetailResult>(DATA_KEYS.workflowDetail, detailParams);
+
+  useEffect(() => {
+    if (!selectedWorkflowId) return;
+    const workflow = workflowDetailQuery.data?.workflow;
+    if (!workflow) return;
+    setForm(workflowToForm(workflow));
+  }, [selectedWorkflowId, workflowDetailQuery.data]);
+
+  useEffect(() => {
+    if (!selectedWorkflowId) {
+      setForm((current) => (
+        current.projectId === (props.projectId ?? "") ? current : { ...current, projectId: props.projectId ?? "" }
+      ));
+    }
+  }, [props.projectId, selectedWorkflowId]);
+
+  const workflows = workflowsQuery.data?.workflows ?? [];
+  const templates = templatesQuery.data?.templates ?? listWorkflowFallbackTemplates();
+
+  function resetForm() {
+    setSelectedWorkflowId(null);
+    setForm(emptyWorkflowForm(props.projectId));
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!companyId) return;
+    setSaving(true);
+    try {
+      const result = await upsertWorkflow({
+        companyId,
+        workflowId: form.workflowId ?? undefined,
+        name: form.name,
+        templateKey: form.templateKey,
+        status: form.status,
+        description: form.description,
+        projectId: form.projectId || undefined,
+      }) as WorkflowActionResult;
+      workflowsQuery.refresh();
+      workflowDetailQuery.refresh();
+      toast({
+        title: form.workflowId ? "Workflow updated" : "Workflow created",
+        body: result.workflow.name,
+        tone: "success",
+      });
+      resetForm();
+    } catch (error) {
+      toast({
+        title: "Workflow save failed",
+        body: error instanceof Error ? error.message : "Unknown plugin action failure",
+        tone: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(workflowId: string) {
+    if (!companyId) return;
+    setDeletingId(workflowId);
+    try {
+      await deleteWorkflow({ companyId, workflowId });
+      workflowsQuery.refresh();
+      if (selectedWorkflowId === workflowId) {
+        resetForm();
+      }
+      toast({
+        title: "Workflow deleted",
+        body: workflowId,
+        tone: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Delete failed",
+        body: error instanceof Error ? error.message : "Unknown plugin action failure",
+        tone: "error",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: "1rem" }}>
+      <ScaffoldPanel
+        title={props.title}
+        summary={props.summary}
+        meta={[
+          { label: "Company", value: companyId || "unknown" },
+          { label: "Project", value: props.projectId ?? "all workflows" },
+          { label: "Stored workflows", value: String(workflowsQuery.data?.total ?? 0) },
+        ]}
+      />
+
+      {!companyId ? (
+        <div style={{ color: "rgba(15, 23, 42, 0.7)" }}>Company context is required to manage podcast workflows.</div>
+      ) : null}
+
+      {templatesQuery.loading ? <div style={{ color: "rgba(15, 23, 42, 0.7)" }}>Loading workflow templates…</div> : null}
+      {workflowsQuery.loading ? <div style={{ color: "rgba(15, 23, 42, 0.7)" }}>Loading workflows…</div> : null}
+      {workflowsQuery.error ? <div style={{ color: "#b91c1c" }}>Workflow load failed: {workflowsQuery.error.message}</div> : null}
+
+      {companyId ? (
+        <section style={panelStyle}>
+          <div style={{ marginBottom: "0.75rem" }}>
+            <strong>{form.workflowId ? "Edit workflow" : "New workflow"}</strong>
+          </div>
+          <WorkflowForm
+            companyId={companyId}
+            projectId={props.projectId}
+            form={form}
+            templates={templates}
+            saving={saving}
+            onChange={setForm}
+            onSubmit={handleSubmit}
+            onCancel={resetForm}
+          />
+        </section>
+      ) : null}
+
+      <WorkflowList
+        workflows={workflows}
+        deletingId={deletingId}
+        emptyMessage={props.emptyMessage}
+        onEdit={(workflow) => {
+          setSelectedWorkflowId(workflow.id);
+          setForm(workflowToForm(workflow));
+        }}
+        onDelete={handleDelete}
+      />
+    </div>
+  );
+}
+
+function listWorkflowFallbackTemplates(): WorkflowTemplatesData["templates"] {
+  return WORKFLOW_TEMPLATES.map((template) => ({ ...template }));
+}
+
 export function PodcastControlPlanePage({ context }: PluginPageProps) {
   return (
-    <ScaffoldPanel
+    <PodcastWorkflowManager
+      companyId={context.companyId}
+      projectId={context.projectId ?? null}
       title="Podcast Control Plane"
-      summary="Phase 1 reserves the product surfaces for workflow configuration, run visibility, and curated project actions."
-      meta={[
-        { label: "Company", value: context.companyId ?? "unknown" },
-        { label: "Project", value: context.projectId ?? "none selected" },
-        { label: "Surface", value: "Standalone page" },
-      ]}
+      summary="Manage company-scoped workflow definitions for episode production, promotion, and repeatable podcast operations."
+      emptyMessage="No podcast workflows are configured for this company yet."
     />
   );
 }
 
 export function PodcastControlPlaneSettingsPage({ context }: PluginSettingsPageProps) {
+  const templates = usePluginData<WorkflowTemplatesData>(DATA_KEYS.workflowTemplates, {});
+
   return (
     <ScaffoldPanel
       title="Podcast Control Plane Settings"
-      summary="Future slices will move project bindings, secret references, and workflow defaults into plugin-managed configuration."
+      summary="This slice introduces the reusable workflow templates and company-scoped plugin-state storage that later settings, bindings, and connector references will build on."
       meta={[
         { label: "Company", value: context.companyId ?? "unknown" },
-        { label: "Surface", value: "Plugin settings page" },
+        { label: "Template count", value: String(templates.data?.templates.length ?? WORKFLOW_TEMPLATES.length) },
+        { label: "State namespace", value: "podcast-control-plane" },
       ]}
     />
   );
 }
 
 export function PodcastControlPlaneDashboardWidget({ context }: PluginWidgetProps) {
+  const workflows = usePluginData<WorkflowListData>(DATA_KEYS.workflowList, { companyId: context.companyId ?? "" });
+  const activeCount = (workflows.data?.workflows ?? []).filter((workflow) => workflow.status === "active").length;
+  const latest = workflows.data?.workflows[0];
+
   return (
     <ScaffoldPanel
       title="Podcast Control Plane"
-      summary="This widget placeholder will become the run queue, health, and action entry point for podcast operations."
+      summary="Quick visibility into the number of configured podcast workflows and the most recently updated definition."
       meta={[
         { label: "Company", value: context.companyId ?? "unknown" },
-        { label: "Surface", value: "Dashboard widget" },
+        { label: "Total workflows", value: String(workflows.data?.total ?? 0) },
+        { label: "Active workflows", value: String(activeCount) },
+        { label: "Latest", value: latest?.name ?? "None yet" },
       ]}
     />
   );
@@ -83,14 +532,12 @@ export function PodcastControlPlaneDashboardWidget({ context }: PluginWidgetProp
 
 export function PodcastProjectDetailTab({ context }: PluginDetailTabProps) {
   return (
-    <ScaffoldPanel
-      title="Podcast Project"
-      summary="Project-level workflow controls will attach here once bindings, curated actions, and run history are implemented."
-      meta={[
-        { label: "Project", value: context.entityId ?? "unknown" },
-        { label: "Company", value: context.companyId ?? "unknown" },
-        { label: "Surface", value: "Project detail tab" },
-      ]}
+    <PodcastWorkflowManager
+      companyId={context.companyId}
+      projectId={context.entityId ?? null}
+      title="Podcast Project Workflows"
+      summary="Project-scoped view of podcast workflow definitions bound to this project."
+      emptyMessage="No podcast workflows are bound to this project yet."
     />
   );
 }
