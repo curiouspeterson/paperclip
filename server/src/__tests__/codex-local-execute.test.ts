@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { execute } from "@paperclipai/adapter-codex-local/server";
 
+const CHILD_PROCESS_TEST_TIMEOUT_MS = 15_000;
+
 async function writeFakeCodexCommand(commandPath: string): Promise<void> {
   const script = `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -41,7 +43,9 @@ type LogEntry = {
 };
 
 describe("codex execute", () => {
-  it("uses a Paperclip-managed CODEX_HOME outside worktree mode while preserving shared auth and config", async () => {
+  it(
+    "uses a Paperclip-managed CODEX_HOME outside worktree mode while preserving shared auth and config",
+    async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-default-"));
     const workspace = path.join(root, "workspace");
     const commandPath = path.join(root, "codex");
@@ -137,9 +141,13 @@ describe("codex execute", () => {
       else process.env.CODEX_HOME = previousCodexHome;
       await fs.rm(root, { recursive: true, force: true });
     }
-  });
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
 
-  it("emits a command note that Codex auto-applies repo-scoped AGENTS.md files", async () => {
+  it(
+    "emits a command note that Codex auto-applies repo-scoped AGENTS.md files",
+    async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-notes-"));
     const workspace = path.join(root, "workspace");
     const commandPath = path.join(root, "codex");
@@ -193,9 +201,13 @@ describe("codex execute", () => {
       else process.env.HOME = previousHome;
       await fs.rm(root, { recursive: true, force: true });
     }
-  });
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
 
-  it("uses a worktree-isolated CODEX_HOME while preserving shared auth and config", async () => {
+  it(
+    "uses a worktree-isolated CODEX_HOME while preserving shared auth and config",
+    async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-"));
     const workspace = path.join(root, "workspace");
     const commandPath = path.join(root, "codex");
@@ -310,9 +322,13 @@ describe("codex execute", () => {
       else process.env.CODEX_HOME = previousCodexHome;
       await fs.rm(root, { recursive: true, force: true });
     }
-  });
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
 
-  it("respects an explicit CODEX_HOME config override even in worktree mode", async () => {
+  it(
+    "respects an explicit CODEX_HOME config override even in worktree mode",
+    async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-explicit-"));
     const workspace = path.join(root, "workspace");
     const commandPath = path.join(root, "codex");
@@ -386,5 +402,7 @@ describe("codex execute", () => {
       else process.env.CODEX_HOME = previousCodexHome;
       await fs.rm(root, { recursive: true, force: true });
     }
-  });
+    },
+    CHILD_PROCESS_TEST_TIMEOUT_MS,
+  );
 });

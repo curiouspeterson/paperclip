@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { execute } from "@paperclipai/adapter-cursor-local/server";
 
+const CHILD_PROCESS_TEST_TIMEOUT_MS = 15_000;
+
 async function writeFakeCursorCommand(commandPath: string): Promise<void> {
   const script = `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -127,7 +129,7 @@ describe("cursor execute", () => {
       }
       await fs.rm(root, { recursive: true, force: true });
     }
-  });
+  }, CHILD_PROCESS_TEST_TIMEOUT_MS);
 
   it("passes --mode when explicitly configured", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-cursor-execute-mode-"));
@@ -185,7 +187,7 @@ describe("cursor execute", () => {
       }
       await fs.rm(root, { recursive: true, force: true });
     }
-  });
+  }, CHILD_PROCESS_TEST_TIMEOUT_MS);
 
   it("injects company-library runtime skills into the Cursor skills home before execution", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-cursor-execute-runtime-skill-"));
@@ -258,5 +260,5 @@ describe("cursor execute", () => {
       }
       await fs.rm(root, { recursive: true, force: true });
     }
-  });
+  }, CHILD_PROCESS_TEST_TIMEOUT_MS);
 });
