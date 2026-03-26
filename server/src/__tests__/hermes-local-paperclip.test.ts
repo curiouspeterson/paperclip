@@ -99,12 +99,16 @@ describe("Hermes local Paperclip wrapper", () => {
     });
 
     expect(mockHermesExecute).toHaveBeenCalledTimes(1);
+    const expectedConfig = expect.objectContaining({
+      provider: "codex",
+      model: "gpt-5.4",
+      promptTemplate: "Work the issue.",
+    });
     expect(mockHermesExecute).toHaveBeenCalledWith(
       expect.objectContaining({
-        config: expect.objectContaining({
-          provider: "codex",
-          model: "gpt-5.4",
-          promptTemplate: "Work the issue.",
+        config: expectedConfig,
+        agent: expect.objectContaining({
+          adapterConfig: expectedConfig,
         }),
       }),
     );

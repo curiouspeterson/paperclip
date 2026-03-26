@@ -16,9 +16,14 @@ import {
 } from "./paperclip.js";
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
+  const normalizedConfig = normalizeHermesLocalPaperclipConfig(ctx.config);
   const result = await hermesExecute({
     ...ctx,
-    config: normalizeHermesLocalPaperclipConfig(ctx.config),
+    config: normalizedConfig,
+    agent: {
+      ...ctx.agent,
+      adapterConfig: normalizedConfig,
+    },
   });
   return normalizeHermesLocalExecutionResult(result);
 }
