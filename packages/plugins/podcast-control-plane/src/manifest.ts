@@ -58,6 +58,13 @@ const manifest: PaperclipPluginManifestV1 = {
         entityTypes: ["project"],
       },
       {
+        type: "detailTab",
+        id: SLOT_IDS.issueTab,
+        displayName: "Podcast Workflow Context",
+        exportName: EXPORT_NAMES.issueTab,
+        entityTypes: ["issue"],
+      },
+      {
         type: "commentAnnotation",
         id: SLOT_IDS.commentAnnotation,
         displayName: "Podcast Workflow Output",

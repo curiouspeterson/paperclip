@@ -32,6 +32,12 @@ describe("podcast control plane plugin scaffold", () => {
           exportName: "PodcastProjectDetailTab",
           entityTypes: ["project"],
         }),
+        expect.objectContaining({
+          type: "detailTab",
+          id: "podcast-control-plane-issue-tab",
+          exportName: "PodcastIssueDetailTab",
+          entityTypes: ["issue"],
+        }),
       ]),
     );
   });

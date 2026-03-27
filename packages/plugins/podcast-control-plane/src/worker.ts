@@ -19,6 +19,7 @@ import {
   buildWorkflowStageIssueTitle,
   createWorkflowStageSyncRecord,
   deleteWorkflowStageSyncRecords,
+  findWorkflowStageContextForIssue,
   getWorkflowStageTemplate,
   listWorkflowStageViews,
   readWorkflowStageSyncRecord,
@@ -288,6 +289,48 @@ async function registerWorkflowData(ctx: PluginContext) {
     return {
       total: runs.length,
       runs,
+    };
+  });
+
+  ctx.data.register(DATA_KEYS.issueStageContext, async (params) => {
+    const companyId = normalizeOptionalString(params.companyId);
+    const issueId = normalizeOptionalString(params.issueId);
+    if (!companyId || !issueId) {
+      return { linkedStage: null };
+    }
+
+    const workflows = await listWorkflowRecords(ctx, companyId);
+    const linkedStage = await findWorkflowStageContextForIssue(ctx, workflows, issueId);
+    if (!linkedStage) {
+      return { linkedStage: null };
+    }
+
+    return {
+      linkedStage: {
+        workflowId: linkedStage.workflow.id,
+        workflowName: linkedStage.workflow.name,
+        workflowStatus: linkedStage.workflow.status,
+        workflowProjectId: linkedStage.workflow.projectId,
+        workflowDescription: linkedStage.workflow.description,
+        stageKey: linkedStage.stage.key,
+        stageDisplayName: linkedStage.stage.displayName,
+        stageDescription: linkedStage.stage.description,
+        issueId: linkedStage.issue.id,
+        issueTitle: linkedStage.issue.title,
+        issueStatus: linkedStage.issue.status,
+        syncedAt: linkedStage.sync.syncedAt,
+        projectWorkspaceId: linkedStage.sync.projectWorkspaceId,
+        latestRun: linkedStage.lastRun
+          ? {
+            runId: linkedStage.lastRun.runId,
+            commentId: linkedStage.lastRun.commentId,
+            issueId: linkedStage.lastRun.issueId,
+            summary: linkedStage.lastRun.summary,
+            artifacts: linkedStage.lastRun.artifacts.map((artifact) => ({ ...artifact })),
+            createdAt: linkedStage.lastRun.createdAt,
+          }
+          : null,
+      },
     };
   });
 }

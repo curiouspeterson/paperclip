@@ -968,4 +968,99 @@ describe("podcast workflow worker contract", () => {
       }),
     ).rejects.toThrow("Sync the stage issue before recording workflow output");
   });
+
+  it("resolves linked issue workflow context for the issue detail tab", async () => {
+    const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
+    await plugin.definition.setup(harness.ctx);
+    harness.seed({
+      projects: [createProjectFixture()],
+    });
+
+    const created = await harness.performAction<{
+      workflow: {
+        id: string;
+        name: string;
+      };
+    }>(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      name: "Episode 26 Production",
+      templateKey: "episode-pipeline",
+      description: "Coordinate the episode transcript and release process.",
+      projectId: PROJECT_ID,
+    });
+
+    const transcriptSync = await harness.performAction<{
+      issue: {
+        id: string;
+        title: string;
+      };
+    }>(ACTION_KEYS.syncWorkflowStageIssue, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+    });
+
+    await harness.performAction(ACTION_KEYS.recordWorkflowStageOutput, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+      summary: "Transcript generated",
+      details: "Editorial notes are attached.",
+      artifacts: [{ label: "Transcript", href: "https://example.com/transcript" }],
+    });
+
+    await expect(
+      harness.getData<{
+        linkedStage: {
+          workflowId: string;
+          workflowName: string;
+          workflowStatus: string;
+          workflowProjectId: string | null;
+          stageKey: string;
+          stageDisplayName: string;
+          issueId: string;
+          issueTitle: string;
+          issueStatus: string;
+          syncedAt: string;
+          latestRun: {
+            runId: string;
+            commentId: string;
+            issueId: string;
+            summary: string;
+            artifacts: Array<{ label: string; href: string }>;
+            createdAt: string;
+          } | null;
+        } | null;
+      }>("issue-stage-context", {
+        companyId: COMPANY_ID,
+        issueId: transcriptSync.issue.id,
+      }),
+    ).resolves.toEqual({
+      linkedStage: expect.objectContaining({
+        workflowId: created.workflow.id,
+        workflowName: "Episode 26 Production",
+        workflowStatus: "draft",
+        workflowProjectId: PROJECT_ID,
+        stageKey: "transcript",
+        stageDisplayName: "Transcript",
+        issueId: transcriptSync.issue.id,
+        issueTitle: transcriptSync.issue.title,
+        issueStatus: "todo",
+        latestRun: expect.objectContaining({
+          issueId: transcriptSync.issue.id,
+          summary: "Transcript generated",
+          artifacts: [{ label: "Transcript", href: "https://example.com/transcript" }],
+        }),
+      }),
+    });
+
+    await expect(
+      harness.getData("issue-stage-context", {
+        companyId: COMPANY_ID,
+        issueId: "not-a-linked-issue",
+      }),
+    ).resolves.toEqual({
+      linkedStage: null,
+    });
+  });
 });

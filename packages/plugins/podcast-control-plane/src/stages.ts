@@ -47,6 +47,14 @@ export interface WorkflowStageSyncTarget {
   } | null;
 }
 
+export interface PodcastIssueLinkedStageContext {
+  workflow: PodcastWorkflowRecord;
+  stage: PodcastWorkflowStageTemplate;
+  sync: PodcastWorkflowStageSyncRecord;
+  issue: Issue;
+  lastRun: PodcastWorkflowStageLastRunView | null;
+}
+
 export const WORKFLOW_STAGE_TEMPLATES: Record<PodcastWorkflowTemplateKey, readonly PodcastWorkflowStageTemplate[]> = {
   "episode-pipeline": [
     {
@@ -275,6 +283,38 @@ export async function listWorkflowStageViews(
   }
 
   return results;
+}
+
+export async function findWorkflowStageContextForIssue(
+  ctx: PluginContext,
+  workflows: PodcastWorkflowRecord[],
+  issueId: string,
+): Promise<PodcastIssueLinkedStageContext | null> {
+  for (const workflow of workflows) {
+    const stages = listWorkflowStageTemplates(workflow.templateKey);
+    for (const stage of stages) {
+      const sync = await readWorkflowStageSyncRecord(ctx, workflow.companyId, workflow.id, stage.key);
+      if (!sync || sync.issueId !== issueId) {
+        continue;
+      }
+
+      const issue = await ctx.issues.get(issueId, workflow.companyId);
+      if (!issue) {
+        return null;
+      }
+
+      const lastRun = await readWorkflowStageLastRunView(ctx, workflow.companyId, workflow.id, stage.key);
+      return {
+        workflow,
+        stage,
+        sync,
+        issue,
+        lastRun,
+      };
+    }
+  }
+
+  return null;
 }
 
 export function buildWorkflowStageIssueTitle(

@@ -213,6 +213,32 @@ type CommentStageOutputData = {
   } | null;
 };
 
+type IssueStageContextData = {
+  linkedStage: {
+    workflowId: string;
+    workflowName: string;
+    workflowStatus: string;
+    workflowProjectId: string | null;
+    workflowDescription: string;
+    stageKey: string;
+    stageDisplayName: string;
+    stageDescription: string;
+    issueId: string;
+    issueTitle: string;
+    issueStatus: string;
+    syncedAt: string;
+    projectWorkspaceId: string;
+    latestRun: {
+      runId: string;
+      commentId: string;
+      issueId: string;
+      summary: string;
+      artifacts: PodcastWorkflowArtifactReference[];
+      createdAt: string;
+    } | null;
+  } | null;
+};
+
 type StageOutputDraft = {
   summary: string;
   details: string;
@@ -1199,5 +1225,124 @@ export function PodcastProjectDetailTab({ context }: PluginDetailTabProps) {
       summary="Project-scoped view of podcast workflow definitions bound to this project."
       emptyMessage="No podcast workflows are bound to this project yet."
     />
+  );
+}
+
+export function PodcastIssueDetailTab({ context }: PluginDetailTabProps) {
+  const issueContext = usePluginData<IssueStageContextData>(
+    DATA_KEYS.issueStageContext,
+    context.companyId
+      ? {
+        companyId: context.companyId,
+        issueId: context.entityId,
+      }
+      : {},
+  );
+
+  if (issueContext.loading) {
+    return (
+      <section style={panelStyle}>
+        <div style={{ color: "rgba(15, 23, 42, 0.68)" }}>Loading workflow context…</div>
+      </section>
+    );
+  }
+
+  if (issueContext.error) {
+    return (
+      <section style={panelStyle}>
+        <div style={{ color: "#b91c1c" }}>Workflow context load failed: {issueContext.error.message}</div>
+      </section>
+    );
+  }
+
+  if (!issueContext.data?.linkedStage) {
+    return (
+      <section style={panelStyle}>
+        <div style={{ display: "grid", gap: "0.35rem" }}>
+          <strong>No podcast workflow stage is linked to this issue.</strong>
+          <div style={{ color: "rgba(15, 23, 42, 0.68)" }}>
+            Stage-linked issues created from the podcast control plane will show their workflow context here.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const linkedStage = issueContext.data.linkedStage;
+  const latestCommentHref = linkedStage.latestRun
+    ? buildIssueCommentHref(context.companyPrefix, linkedStage.issueId, linkedStage.latestRun.commentId)
+    : null;
+
+  return (
+    <section style={panelStyle}>
+      <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+        <div style={{ display: "grid", gap: "0.25rem" }}>
+          <strong>{linkedStage.workflowName}</strong>
+          <div style={{ fontSize: "0.9rem", color: "rgba(15, 23, 42, 0.66)" }}>
+            {linkedStage.stageDisplayName} stage
+          </div>
+        </div>
+        <div
+          style={{
+            borderRadius: "999px",
+            padding: "0.2rem 0.65rem",
+            fontSize: "0.8rem",
+            background: toneColor(linkedStage.workflowStatus as PodcastWorkflowStatus),
+            color: "#fff",
+            textTransform: "capitalize",
+          }}
+        >
+          {linkedStage.workflowStatus}
+        </div>
+      </div>
+
+      <div style={{ color: "rgba(15, 23, 42, 0.74)" }}>
+        {linkedStage.workflowDescription || linkedStage.stageDescription}
+      </div>
+
+      <div style={metaGridStyle}>
+        <div><strong>Stage key:</strong> {linkedStage.stageKey}</div>
+        <div><strong>Issue status:</strong> {linkedStage.issueStatus}</div>
+        <div><strong>Project:</strong> {linkedStage.workflowProjectId ?? "Unbound"}</div>
+        <div><strong>Workspace:</strong> {linkedStage.projectWorkspaceId}</div>
+        <div><strong>Synced:</strong> {new Date(linkedStage.syncedAt).toLocaleString()}</div>
+      </div>
+
+      {linkedStage.latestRun ? (
+        <div style={{ ...metaGridStyle, padding: "0.75rem", borderRadius: "0.65rem", background: "rgba(15, 23, 42, 0.04)" }}>
+          <div><strong>Latest workflow output:</strong> {linkedStage.latestRun.summary}</div>
+          <div><strong>Recorded:</strong> {new Date(linkedStage.latestRun.createdAt).toLocaleString()}</div>
+          {latestCommentHref ? (
+            <div>
+              <a href={latestCommentHref} style={actionLinkStyle}>
+                Jump to latest workflow comment
+              </a>
+            </div>
+          ) : null}
+          {linkedStage.latestRun.artifacts.length > 0 ? (
+            <div style={artifactGridStyle}>
+              {linkedStage.latestRun.artifacts.map((artifact) => (
+                <a
+                  key={`${linkedStage.latestRun?.commentId}:${artifact.label}:${artifact.href}`}
+                  href={artifact.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={artifactLinkStyle}
+                >
+                  <strong>{artifact.label}</strong>
+                  <span style={{ fontSize: "0.82rem", color: "rgba(15, 23, 42, 0.7)", wordBreak: "break-all" }}>
+                    {artifact.href}
+                  </span>
+                </a>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div style={{ color: "rgba(15, 23, 42, 0.64)" }}>
+          No workflow output has been recorded for this stage yet.
+        </div>
+      )}
+    </section>
   );
 }

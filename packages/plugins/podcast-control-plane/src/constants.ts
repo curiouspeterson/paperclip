@@ -7,6 +7,7 @@ export const SLOT_IDS = {
   settingsPage: "podcast-control-plane-settings-page",
   dashboardWidget: "podcast-control-plane-dashboard-widget",
   projectTab: "podcast-control-plane-project-tab",
+  issueTab: "podcast-control-plane-issue-tab",
   commentAnnotation: "podcast-control-plane-comment-annotation",
 } as const;
 
@@ -15,6 +16,7 @@ export const EXPORT_NAMES = {
   settingsPage: "PodcastControlPlaneSettingsPage",
   dashboardWidget: "PodcastControlPlaneDashboardWidget",
   projectTab: "PodcastProjectDetailTab",
+  issueTab: "PodcastIssueDetailTab",
   commentAnnotation: "PodcastWorkflowCommentAnnotation",
 } as const;
 
@@ -25,6 +27,7 @@ export const DATA_KEYS = {
   workflowStages: "workflow-stages",
   commentStageOutput: "comment-stage-output",
   workflowRuns: "workflow-runs",
+  issueStageContext: "issue-stage-context",
 } as const;
 
 export const ACTION_KEYS = {
