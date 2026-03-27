@@ -25,6 +25,11 @@ This keeps one authenticated auth stack while still separating low-friction priv
 | `authenticated` | `private` | Login required | Private-network access (for example Tailscale/VPN/LAN) |
 | `authenticated` | `public` | Login required | Internet-facing/cloud deployment |
 
+Plugin caveat:
+
+- The core host supports `authenticated` deployments today, but the current dynamic plugin runtime is still best treated as a trusted self-hosted persistent-node feature.
+- Do not assume plugin install/distribution is ready for horizontally scaled or ephemeral cloud deployments unless you add your own artifact coordination layer.
+
 ## 3. Security Policy
 
 ## `local_trusted`

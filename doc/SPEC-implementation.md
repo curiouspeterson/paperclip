@@ -52,7 +52,7 @@ As of 2026-03-25, the repo already includes:
 - React UI pages for dashboard/agents/projects/goals/issues lists
 - PostgreSQL schema via Drizzle with embedded PostgreSQL fallback when `DATABASE_URL` is unset
 - Better Auth-backed human access with instance admin, company memberships, invites, and coarse permission grants
-- Public plugin runtime and SDK surfaces under `packages/plugins/*`
+- Public plugin runtime and SDK surfaces under `packages/plugins/*`, with the current runtime treated as a trusted self-hosted persistent-deployment feature rather than a cloud-ready plugin marketplace or sandbox
 
 V1 implementation extends this baseline into a company-centric, governance-aware control plane.
 
@@ -72,7 +72,7 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 - Human membership/invite flows and coarse company-scoped permission grants
 - Board web UI for dashboard, org chart, tasks, agents, approvals, costs
 - Agent-facing API contract (task read/write, heartbeat report, cost report)
-- Plugin host/runtime and public plugin SDK
+- Plugin host/runtime and public plugin SDK for trusted self-hosted instances
 - Auditable activity log for all mutating actions
 
 ## 5.2 Out of Scope (V1)
@@ -82,6 +82,7 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 - Public marketplace (ClipHub)
 - Multi-board governance and enterprise-grade RBAC beyond the current company-scoped grant model
 - Third-party plugin marketplace/distribution
+- Cloud-ready multi-node plugin distribution/install coordination
 - Automatic self-healing orchestration (auto-reassign/retry planners)
 
 ## 6. Architecture

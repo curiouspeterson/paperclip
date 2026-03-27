@@ -94,6 +94,9 @@ Use the smallest stable surface that can solve the problem:
 - `skills/` and company skills for prompts, instructions, and domain knowledge
 - `packages/plugins/` for additive UI, tools, jobs, connectors, dashboards, and workflow surfaces
 - core `packages/db` / `packages/shared` / `server` / `ui` changes only when current extension seams are insufficient
+Current plugin boundary note:
+- today’s plugin runtime is trusted same-origin code and is best suited to self-hosted persistent deployments
+- do not assume plugins are a sandbox boundary or that dynamic plugin install is ready for multi-node/public-cloud distribution
 
 7. Treat adapters as coordinated platform changes.
 New adapters are not fully out-of-tree today. If you add or change an adapter, keep `packages/shared`, `server/src/adapters`, and `ui/src/adapters` aligned.

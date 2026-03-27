@@ -110,6 +110,7 @@ Paperclip’s core identity is a **control plane for autonomous AI companies**, 
 - Make outputs first-class: files, docs, reports, previews, links, screenshots.
 - Provide **hooks into engineering workflows**: worktrees, preview servers, PR links, external review tools.
 - Use **plugins** for edge cases like rich chat, knowledge bases, doc editors, custom tracing.
+  In the current implementation, that means a trusted self-hosted extension seam, not a sandboxed or cloud-distributed app platform.
 
 **Do not**
 
@@ -138,9 +139,11 @@ Paperclip’s core identity is a **control plane for autonomous AI companies**, 
 
 6. **Local-first, cloud-ready**
    The mental model should not change between local solo use and shared/private or public/cloud deployment.
+   The current plugin runtime is not fully there yet: dynamic plugin install remains best suited to trusted self-hosted persistent deployments, not horizontally scaled public-cloud distribution.
 
 7. **Safe autonomy**
    Auto mode is allowed; hidden token burn is not.
 
 8. **Thin core, rich edges**
    Put optional chat, knowledge, and special surfaces into plugins/extensions rather than bloating the control plane.
+   For V1, keep governance, auth, approvals, and hard-stop enforcement in core while treating plugins as trusted same-origin add-ons.
