@@ -1,8 +1,6 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { errorHandler } from "../middleware/index.js";
-import { issueRoutes } from "../routes/issues.js";
 
 const mockIssueService = vi.hoisted(() => ({
   getById: vi.fn(),
@@ -75,23 +73,26 @@ const AGENT_ONE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const AGENT_TWO_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const RUN_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
-vi.mock("../services/index.js", () => ({
-  accessService: () => mockAccessService,
-  agentService: () => mockAgentService,
-  budgetService: () => mockBudgetService,
-  documentService: () => mockDocumentService,
-  executionWorkspaceService: () => mockExecutionWorkspaceService,
-  goalService: () => mockGoalService,
-  heartbeatService: () => mockHeartbeatService,
-  issueApprovalService: () => ({ listApprovalsForIssue: vi.fn(async () => []) }),
-  issueService: () => mockIssueService,
-  logActivity: mockLogActivity,
-  projectService: () => mockProjectService,
-  routineService: () => ({ syncRunStatusForIssue: vi.fn(async () => undefined) }),
-  workProductService: () => mockWorkProductService,
-}));
-
-function createApp(actor: Record<string, unknown>) {
+async function createApp(actor: Record<string, unknown>) {
+  vi.doMock("../services/index.js", () => ({
+    accessService: () => mockAccessService,
+    agentService: () => mockAgentService,
+    budgetService: () => mockBudgetService,
+    documentService: () => mockDocumentService,
+    executionWorkspaceService: () => mockExecutionWorkspaceService,
+    goalService: () => mockGoalService,
+    heartbeatService: () => mockHeartbeatService,
+    issueApprovalService: () => ({ listApprovalsForIssue: vi.fn(async () => []) }),
+    issueService: () => mockIssueService,
+    logActivity: mockLogActivity,
+    projectService: () => mockProjectService,
+    routineService: () => ({ syncRunStatusForIssue: vi.fn(async () => undefined) }),
+    workProductService: () => mockWorkProductService,
+  }));
+  const [{ errorHandler }, { issueRoutes }] = await Promise.all([
+    import("../middleware/index.js"),
+    import("../routes/issues.js"),
+  ]);
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -122,7 +123,8 @@ function makeIssue(overrides?: Partial<Record<string, unknown>>) {
 
 describe("issue contract routes", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.resetModules();
+    vi.clearAllMocks();
     mockIssueService.create.mockResolvedValue(makeIssue());
     mockIssueService.assertCheckoutOwner.mockResolvedValue({
       id: "11111111-1111-4111-8111-111111111111",
@@ -167,7 +169,7 @@ describe("issue contract routes", () => {
     mockIssueService.getById.mockResolvedValue(makeIssue());
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "board",
         userId: "board-user",
         companyIds: [COMPANY_ID],
@@ -184,7 +186,7 @@ describe("issue contract routes", () => {
 
   it("rejects create payloads that still send assigneeUserId", async () => {
     const res = await request(
-      createApp({
+      await createApp({
         type: "board",
         userId: "board-user",
         companyIds: [COMPANY_ID],
@@ -209,7 +211,7 @@ describe("issue contract routes", () => {
     mockIssueService.getById.mockResolvedValue(makeIssue());
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "board",
         userId: "board-user",
         companyIds: [COMPANY_ID],
@@ -232,7 +234,7 @@ describe("issue contract routes", () => {
     }));
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "agent",
         agentId: AGENT_ONE_ID,
         companyId: COMPANY_ID,
@@ -258,7 +260,7 @@ describe("issue contract routes", () => {
     }));
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "agent",
         agentId: AGENT_ONE_ID,
         companyId: COMPANY_ID,
@@ -303,7 +305,7 @@ describe("issue contract routes", () => {
     });
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "board",
         userId: "board-user",
         companyIds: [COMPANY_ID],
@@ -334,7 +336,7 @@ describe("issue contract routes", () => {
     }));
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "agent",
         agentId: AGENT_ONE_ID,
         companyId: COMPANY_ID,
@@ -361,7 +363,7 @@ describe("issue contract routes", () => {
     mockAccessService.canUser.mockResolvedValue(false);
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "board",
         userId: "board-user",
         companyIds: [COMPANY_ID],
@@ -391,7 +393,7 @@ describe("issue contract routes", () => {
     });
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "agent",
         agentId: AGENT_ONE_ID,
         companyId: COMPANY_ID,
@@ -420,7 +422,7 @@ describe("issue contract routes", () => {
     });
 
     const res = await request(
-      createApp({
+      await createApp({
         type: "agent",
         agentId: AGENT_ONE_ID,
         companyId: COMPANY_ID,
@@ -444,7 +446,7 @@ describe("issue contract routes", () => {
       }));
 
       const res = await request(
-        createApp({
+        await createApp({
           type: "agent",
           agentId: AGENT_ONE_ID,
           companyId: COMPANY_ID,
