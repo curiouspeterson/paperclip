@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import type { AdapterExecutionResult } from "../types.js";
 
 export const DEFAULT_HERMES_LOCAL_MODEL = "gpt-5.4";
@@ -28,6 +30,74 @@ export function normalizeHermesLocalPaperclipConfig(
   const next = value && typeof value === "object" && !Array.isArray(value) ? { ...value } : {};
   next.model = DEFAULT_HERMES_LOCAL_MODEL;
   next.provider = DEFAULT_HERMES_LOCAL_PROVIDER;
+  return next;
+}
+
+function pathKey(env: NodeJS.ProcessEnv): "PATH" | "Path" {
+  return typeof env.PATH === "string" ? "PATH" : "Path";
+}
+
+function uniquePathEntries(entries: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of entries) {
+    if (!entry) continue;
+    if (seen.has(entry)) continue;
+    seen.add(entry);
+    out.push(entry);
+  }
+  return out;
+}
+
+function candidateHermesSearchPaths(env: NodeJS.ProcessEnv): string[] {
+  const home = asString(env.HOME);
+  const delimiter = process.platform === "win32" ? ";" : ":";
+  const pathValue = env[pathKey(env)] ?? "";
+  const envPaths = pathValue.split(delimiter).filter(Boolean);
+  const preferredPaths = home
+    ? [path.join(home, ".local", "bin"), path.join(home, "bin")]
+    : [];
+  return uniquePathEntries([...preferredPaths, ...envPaths]);
+}
+
+function resolveHermesCommandPath(command: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (!command.trim()) return null;
+
+  if (command.includes("/") || command.includes("\\")) {
+    const absolute = path.isAbsolute(command) ? command : path.resolve(command);
+    return existsSync(absolute) ? absolute : null;
+  }
+
+  const exts =
+    process.platform === "win32"
+      ? (env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean)
+      : [""];
+  const hasExtension = process.platform === "win32" && path.extname(command).length > 0;
+
+  for (const dir of candidateHermesSearchPaths(env)) {
+    const candidates =
+      process.platform === "win32"
+        ? hasExtension
+          ? [path.join(dir, command)]
+          : exts.map((ext) => path.join(dir, `${command}${ext}`))
+        : [path.join(dir, command)];
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+
+  return null;
+}
+
+export function normalizeHermesLocalPaperclipRuntimeConfig(
+  value: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const next = normalizeHermesLocalPaperclipConfig(value);
+  const configuredCommand = asString(next.hermesCommand) ?? "hermes";
+  const resolvedCommand = resolveHermesCommandPath(configuredCommand);
+  if (resolvedCommand) {
+    next.hermesCommand = resolvedCommand;
+  }
   return next;
 }
 

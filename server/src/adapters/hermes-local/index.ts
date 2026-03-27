@@ -1,7 +1,7 @@
 import {
   execute as hermesExecute,
   sessionCodec,
-  testEnvironment,
+  testEnvironment as hermesTestEnvironment,
 } from "hermes-paperclip-adapter/server";
 import type {
   AdapterEnvironmentTestContext,
@@ -12,11 +12,11 @@ import type {
 } from "../types.js";
 import {
   normalizeHermesLocalExecutionResult,
-  normalizeHermesLocalPaperclipConfig,
+  normalizeHermesLocalPaperclipRuntimeConfig,
 } from "./paperclip.js";
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
-  const normalizedConfig = normalizeHermesLocalPaperclipConfig(ctx.config);
+  const normalizedConfig = normalizeHermesLocalPaperclipRuntimeConfig(ctx.config);
   const result = await hermesExecute({
     ...ctx,
     config: normalizedConfig,
@@ -28,7 +28,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   return normalizeHermesLocalExecutionResult(result);
 }
 
-export { testEnvironment };
+export async function testEnvironment(
+  ctx: AdapterEnvironmentTestContext,
+): Promise<AdapterEnvironmentTestResult> {
+  const normalizedConfig = normalizeHermesLocalPaperclipRuntimeConfig(
+    (ctx.config ?? null) as Record<string, unknown> | null,
+  );
+  return hermesTestEnvironment({
+    ...ctx,
+    config: normalizedConfig,
+  });
+}
+
 export { sessionCodec };
 export type HermesLocalSessionCodec = AdapterSessionCodec;
 export type HermesLocalEnvironmentTestContext = AdapterEnvironmentTestContext;
