@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AGENT_ADAPTER_TYPES } from "../constants.js";
 
 export const portabilityIncludeSchema = z
   .object({
@@ -53,7 +54,7 @@ export const portabilityAgentManifestEntrySchema = z.object({
   icon: z.string().nullable(),
   capabilities: z.string().nullable(),
   reportsToSlug: z.string().min(1).nullable(),
-  adapterType: z.string().min(1),
+  adapterType: z.enum(AGENT_ADAPTER_TYPES),
   adapterConfig: z.record(z.unknown()),
   runtimeConfig: z.record(z.unknown()),
   permissions: z.record(z.unknown()),
@@ -225,7 +226,7 @@ export const companyPortabilityPreviewSchema = z.object({
 export type CompanyPortabilityPreview = z.infer<typeof companyPortabilityPreviewSchema>;
 
 export const portabilityAdapterOverrideSchema = z.object({
-  adapterType: z.string().min(1),
+  adapterType: z.enum(AGENT_ADAPTER_TYPES),
   adapterConfig: z.record(z.unknown()).optional(),
 });
 

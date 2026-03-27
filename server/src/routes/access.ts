@@ -19,6 +19,7 @@ import {
 } from "@paperclipai/db";
 import {
   acceptInviteSchema,
+  isAgentAdapterType,
   createCliAuthChallengeSchema,
   claimJoinRequestApiKeySchema,
   createCompanyInviteSchema,
@@ -35,7 +36,8 @@ import {
   conflict,
   notFound,
   unauthorized,
-  badRequest
+  badRequest,
+  unprocessable,
 } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { validate } from "../middleware/validate.js";
@@ -2610,13 +2612,19 @@ export function accessRoutes(
         );
 
         const created = await agents.create(companyId, {
+          adapterType: (() => {
+            const adapterType = existing.adapterType ?? "process";
+            if (!isAgentAdapterType(adapterType)) {
+              throw unprocessable(`Invalid adapter type: ${adapterType}`);
+            }
+            return adapterType;
+          })(),
           name: agentName,
           role: "general",
           title: null,
           status: "idle",
           reportsTo: managerId,
           capabilities: existing.capabilities ?? null,
-          adapterType: existing.adapterType ?? "process",
           adapterConfig:
             existing.agentDefaultsPayload &&
             typeof existing.agentDefaultsPayload === "object"

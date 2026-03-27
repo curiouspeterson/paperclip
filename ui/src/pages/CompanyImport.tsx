@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  AgentAdapterType,
   CompanyPortabilityCollisionStrategy,
   CompanyPortabilityFileEntry,
   CompanyPortabilityPreviewResult,
@@ -512,8 +513,8 @@ function ConflictResolutionList({
 
 // ── Adapter type options for import ───────────────────────────────────
 
-const IMPORT_ADAPTER_OPTIONS: { value: string; label: string }[] = listUIAdapters().map((adapter) => ({
-  value: adapter.type,
+const IMPORT_ADAPTER_OPTIONS: { value: AgentAdapterType; label: string }[] = listUIAdapters().map((adapter) => ({
+  value: adapter.type as AgentAdapterType,
   label: adapterLabels[adapter.type] ?? adapter.label,
 }));
 
@@ -522,7 +523,7 @@ const IMPORT_ADAPTER_OPTIONS: { value: string; label: string }[] = listUIAdapter
 interface AdapterPickerItem {
   slug: string;
   name: string;
-  adapterType: string;
+  adapterType: AgentAdapterType;
 }
 
 function AdapterPickerList({
@@ -535,10 +536,10 @@ function AdapterPickerList({
   onChangeConfig,
 }: {
   agents: AdapterPickerItem[];
-  adapterOverrides: Record<string, string>;
+  adapterOverrides: Record<string, AgentAdapterType>;
   expandedSlugs: Set<string>;
   configValues: Record<string, CreateConfigValues>;
-  onChangeAdapter: (slug: string, adapterType: string) => void;
+  onChangeAdapter: (slug: string, adapterType: AgentAdapterType) => void;
   onToggleExpand: (slug: string) => void;
   onChangeConfig: (slug: string, patch: Partial<CreateConfigValues>) => void;
 }) {
@@ -575,7 +576,7 @@ function AdapterPickerList({
                   <select
                     className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 py-1 text-xs outline-none focus:border-foreground"
                     value={selectedType}
-                    onChange={(e) => onChangeAdapter(agent.slug, e.target.value)}
+                    onChange={(e) => onChangeAdapter(agent.slug, e.target.value as AgentAdapterType)}
                   >
                     {IMPORT_ADAPTER_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -686,7 +687,7 @@ export function CompanyImport() {
   const [collisionStrategy, setCollisionStrategy] = useState<CompanyPortabilityCollisionStrategy>("rename");
 
   // Adapter override state
-  const [adapterOverrides, setAdapterOverrides] = useState<Record<string, string>>({});
+  const [adapterOverrides, setAdapterOverrides] = useState<Record<string, AgentAdapterType>>({});
   const [adapterExpandedSlugs, setAdapterExpandedSlugs] = useState<Set<string>>(new Set());
   const [adapterConfigValues, setAdapterConfigValues] = useState<Record<string, CreateConfigValues>>({});
 
@@ -761,7 +762,7 @@ export function CompanyImport() {
       setConfirmedSlugs(new Set());
 
       // Initialize adapter overrides — default all agents to the CEO's adapter type
-      const defaultAdapters: Record<string, string> = {};
+      const defaultAdapters: Record<string, AgentAdapterType> = {};
       for (const agent of result.manifest.agents) {
         defaultAdapters[agent.slug] = ceoAdapterType;
       }
@@ -1020,7 +1021,7 @@ export function CompanyImport() {
     });
   }
 
-  function handleAdapterChange(slug: string, adapterType: string) {
+  function handleAdapterChange(slug: string, adapterType: AgentAdapterType) {
     setAdapterOverrides((prev) => ({ ...prev, [slug]: adapterType }));
     // Reset config values when adapter type changes
     setAdapterConfigValues((prev) => {

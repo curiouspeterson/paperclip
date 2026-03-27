@@ -246,4 +246,62 @@ describeEmbeddedPostgres("applyPendingMigrations", () => {
     },
     60_000,
   );
+
+  it(
+    "rejects agents with unsupported adapter types after migration 0047",
+    async () => {
+      const connectionString = await createTempDatabase();
+
+      await applyPendingMigrations(connectionString);
+
+      const companyId = "22222222-2222-4222-8222-222222222222";
+      const sql = postgres(connectionString, { max: 1, onnotice: () => {} });
+      try {
+        await sql.unsafe(`
+          INSERT INTO "companies" (
+            "id",
+            "name",
+            "issue_prefix",
+            "require_board_approval_for_new_agents"
+          )
+          VALUES (
+            '${companyId}',
+            'Adapter Guard Company',
+            'AGC',
+            false
+          )
+        `);
+
+        await expect(
+          sql.unsafe(`
+            INSERT INTO "agents" (
+              "id",
+              "company_id",
+              "name",
+              "role",
+              "status",
+              "adapter_type",
+              "adapter_config",
+              "runtime_config",
+              "permissions"
+            )
+            VALUES (
+              '33333333-3333-4333-8333-333333333333',
+              '${companyId}',
+              'Broken Adapter',
+              'engineer',
+              'active',
+              'unknown_adapter',
+              '{}'::jsonb,
+              '{}'::jsonb,
+              '{}'::jsonb
+            )
+          `),
+        ).rejects.toThrow();
+      } finally {
+        await sql.end();
+      }
+    },
+    60_000,
+  );
 });

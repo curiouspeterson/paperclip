@@ -35,6 +35,12 @@ export const AGENT_ADAPTER_TYPES = [
 ] as const;
 export type AgentAdapterType = (typeof AGENT_ADAPTER_TYPES)[number];
 
+const AGENT_ADAPTER_TYPE_SET = new Set<string>(AGENT_ADAPTER_TYPES);
+
+export function isAgentAdapterType(value: string): value is AgentAdapterType {
+  return AGENT_ADAPTER_TYPE_SET.has(value);
+}
+
 export const AGENT_ROLES = [
   "ceo",
   "cto",

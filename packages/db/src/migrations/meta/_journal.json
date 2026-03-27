@@ -330,6 +330,13 @@
       "when": 1774483200000,
       "tag": "0046_root_company_goal_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1774573200000,
+      "tag": "0047_agent_adapter_type_guard",
+      "breakpoints": true
     }
   ]
 }

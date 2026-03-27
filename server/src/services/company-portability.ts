@@ -38,6 +38,7 @@ import {
   ROUTINE_TRIGGER_KINDS,
   ROUTINE_TRIGGER_SIGNING_MODES,
   deriveProjectUrlKey,
+  isAgentAdapterType,
   normalizeAgentUrlKey,
 } from "@paperclipai/shared";
 import {
@@ -2341,6 +2342,13 @@ function buildManifestFromPackageFiles(
       : {};
     const runtimeConfig = extensionRuntime ?? {};
     const title = asString(frontmatter.title);
+    const rawAdapterType = asString(extensionAdapter?.type);
+    const adapterType = rawAdapterType && isAgentAdapterType(rawAdapterType)
+      ? rawAdapterType
+      : "process";
+    if (rawAdapterType && !isAgentAdapterType(rawAdapterType)) {
+      warnings.push(`Agent ${slug} uses unsupported adapter type '${rawAdapterType}' in package metadata; defaulting export manifest to process.`);
+    }
 
     manifest.agents.push({
       slug,
@@ -2352,7 +2360,7 @@ function buildManifestFromPackageFiles(
       icon: asString(extension.icon),
       capabilities: asString(extension.capabilities),
       reportsToSlug: asString(frontmatter.reportsTo) ?? asString(extension.reportsTo),
-      adapterType: asString(extensionAdapter?.type) ?? "process",
+      adapterType,
       adapterConfig,
       runtimeConfig,
       permissions: extensionPermissions ?? {},

@@ -172,4 +172,37 @@ describe("company portability routes", () => {
     expect(res.status).toBe(403);
     expect(res.body.error).toContain("Board access required");
   });
+
+  it("rejects unsupported adapter overrides on safe import apply routes before the service layer", async () => {
+    mockAgentService.getById.mockResolvedValue({
+      id: "agent-1",
+      companyId: "11111111-1111-4111-8111-111111111111",
+      role: "ceo",
+    });
+    const app = await createApp({
+      type: "agent",
+      agentId: "agent-1",
+      companyId: "11111111-1111-4111-8111-111111111111",
+      source: "agent_key",
+      runId: "run-1",
+    });
+
+    const res = await request(app)
+      .post("/api/companies/11111111-1111-4111-8111-111111111111/imports/apply")
+      .send({
+        source: { type: "inline", files: { "COMPANY.md": "---\nname: Test\n---\n" } },
+        include: { company: true, agents: true, projects: false, issues: false },
+        target: { mode: "existing_company", companyId: "11111111-1111-4111-8111-111111111111" },
+        collisionStrategy: "rename",
+        adapterOverrides: {
+          brokenagent: {
+            adapterType: "unknown_adapter",
+          },
+        },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Validation error");
+    expect(mockCompanyPortabilityService.importBundle).not.toHaveBeenCalled();
+  });
 });

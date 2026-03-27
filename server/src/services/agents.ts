@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
+import { isAgentAdapterType, type AgentAdapterType, isUuidLike, normalizeAgentUrlKey } from "@paperclipai/shared";
 import {
   agents,
   agentConfigRevisions,
@@ -12,7 +13,6 @@ import {
   heartbeatRunEvents,
   heartbeatRuns,
 } from "@paperclipai/db";
-import { isUuidLike, normalizeAgentUrlKey } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import { normalizeAgentPermissions } from "./agent-permissions.js";
 import { REDACTED_EVENT_VALUE, sanitizeRecord } from "../redaction.js";
@@ -69,6 +69,12 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 function jsonEqual(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function assertValidAgentAdapterType(adapterType: string): asserts adapterType is AgentAdapterType {
+  if (!isAgentAdapterType(adapterType)) {
+    throw unprocessable(`Invalid adapter type: ${adapterType}`);
+  }
 }
 
 function buildConfigSnapshot(
@@ -130,6 +136,7 @@ function configPatchFromSnapshot(snapshot: unknown): Partial<typeof agents.$infe
   if (typeof snapshot.adapterType !== "string" || snapshot.adapterType.length === 0) {
     throw unprocessable("Invalid revision snapshot: adapterType");
   }
+  assertValidAgentAdapterType(snapshot.adapterType);
   if (typeof snapshot.budgetMonthlyCents !== "number" || !Number.isFinite(snapshot.budgetMonthlyCents)) {
     throw unprocessable("Invalid revision snapshot: budgetMonthlyCents");
   }
@@ -341,6 +348,9 @@ function normalizeAgentRow(row: typeof agents.$inferSelect) {
     }
 
     const normalizedPatch = { ...data } as Partial<typeof agents.$inferInsert>;
+    if (typeof normalizedPatch.adapterType === "string") {
+      assertValidAgentAdapterType(normalizedPatch.adapterType);
+    }
     if (data.permissions !== undefined) {
       const role = (data.role ?? existing.role) as string;
       normalizedPatch.permissions = normalizeAgentPermissions(data.permissions, role);
@@ -392,6 +402,8 @@ function normalizeAgentRow(row: typeof agents.$inferSelect) {
     getById,
 
     create: async (companyId: string, data: Omit<typeof agents.$inferInsert, "companyId">) => {
+      const adapterType = data.adapterType ?? "process";
+      assertValidAgentAdapterType(adapterType);
       if (data.reportsTo) {
         await ensureManager(companyId, data.reportsTo);
       }
@@ -406,7 +418,14 @@ function normalizeAgentRow(row: typeof agents.$inferSelect) {
       const normalizedPermissions = normalizeAgentPermissions(data.permissions, role);
       const created = await db
         .insert(agents)
-        .values({ ...data, name: uniqueName, companyId, role, permissions: normalizedPermissions })
+        .values({
+          ...data,
+          name: uniqueName,
+          companyId,
+          role,
+          adapterType,
+          permissions: normalizedPermissions,
+        })
         .returning()
         .then((rows) => rows[0]);
 

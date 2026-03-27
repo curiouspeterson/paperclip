@@ -1,3 +1,5 @@
+import type { AgentAdapterType } from "../constants.js";
+
 export interface CompanyPortabilityInclude {
   company: boolean;
   agents: boolean;
@@ -114,7 +116,7 @@ export interface CompanyPortabilityAgentManifestEntry {
   icon: string | null;
   capabilities: string | null;
   reportsToSlug: string | null;
-  adapterType: string;
+  adapterType: AgentAdapterType;
   adapterConfig: Record<string, unknown>;
   runtimeConfig: Record<string, unknown>;
   permissions: Record<string, unknown>;
@@ -264,7 +266,7 @@ export interface CompanyPortabilityPreviewResult {
 }
 
 export interface CompanyPortabilityAdapterOverride {
-  adapterType: string;
+  adapterType: AgentAdapterType;
   adapterConfig?: Record<string, unknown>;
 }
 
