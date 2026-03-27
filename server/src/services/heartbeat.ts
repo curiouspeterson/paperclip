@@ -31,6 +31,11 @@ import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir, resolveManagedProjectWorkspaceDir } from "../home-paths.js";
 import { summarizeHeartbeatRunResultJson } from "./heartbeat-run-summary.js";
 import {
+  buildHeartbeatIssueCompletionComment,
+  buildPersistedHeartbeatResultJson,
+  resolveHeartbeatRunOutcome,
+} from "./heartbeat-run-policy.js";
+import {
   buildWorkspaceReadyComment,
   cleanupExecutionWorkspaceArtifacts,
   ensureRuntimeServicesForRun,
@@ -2590,17 +2595,11 @@ export function heartbeatService(db: Db) {
       });
       const normalizedUsage = sessionUsageResolution.normalizedUsage;
 
-      let outcome: "succeeded" | "failed" | "cancelled" | "timed_out";
       const latestRun = await getRun(run.id);
-      if (latestRun?.status === "cancelled") {
-        outcome = "cancelled";
-      } else if (adapterResult.timedOut) {
-        outcome = "timed_out";
-      } else if ((adapterResult.exitCode ?? 0) === 0 && !adapterResult.errorMessage) {
-        outcome = "succeeded";
-      } else {
-        outcome = "failed";
-      }
+      const outcome = resolveHeartbeatRunOutcome({
+        latestRunStatus: latestRun?.status ?? null,
+        adapterResult,
+      });
 
       let logSummary: { bytes: number; sha256?: string; compressed: boolean } | null = null;
       if (handle) {
@@ -2642,6 +2641,8 @@ export function heartbeatService(db: Db) {
             } as Record<string, unknown>)
           : null;
 
+      const persistedResultJson = buildPersistedHeartbeatResultJson(adapterResult);
+
       await setRunStatus(run.id, status, {
         finishedAt: new Date(),
         error:
@@ -2662,7 +2663,7 @@ export function heartbeatService(db: Db) {
         exitCode: adapterResult.exitCode,
         signal: adapterResult.signal,
         usageJson,
-        resultJson: adapterResult.resultJson ?? null,
+        resultJson: persistedResultJson,
         sessionIdAfter: nextSessionState.displayId ?? nextSessionState.legacySessionId,
         stdoutExcerpt,
         stderrExcerpt,
@@ -2818,7 +2819,7 @@ export function heartbeatService(db: Db) {
   }
 
   async function releaseIssueExecutionAndPromote(run: typeof heartbeatRuns.$inferSelect) {
-    const promotedRun = await db.transaction(async (tx) => {
+    const releaseResult = await db.transaction(async (tx) => {
       await tx.execute(
         sql`select id from issues where company_id = ${run.companyId} and execution_run_id = ${run.id} for update`,
       );
@@ -2832,7 +2833,12 @@ export function heartbeatService(db: Db) {
         .where(and(eq(issues.companyId, run.companyId), eq(issues.executionRunId, run.id)))
         .then((rows) => rows[0] ?? null);
 
-      if (!issue) return;
+      if (!issue) {
+        return {
+          promotedRun: null,
+          releasedIssueId: null,
+        };
+      }
 
       await tx
         .update(issues)
@@ -2859,7 +2865,12 @@ export function heartbeatService(db: Db) {
           .limit(1)
           .then((rows) => rows[0] ?? null);
 
-        if (!deferred) return null;
+        if (!deferred) {
+          return {
+            promotedRun: null,
+            releasedIssueId: issue.id,
+          };
+        }
 
         const deferredAgent = await tx
           .select()
@@ -2950,10 +2961,42 @@ export function heartbeatService(db: Db) {
           })
           .where(eq(issues.id, issue.id));
 
-        return newRun;
+        return {
+          promotedRun: newRun,
+          releasedIssueId: issue.id,
+        };
       }
     });
 
+    if (releaseResult.releasedIssueId) {
+      const completionComment = buildHeartbeatIssueCompletionComment({
+        runId: run.id,
+        status: run.status as "succeeded" | "failed" | "cancelled" | "timed_out",
+        error: run.error,
+        resultJson:
+          run.resultJson && typeof run.resultJson === "object" && !Array.isArray(run.resultJson)
+            ? (run.resultJson as Record<string, unknown>)
+            : null,
+      });
+      if (completionComment) {
+        try {
+          await issuesSvc.addComment(releaseResult.releasedIssueId, completionComment, {
+            agentId: run.agentId,
+          });
+        } catch (err) {
+          logger.warn(
+            {
+              err,
+              runId: run.id,
+              issueId: releaseResult.releasedIssueId,
+            },
+            "failed to post heartbeat completion comment",
+          );
+        }
+      }
+    }
+
+    const promotedRun = releaseResult.promotedRun;
     if (!promotedRun) return;
 
     publishLiveEvent({

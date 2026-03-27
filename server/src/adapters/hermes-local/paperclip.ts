@@ -4,6 +4,8 @@ export const DEFAULT_HERMES_LOCAL_MODEL = "gpt-5.4";
 export const DEFAULT_HERMES_LOCAL_PROVIDER = "codex";
 export const HERMES_TOOL_ONLY_EXIT_MESSAGE =
   "Hermes returned tool-call transcript output without a final assistant completion.";
+export const HERMES_PROVIDER_AUTH_REQUIRED_CODE = "provider_auth_required";
+export const HERMES_PAPERCLIP_UNREACHABLE_CODE = "paperclip_unreachable";
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -32,25 +34,50 @@ export function normalizeHermesLocalPaperclipConfig(
 export function normalizeHermesLocalExecutionSummary(value: unknown): {
   summary: string | null;
   anomalyMessage: string | null;
+  anomalyCode: string | null;
 } {
   const raw = asString(value);
   if (!raw) {
-    return { summary: null, anomalyMessage: null };
+    return { summary: null, anomalyMessage: null, anomalyCode: null };
   }
 
   const normalized = stripHermesTranscriptNoise(raw);
-  if (normalized) {
-    return { summary: normalized, anomalyMessage: null };
+  const hadToolTranscript = /<tool_call>|<tool_response>|<tool_result>/i.test(raw);
+  const visibleText = normalized || raw;
+
+  if (/Hermes is not logged into Nous Portal\./i.test(visibleText)) {
+    return {
+      summary: visibleText,
+      anomalyMessage: visibleText,
+      anomalyCode: HERMES_PROVIDER_AUTH_REQUIRED_CODE,
+    };
   }
 
-  const hadToolTranscript = /<tool_call>|<tool_response>|<tool_result>/i.test(raw);
+  if (
+    /Paperclip API server/i.test(visibleText) &&
+    /(not responding|connection refused|unable to connect|server appears to be down|server appears unreachable)/i.test(
+      visibleText,
+    )
+  ) {
+    return {
+      summary: visibleText,
+      anomalyMessage: visibleText,
+      anomalyCode: HERMES_PAPERCLIP_UNREACHABLE_CODE,
+    };
+  }
+
+  if (normalized) {
+    return { summary: normalized, anomalyMessage: null, anomalyCode: null };
+  }
+
   if (!hadToolTranscript) {
-    return { summary: raw, anomalyMessage: null };
+    return { summary: raw, anomalyMessage: null, anomalyCode: null };
   }
 
   return {
     summary: null,
     anomalyMessage: HERMES_TOOL_ONLY_EXIT_MESSAGE,
+    anomalyCode: "incomplete_assistant_completion",
   };
 }
 
@@ -79,7 +106,7 @@ export function normalizeHermesLocalExecutionResult(
   return {
     ...next,
     errorMessage: result.errorMessage ?? normalized.anomalyMessage,
-    errorCode: result.errorCode ?? "incomplete_assistant_completion",
+    errorCode: result.errorCode ?? normalized.anomalyCode ?? "incomplete_assistant_completion",
     resultJson: {
       ...(existingResultJson ?? {}),
       message: normalized.anomalyMessage,
