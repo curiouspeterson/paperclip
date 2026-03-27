@@ -295,6 +295,7 @@ describe("Hermes local Paperclip wrapper", () => {
     expect(result.errorCode).toBe("paperclip_unreachable");
     expect(result.errorMessage).toContain("Paperclip API server");
     expect(result.summary).toContain("Unable to connect to Paperclip API server");
+    expect(result.clearSession).toBe(true);
   });
 
   it("treats stored localhost-unreachable heartbeat summaries as Paperclip failures", async () => {
@@ -336,5 +337,6 @@ describe("Hermes local Paperclip wrapper", () => {
     expect(result.errorCode).toBe("paperclip_unreachable");
     expect(result.errorMessage).toContain("localhost:3100 is unreachable from this session");
     expect(result.summary).toContain("curl to http://127.0.0.1:3100/... failed with exit code 7");
+    expect(result.clearSession).toBe(true);
   });
 });

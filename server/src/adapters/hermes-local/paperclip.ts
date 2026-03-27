@@ -186,6 +186,9 @@ export function normalizeHermesLocalExecutionResult(
     ...next,
     errorMessage: result.errorMessage ?? normalized.anomalyMessage,
     errorCode: result.errorCode ?? normalized.anomalyCode ?? "incomplete_assistant_completion",
+    clearSession:
+      result.clearSession === true ||
+      normalized.anomalyCode === HERMES_PAPERCLIP_UNREACHABLE_CODE,
     resultJson: {
       ...(existingResultJson ?? {}),
       message: normalized.anomalyMessage,
