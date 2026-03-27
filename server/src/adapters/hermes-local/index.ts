@@ -16,7 +16,11 @@ import {
 } from "./paperclip.js";
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
-  const normalizedConfig = normalizeHermesLocalPaperclipRuntimeConfig(ctx.config);
+  const normalizedConfig = await normalizeHermesLocalPaperclipRuntimeConfig(ctx.config, {
+    companyId: ctx.agent.companyId,
+    agentId: ctx.agent.id,
+    onLog: ctx.onLog,
+  });
   const result = await hermesExecute({
     ...ctx,
     config: normalizedConfig,
@@ -31,8 +35,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 export async function testEnvironment(
   ctx: AdapterEnvironmentTestContext,
 ): Promise<AdapterEnvironmentTestResult> {
-  const normalizedConfig = normalizeHermesLocalPaperclipRuntimeConfig(
+  const normalizedConfig = await normalizeHermesLocalPaperclipRuntimeConfig(
     (ctx.config ?? null) as Record<string, unknown> | null,
+    {
+      companyId: ctx.companyId,
+    },
   );
   return hermesTestEnvironment({
     ...ctx,

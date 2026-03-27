@@ -61,9 +61,22 @@ describe("boardMutationGuard", () => {
   });
 
   it("allows board bearer-key mutations without origin", async () => {
-    const app = createApp("board", "board_key");
-    const res = await request(app).post("/mutate").send({ ok: true });
-    expect(res.status).toBe(204);
+    const middleware = boardMutationGuard();
+    const req = {
+      method: "POST",
+      actor: { type: "board", userId: "board", source: "board_key" },
+      header: () => undefined,
+    } as any;
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    } as any;
+    const next = vi.fn();
+
+    middleware(req, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.status).not.toHaveBeenCalled();
   });
 
   it("allows board mutations from trusted origin", async () => {

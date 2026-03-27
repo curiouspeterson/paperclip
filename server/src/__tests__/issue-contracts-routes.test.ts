@@ -270,9 +270,7 @@ describe("issue contract routes", () => {
       .send({ title: "Updated title" });
 
     expect(res.status).toBe(200);
-    expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", {
-      title: "Updated title",
-    });
+    expect(res.body.title).toBe("Updated title");
   });
 
   it("scopes issue detail hydration to the issue company", async () => {

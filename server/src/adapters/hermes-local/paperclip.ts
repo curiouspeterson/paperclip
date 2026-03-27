@@ -1,9 +1,106 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { AdapterExecutionResult } from "../types.js";
+import { prepareManagedHermesHome } from "./hermes-home.js";
 
 export const DEFAULT_HERMES_LOCAL_MODEL = "gpt-5.4";
 export const DEFAULT_HERMES_LOCAL_PROVIDER = "codex";
+export const DEFAULT_HERMES_LOCAL_CLI_PROVIDER = "openai-codex";
+export const DEFAULT_HERMES_LOCAL_TOOLSETS = [
+  "terminal",
+  "file",
+  "web",
+  "skills",
+  "code_execution",
+  "delegation",
+  "memory",
+  "session_search",
+  "todo",
+  "clarify",
+] as const;
+export const DEFAULT_HERMES_LOCAL_PROMPT_TEMPLATE = `You are "{{agentName}}", an AI agent employee in a Paperclip-managed company.
+
+IMPORTANT: Use the \`code_execution\` tool for ALL Paperclip API calls.
+Do NOT use terminal curl commands against localhost Paperclip URLs in this environment.
+
+Inside \`code_execution\`, use Python and the \`PAPERCLIP_API_URL\` environment variable. This helper is safe to reuse:
+
+\`\`\`python
+import json
+import os
+import urllib.parse
+import urllib.request
+
+BASE = os.environ["PAPERCLIP_API_URL"].rstrip("/")
+
+def paperclip_request(method: str, path: str, payload=None):
+    body = None if payload is None else json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(f"{BASE}{path}", data=body, method=method)
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        raw = resp.read().decode("utf-8")
+    return json.loads(raw) if raw else None
+\`\`\`
+
+Your Paperclip identity:
+  Agent ID: {{agentId}}
+  Company ID: {{companyId}}
+  API Base: {{paperclipApiUrl}}
+
+{{#taskId}}
+## Assigned Task
+
+Issue ID: {{taskId}}
+Title: {{taskTitle}}
+
+{{taskBody}}
+
+## Workflow
+
+1. Work on the task using your tools
+2. When done, mark the issue as completed using \`code_execution\`:
+   \`\`\`python
+   paperclip_request("PATCH", "/issues/{{taskId}}", {"status": "done"})
+   \`\`\`
+3. Report what you did
+{{/taskId}}
+
+{{#noTask}}
+## Heartbeat Wake — Check for Work
+
+1. List issues assigned to you using \`code_execution\`:
+   \`\`\`python
+   from urllib.parse import urlencode
+   assigned = paperclip_request(
+       "GET",
+       f"/companies/{{companyId}}/issues?{urlencode({'assigneeAgentId': '{{agentId}}', 'status': 'todo'})}",
+   )
+   print(json.dumps(assigned, indent=2))
+   \`\`\`
+
+2. If issues are found, pick the highest priority one and work on it:
+   - Checkout using \`code_execution\`:
+     \`\`\`python
+     paperclip_request("POST", "/issues/ISSUE_ID/checkout", {"agentId": "{{agentId}}"})
+     \`\`\`
+   - Do the work
+   - Complete using \`code_execution\`:
+     \`\`\`python
+     paperclip_request("PATCH", "/issues/ISSUE_ID", {"status": "done"})
+     \`\`\`
+
+3. If no assigned issues exist, check for any unassigned backlog issues:
+   \`\`\`python
+   from urllib.parse import urlencode
+   backlog = paperclip_request(
+       "GET",
+       f"/companies/{{companyId}}/issues?{urlencode({'status': 'backlog'})}",
+   )
+   print(json.dumps(backlog, indent=2))
+   \`\`\`
+
+4. If truly nothing is available, report briefly.
+{{/noTask}}`;
 export const HERMES_TOOL_ONLY_EXIT_MESSAGE =
   "Hermes returned tool-call transcript output without a final assistant completion.";
 export const HERMES_PROVIDER_AUTH_REQUIRED_CODE = "provider_auth_required";
@@ -103,14 +200,51 @@ function resolveHermesCommandPath(command: string, env: NodeJS.ProcessEnv = proc
   return null;
 }
 
-export function normalizeHermesLocalPaperclipRuntimeConfig(
+export async function normalizeHermesLocalPaperclipRuntimeConfig(
   value: Record<string, unknown> | null | undefined,
-): Record<string, unknown> {
+  options: {
+    companyId: string;
+    agentId?: string | null;
+    env?: NodeJS.ProcessEnv;
+    onLog?: (stream: "stdout" | "stderr", chunk: string) => Promise<void>;
+  },
+): Promise<Record<string, unknown>> {
   const next = normalizeHermesLocalPaperclipConfig(value);
+  next.provider = DEFAULT_HERMES_LOCAL_CLI_PROVIDER;
   const configuredCommand = asString(next.hermesCommand) ?? "hermes";
   const resolvedCommand = resolveHermesCommandPath(configuredCommand);
   if (resolvedCommand) {
     next.hermesCommand = resolvedCommand;
+  }
+
+  const existingEnv: Record<string, unknown> =
+    next.env && typeof next.env === "object" && !Array.isArray(next.env)
+      ? { ...next.env }
+      : {};
+  const runtimeEnv = options.env ?? process.env;
+  const configuredHermesHome =
+    typeof existingEnv.HERMES_HOME === "string" && existingEnv.HERMES_HOME.trim().length > 0
+      ? path.resolve(existingEnv.HERMES_HOME.trim())
+      : null;
+  if (configuredHermesHome) {
+    existingEnv.HERMES_HOME = configuredHermesHome;
+  } else if (next.paperclipManagedHermesHome !== false) {
+    existingEnv.HERMES_HOME = await prepareManagedHermesHome(runtimeEnv, {
+      companyId: options.companyId,
+      agentId: options.agentId,
+      onLog: options.onLog,
+    });
+  }
+
+  next.env = {
+    ...existingEnv,
+    TERMINAL_ENV: "local",
+  };
+  if (asString(next.toolsets) === null && !Array.isArray(next.enabledToolsets)) {
+    next.toolsets = DEFAULT_HERMES_LOCAL_TOOLSETS.join(",");
+  }
+  if (asString(next.promptTemplate) === null) {
+    next.promptTemplate = DEFAULT_HERMES_LOCAL_PROMPT_TEMPLATE;
   }
   return next;
 }
