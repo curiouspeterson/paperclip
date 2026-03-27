@@ -8,6 +8,7 @@ import { piLocalUIAdapter } from "./pi-local";
 import { openClawGatewayUIAdapter } from "./openclaw-gateway";
 import { processUIAdapter } from "./process";
 import { httpUIAdapter } from "./http";
+import { unsupportedUIAdapter } from "./unsupported";
 
 const uiAdapters: UIAdapterModule[] = [
   claudeLocalUIAdapter,
@@ -26,7 +27,7 @@ const adaptersByType = new Map<string, UIAdapterModule>(
 );
 
 export function getUIAdapter(type: string): UIAdapterModule {
-  return adaptersByType.get(type) ?? processUIAdapter;
+  return adaptersByType.get(type) ?? unsupportedUIAdapter;
 }
 
 export function listUIAdapters(): UIAdapterModule[] {

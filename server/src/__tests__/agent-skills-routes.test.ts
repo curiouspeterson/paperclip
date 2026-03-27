@@ -312,6 +312,25 @@ describe("agent skill routes", () => {
     );
   });
 
+  it("allows creating a gemini_local agent through the canonical create route", async () => {
+    const res = await request(createApp())
+      .post("/api/companies/company-1/agents")
+      .send({
+        name: "Gemini Agent",
+        role: "engineer",
+        adapterType: "gemini_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockAgentService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        adapterType: "gemini_local",
+      }),
+    );
+  });
+
   it("materializes a managed AGENTS.md for directly created local agents", async () => {
     const res = await request(createApp())
       .post("/api/companies/company-1/agents")

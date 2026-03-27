@@ -38,7 +38,7 @@ These decisions close open questions from `SPEC.md` for V1.
 | Communication | Tasks + comments only (no separate chat system) |
 | Task ownership | Single assignee; atomic checkout required for `in_progress` transition |
 | Recovery | No automatic reassignment; work recovery stays manual/explicit |
-| Agent adapters | Canonical adapter enum is `process | http | claude_local | codex_local | opencode_local | pi_local | cursor | openclaw_gateway | hermes_local` |
+| Agent adapters | Canonical adapter enum is `process | http | claude_local | codex_local | gemini_local | opencode_local | pi_local | cursor | openclaw_gateway | hermes_local` |
 | Auth | Mode-dependent human auth (`local_trusted` implicit board in current code; authenticated mode uses sessions), API keys for agents |
 | Budget period | Monthly UTC calendar window |
 | Budget enforcement | Soft alerts + hard limit auto-pause |

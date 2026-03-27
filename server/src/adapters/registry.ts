@@ -204,8 +204,7 @@ const adaptersByType = new Map<string, ServerAdapterModule>(
 export function getServerAdapter(type: string): ServerAdapterModule {
   const adapter = adaptersByType.get(type);
   if (!adapter) {
-    // Fall back to process adapter for unknown types
-    return processAdapter;
+    throw new Error(`Unsupported adapter type: ${type}`);
   }
   return adapter;
 }
