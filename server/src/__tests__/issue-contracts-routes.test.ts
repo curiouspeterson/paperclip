@@ -74,6 +74,7 @@ const AGENT_TWO_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const RUN_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 async function createApp(actor: Record<string, unknown>) {
+  vi.resetModules();
   vi.doMock("../services/index.js", () => ({
     accessService: () => mockAccessService,
     agentService: () => mockAgentService,
@@ -89,10 +90,8 @@ async function createApp(actor: Record<string, unknown>) {
     routineService: () => ({ syncRunStatusForIssue: vi.fn(async () => undefined) }),
     workProductService: () => mockWorkProductService,
   }));
-  const [{ errorHandler }, { issueRoutes }] = await Promise.all([
-    import("../middleware/index.js"),
-    import("../routes/issues.js"),
-  ]);
+  const { errorHandler } = await import("../middleware/index.js");
+  const { issueRoutes } = await import("../routes/issues.js");
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {

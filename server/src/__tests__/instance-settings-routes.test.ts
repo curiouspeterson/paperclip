@@ -1,8 +1,6 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { errorHandler } from "../middleware/index.js";
-import { instanceSettingsRoutes } from "../routes/instance-settings.js";
 
 const mockInstanceSettingsService = vi.hoisted(() => ({
   getGeneral: vi.fn(),
@@ -13,12 +11,15 @@ const mockInstanceSettingsService = vi.hoisted(() => ({
 }));
 const mockLogActivity = vi.hoisted(() => vi.fn());
 
-vi.mock("../services/index.js", () => ({
-  instanceSettingsService: () => mockInstanceSettingsService,
-  logActivity: mockLogActivity,
-}));
-
-function createApp(actor: any) {
+async function createApp(actor: any) {
+  vi.doMock("../services/index.js", () => ({
+    instanceSettingsService: () => mockInstanceSettingsService,
+    logActivity: mockLogActivity,
+  }));
+  const [{ errorHandler }, { instanceSettingsRoutes }] = await Promise.all([
+    import("../middleware/index.js"),
+    import("../routes/instance-settings.js"),
+  ]);
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -32,6 +33,7 @@ function createApp(actor: any) {
 
 describe("instance settings routes", () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
     mockInstanceSettingsService.getGeneral.mockResolvedValue({
       censorUsernameInLogs: false,
@@ -57,7 +59,7 @@ describe("instance settings routes", () => {
   });
 
   it("allows local board users to read and update experimental settings", async () => {
-    const app = createApp({
+    const app = await createApp({
       type: "board",
       userId: "local-board",
       source: "local_implicit",
@@ -83,7 +85,7 @@ describe("instance settings routes", () => {
   });
 
   it("allows local board users to update guarded dev-server auto-restart", async () => {
-    const app = createApp({
+    const app = await createApp({
       type: "board",
       userId: "local-board",
       source: "local_implicit",
@@ -101,7 +103,7 @@ describe("instance settings routes", () => {
   });
 
   it("allows local board users to read and update general settings", async () => {
-    const app = createApp({
+    const app = await createApp({
       type: "board",
       userId: "local-board",
       source: "local_implicit",
@@ -124,7 +126,7 @@ describe("instance settings routes", () => {
   });
 
   it("rejects non-admin board users", async () => {
-    const app = createApp({
+    const app = await createApp({
       type: "board",
       userId: "user-1",
       source: "session",
@@ -139,7 +141,7 @@ describe("instance settings routes", () => {
   });
 
   it("rejects agent callers", async () => {
-    const app = createApp({
+    const app = await createApp({
       type: "agent",
       agentId: "agent-1",
       companyId: "company-1",
