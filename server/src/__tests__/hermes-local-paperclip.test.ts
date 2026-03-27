@@ -230,6 +230,59 @@ describe("Hermes local Paperclip wrapper", () => {
     );
   });
 
+  it("tells generic Hermes wakeups to include assigned in-progress issues before backlog", async () => {
+    mockHermesExecute.mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      summary: "Completed work.",
+      provider: "openai-codex",
+      model: "gpt-5.4",
+    });
+
+    await execute({
+      runId: "run-2d",
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Hermes Agent",
+        adapterType: "hermes_local",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {},
+      context: {},
+      onLog: async () => {},
+    });
+
+    expect(mockHermesExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          promptTemplate: expect.stringContaining("'status': 'todo,in_progress'"),
+        }),
+      }),
+    );
+    expect(mockHermesExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          promptTemplate: expect.stringContaining("/issues/ISSUE_ID/heartbeat-context"),
+        }),
+      }),
+    );
+    expect(mockHermesExecute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          promptTemplate: expect.stringContaining("Do not skip it just because it is already started."),
+        }),
+      }),
+    );
+  });
+
   it("resolves hermes from HOME/.local/bin when PATH does not include it", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-hermes-path-"));
     const localBin = path.join(root, ".local", "bin");

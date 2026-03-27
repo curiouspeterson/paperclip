@@ -73,23 +73,29 @@ Title: {{taskTitle}}
    from urllib.parse import urlencode
    assigned = paperclip_request(
        "GET",
-       f"/companies/{{companyId}}/issues?{urlencode({'assigneeAgentId': '{{agentId}}', 'status': 'todo'})}",
+       f"/companies/{{companyId}}/issues?{urlencode({'assigneeAgentId': '{{agentId}}', 'status': 'todo,in_progress'})}",
    )
    print(json.dumps(assigned, indent=2))
    \`\`\`
 
-2. If issues are found, pick the highest priority one and work on it:
-   - Checkout using \`code_execution\`:
+2. If issues are found, prioritize any issue already in \`in_progress\` before starting new backlog work.
+   - For the chosen issue, load the full heartbeat context first:
+     \`\`\`python
+     context = paperclip_request("GET", "/issues/ISSUE_ID/heartbeat-context")
+     print(json.dumps(context, indent=2))
+     \`\`\`
+   - If the issue is still in \`todo\`, checkout before you start:
      \`\`\`python
      paperclip_request("POST", "/issues/ISSUE_ID/checkout", {"agentId": "{{agentId}}"})
      \`\`\`
+   - If the issue is already in \`in_progress\`, continue the assigned work directly. Do not skip it just because it is already started.
    - Do the work
    - Complete using \`code_execution\`:
      \`\`\`python
      paperclip_request("PATCH", "/issues/ISSUE_ID", {"status": "done"})
      \`\`\`
 
-3. If no assigned issues exist, check for any unassigned backlog issues:
+3. Only if no assigned \`todo\` or \`in_progress\` issues exist, check for any unassigned backlog issues:
    \`\`\`python
    from urllib.parse import urlencode
    backlog = paperclip_request(
