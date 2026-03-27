@@ -3,6 +3,7 @@ import {
   usePluginAction,
   usePluginData,
   usePluginToast,
+  type PluginCommentAnnotationProps,
   type PluginDetailTabProps,
   type PluginPageProps,
   type PluginSettingsPageProps,
@@ -90,6 +91,32 @@ const dangerButtonStyle = {
   border: "1px solid rgba(239, 68, 68, 0.24)",
 } as const;
 
+const annotationCardStyle = {
+  display: "grid",
+  gap: "0.75rem",
+  padding: "0.85rem 0.95rem",
+  borderRadius: "0.8rem",
+  border: "1px solid rgba(15, 23, 42, 0.12)",
+  background: "rgba(15, 23, 42, 0.04)",
+} as const;
+
+const artifactGridStyle = {
+  display: "grid",
+  gap: "0.6rem",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+} as const;
+
+const artifactLinkStyle = {
+  display: "grid",
+  gap: "0.3rem",
+  padding: "0.75rem 0.8rem",
+  borderRadius: "0.75rem",
+  border: "1px solid rgba(15, 118, 110, 0.2)",
+  background: "rgba(15, 118, 110, 0.08)",
+  color: "inherit",
+  textDecoration: "none",
+} as const;
+
 type WorkflowTemplatesData = {
   templates: Array<{
     key: string;
@@ -140,6 +167,21 @@ type WorkflowStageOutputActionResult = {
     key: string;
     displayName: string;
   };
+};
+
+type CommentStageOutputData = {
+  annotation: {
+    workflowId: string;
+    workflowName: string;
+    stageKey: string;
+    stageDisplayName: string;
+    issueId: string;
+    commentId: string;
+    summary: string;
+    details: string;
+    artifacts: PodcastWorkflowArtifactReference[];
+    createdAt: string;
+  } | null;
 };
 
 type StageOutputDraft = {
@@ -831,6 +873,72 @@ function PodcastWorkflowManager(props: {
 
 function listWorkflowFallbackTemplates(): WorkflowTemplatesData["templates"] {
   return WORKFLOW_TEMPLATES.map((template) => ({ ...template }));
+}
+
+export function PodcastWorkflowCommentAnnotation({ context }: PluginCommentAnnotationProps) {
+  const annotation = usePluginData<CommentStageOutputData>(
+    DATA_KEYS.commentStageOutput,
+    context.companyId
+      ? {
+        companyId: context.companyId,
+        issueId: context.parentEntityId,
+        commentId: context.entityId,
+      }
+      : {},
+  );
+
+  if (!annotation.data?.annotation) {
+    return null;
+  }
+
+  const output = annotation.data.annotation;
+
+  return (
+    <div style={annotationCardStyle}>
+      <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+        <div style={{ display: "grid", gap: "0.2rem" }}>
+          <strong>{output.workflowName}</strong>
+          <div style={{ fontSize: "0.85rem", color: "rgba(15, 23, 42, 0.66)" }}>
+            {output.stageDisplayName} output handoff
+          </div>
+        </div>
+        <div style={{ fontSize: "0.8rem", color: "rgba(15, 23, 42, 0.58)" }}>
+          {new Date(output.createdAt).toLocaleString()}
+        </div>
+      </div>
+
+      <div style={{ color: "rgba(15, 23, 42, 0.84)" }}>{output.summary}</div>
+
+      {output.details.trim().length > 0 ? (
+        <div style={{ fontSize: "0.9rem", color: "rgba(15, 23, 42, 0.72)", whiteSpace: "pre-wrap" }}>
+          {output.details}
+        </div>
+      ) : null}
+
+      {output.artifacts.length > 0 ? (
+        <div style={artifactGridStyle}>
+          {output.artifacts.map((artifact) => (
+            <a
+              key={`${output.commentId}:${artifact.label}:${artifact.href}`}
+              href={artifact.href}
+              target="_blank"
+              rel="noreferrer"
+              style={artifactLinkStyle}
+            >
+              <strong>{artifact.label}</strong>
+              <span style={{ fontSize: "0.82rem", color: "rgba(15, 23, 42, 0.7)", wordBreak: "break-all" }}>
+                {artifact.href}
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: "0.85rem", color: "rgba(15, 23, 42, 0.6)" }}>
+          No structured artifacts were attached to this workflow update.
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function PodcastControlPlanePage({ context }: PluginPageProps) {

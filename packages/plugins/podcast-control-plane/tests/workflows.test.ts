@@ -3,7 +3,7 @@ import { createTestHarness } from "@paperclipai/plugin-sdk/testing";
 import type { Project } from "@paperclipai/plugin-sdk";
 import manifest from "../src/manifest.js";
 import plugin from "../src/worker.js";
-import { ACTION_KEYS, DATA_KEYS, STATE_NAMESPACES } from "../src/constants.js";
+import { ACTION_KEYS, DATA_KEYS, EXPORT_NAMES, SLOT_IDS, STATE_NAMESPACES } from "../src/constants.js";
 
 const COMPANY_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
@@ -675,6 +675,114 @@ describe("podcast workflow worker contract", () => {
           }),
         }),
       ]),
+    });
+  });
+
+  it("registers a comment annotation surface that resolves artifact refs for a recorded output comment", async () => {
+    const ui = await import("../src/ui/index.js");
+
+    expect(manifest.capabilities).toContain("ui.commentAnnotation.register");
+    expect(manifest.ui?.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "commentAnnotation",
+          id: SLOT_IDS.commentAnnotation,
+          exportName: EXPORT_NAMES.commentAnnotation,
+          entityTypes: ["comment"],
+        }),
+      ]),
+    );
+    expect(typeof ui[EXPORT_NAMES.commentAnnotation]).toBe("function");
+
+    const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
+    await plugin.definition.setup(harness.ctx);
+    harness.seed({
+      projects: [createProjectFixture()],
+    });
+
+    const created = await harness.performAction<{ workflow: { id: string } }>(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      name: "Episode 26 Production",
+      templateKey: "episode-pipeline",
+      description: "Coordinate the episode transcript and release process.",
+      projectId: PROJECT_ID,
+    });
+
+    const syncResult = await harness.performAction<{ issue: { id: string } }>(
+      ACTION_KEYS.syncWorkflowStageIssue,
+      {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+        stageKey: "transcript",
+      },
+    );
+
+    const outputResult = await harness.performAction<{
+      comment: {
+        id: string;
+      };
+    }>(ACTION_KEYS.recordWorkflowStageOutput, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+      summary: "Transcript imported and speaker labels normalized.",
+      details: "Removed sponsor break duplication.\nReady for editorial review.",
+      artifacts: [
+        {
+          label: "Transcript Doc",
+          href: "https://example.com/transcript-doc",
+        },
+        {
+          label: "Editorial Notes",
+          href: "paperclip://documents/editorial-notes",
+        },
+      ],
+    });
+
+    await expect(
+      harness.getData<{
+        annotation: {
+          workflowId: string;
+          workflowName: string;
+          stageKey: string;
+          stageDisplayName: string;
+          issueId: string;
+          commentId: string;
+          summary: string;
+          details: string;
+          artifacts: Array<{
+            label: string;
+            href: string;
+          }>;
+          createdAt: string;
+        } | null;
+      }>(DATA_KEYS.commentStageOutput, {
+        companyId: COMPANY_ID,
+        issueId: syncResult.issue.id,
+        commentId: outputResult.comment.id,
+      }),
+    ).resolves.toEqual({
+      annotation: expect.objectContaining({
+        workflowId: created.workflow.id,
+        workflowName: "Episode 26 Production",
+        stageKey: "transcript",
+        stageDisplayName: "Transcript",
+        issueId: syncResult.issue.id,
+        commentId: outputResult.comment.id,
+        summary: "Transcript imported and speaker labels normalized.",
+        details: "Removed sponsor break duplication.\nReady for editorial review.",
+        createdAt: expect.any(String),
+        artifacts: [
+          {
+            label: "Transcript Doc",
+            href: "https://example.com/transcript-doc",
+          },
+          {
+            label: "Editorial Notes",
+            href: "paperclip://documents/editorial-notes",
+          },
+        ],
+      }),
     });
   });
 

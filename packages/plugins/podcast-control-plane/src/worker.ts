@@ -4,9 +4,12 @@ import { ACTION_KEYS, DATA_KEYS, PLUGIN_ID } from "./constants.js";
 import {
   type PodcastWorkflowArtifactReference,
   buildWorkflowStageOutputCommentBody,
+  createWorkflowCommentAnnotationRecord,
   createWorkflowStageLatestRunRecord,
   createWorkflowStageRunRecord,
+  readWorkflowCommentAnnotationRecord,
   writeWorkflowStageLatestRunRecord,
+  writeWorkflowCommentAnnotationRecord,
   writeWorkflowStageRunRecord,
 } from "./runs.js";
 import {
@@ -204,6 +207,35 @@ async function registerWorkflowData(ctx: PluginContext) {
         projectId: target.project?.id ?? workflow.projectId,
         projectWorkspace: target.primaryWorkspace ? { id: target.primaryWorkspace.id } : null,
       }),
+    };
+  });
+
+  ctx.data.register(DATA_KEYS.commentStageOutput, async (params) => {
+    const companyId = normalizeOptionalString(params.companyId);
+    const commentId = normalizeOptionalString(params.commentId);
+    const issueId = normalizeOptionalString(params.issueId);
+    if (!companyId || !commentId || !issueId) {
+      return { annotation: null };
+    }
+
+    const annotation = await readWorkflowCommentAnnotationRecord(ctx, companyId, commentId);
+    if (!annotation || annotation.issueId !== issueId) {
+      return { annotation: null };
+    }
+
+    return {
+      annotation: {
+        workflowId: annotation.workflowId,
+        workflowName: annotation.workflowName,
+        stageKey: annotation.stageKey,
+        stageDisplayName: annotation.stageDisplayName,
+        issueId: annotation.issueId,
+        commentId: annotation.commentId,
+        summary: annotation.summary,
+        details: annotation.details,
+        artifacts: annotation.artifacts.map((artifact) => ({ ...artifact })),
+        createdAt: annotation.createdAt,
+      },
     };
   });
 }
@@ -413,6 +445,11 @@ async function registerWorkflowActions(ctx: PluginContext) {
     });
     await writeWorkflowStageRunRecord(ctx, run);
     await writeWorkflowStageLatestRunRecord(ctx, createWorkflowStageLatestRunRecord(run));
+    await writeWorkflowCommentAnnotationRecord(ctx, createWorkflowCommentAnnotationRecord({
+      run,
+      workflowName: workflow.name,
+      stageDisplayName: stage.displayName,
+    }));
 
     await ctx.activity.log({
       companyId,

@@ -23,6 +23,7 @@ const manifest: PaperclipPluginManifestV1 = {
     "ui.page.register",
     "ui.detailTab.register",
     "ui.dashboardWidget.register",
+    "ui.commentAnnotation.register",
   ],
   entrypoints: {
     worker: "./dist/worker.js",
@@ -55,6 +56,13 @@ const manifest: PaperclipPluginManifestV1 = {
         displayName: "Podcast Control Plane",
         exportName: EXPORT_NAMES.projectTab,
         entityTypes: ["project"],
+      },
+      {
+        type: "commentAnnotation",
+        id: SLOT_IDS.commentAnnotation,
+        displayName: "Podcast Workflow Output",
+        exportName: EXPORT_NAMES.commentAnnotation,
+        entityTypes: ["comment"],
       },
     ],
   },

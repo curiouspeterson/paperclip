@@ -45,6 +45,22 @@ export interface PodcastWorkflowStageLastRunView {
   createdAt: string;
 }
 
+export interface PodcastWorkflowCommentAnnotationRecord {
+  version: 1;
+  companyId: string;
+  workflowId: string;
+  workflowName: string;
+  stageKey: string;
+  stageDisplayName: string;
+  runId: string;
+  issueId: string;
+  commentId: string;
+  summary: string;
+  details: string;
+  artifacts: PodcastWorkflowArtifactReference[];
+  createdAt: string;
+}
+
 function isArtifactReference(value: unknown): value is PodcastWorkflowArtifactReference {
   return Boolean(
     value
@@ -69,6 +85,15 @@ function workflowStageLatestRunKey(companyId: string, workflowId: string, stageK
     scopeId: companyId,
     namespace: STATE_NAMESPACES.workflowStageRun,
     stateKey: `${workflowId}:${stageKey}`,
+  };
+}
+
+function workflowCommentAnnotationKey(companyId: string, commentId: string): ScopeKey {
+  return {
+    scopeKind: "company",
+    scopeId: companyId,
+    namespace: STATE_NAMESPACES.workflowCommentRun,
+    stateKey: commentId,
   };
 }
 
@@ -168,6 +193,58 @@ export async function writeWorkflowStageLatestRunRecord(
   await ctx.state.set(workflowStageLatestRunKey(record.companyId, record.workflowId, record.stageKey), record);
 }
 
+export async function readWorkflowCommentAnnotationRecord(
+  ctx: PluginContext,
+  companyId: string,
+  commentId: string,
+): Promise<PodcastWorkflowCommentAnnotationRecord | null> {
+  const stored = await ctx.state.get(workflowCommentAnnotationKey(companyId, commentId));
+  if (!stored || typeof stored !== "object") return null;
+
+  const record = stored as Partial<PodcastWorkflowCommentAnnotationRecord>;
+  if (
+    record.version !== 1
+    || record.companyId !== companyId
+    || typeof record.workflowId !== "string"
+    || typeof record.workflowName !== "string"
+    || typeof record.stageKey !== "string"
+    || typeof record.stageDisplayName !== "string"
+    || typeof record.runId !== "string"
+    || typeof record.issueId !== "string"
+    || record.commentId !== commentId
+    || typeof record.summary !== "string"
+    || typeof record.details !== "string"
+    || !Array.isArray(record.artifacts)
+    || !record.artifacts.every(isArtifactReference)
+    || typeof record.createdAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    version: 1,
+    companyId,
+    workflowId: record.workflowId,
+    workflowName: record.workflowName,
+    stageKey: record.stageKey,
+    stageDisplayName: record.stageDisplayName,
+    runId: record.runId,
+    issueId: record.issueId,
+    commentId,
+    summary: record.summary,
+    details: record.details,
+    artifacts: record.artifacts.map((artifact) => ({ ...artifact })),
+    createdAt: record.createdAt,
+  };
+}
+
+export async function writeWorkflowCommentAnnotationRecord(
+  ctx: PluginContext,
+  record: PodcastWorkflowCommentAnnotationRecord,
+): Promise<void> {
+  await ctx.state.set(workflowCommentAnnotationKey(record.companyId, record.commentId), record);
+}
+
 export async function readWorkflowStageLastRunView(
   ctx: PluginContext,
   companyId: string,
@@ -231,6 +308,28 @@ export function createWorkflowStageLatestRunRecord(
     latestIssueId: run.issueId,
     latestSummary: run.summary,
     latestCreatedAt: run.createdAt,
+  };
+}
+
+export function createWorkflowCommentAnnotationRecord(input: {
+  run: PodcastWorkflowStageRunRecord;
+  workflowName: string;
+  stageDisplayName: string;
+}): PodcastWorkflowCommentAnnotationRecord {
+  return {
+    version: 1,
+    companyId: input.run.companyId,
+    workflowId: input.run.workflowId,
+    workflowName: input.workflowName,
+    stageKey: input.run.stageKey,
+    stageDisplayName: input.stageDisplayName,
+    runId: input.run.id,
+    issueId: input.run.issueId,
+    commentId: input.run.commentId,
+    summary: input.run.summary,
+    details: input.run.details,
+    artifacts: input.run.artifacts.map((artifact) => ({ ...artifact })),
+    createdAt: input.run.createdAt,
   };
 }
 
