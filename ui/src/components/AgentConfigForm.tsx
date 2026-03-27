@@ -164,6 +164,50 @@ const claudeThinkingEffortOptions = [
   { id: "high", label: "High" },
 ] as const;
 
+const HERMES_REASONING_FLAG = "--reasoning-effort";
+
+function normalizeArgList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function stripHermesReasoningEffortArgs(args: string[]): string[] {
+  const next: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    if (value === HERMES_REASONING_FLAG) {
+      index += 1;
+      continue;
+    }
+    if (value.startsWith(`${HERMES_REASONING_FLAG}=`)) {
+      continue;
+    }
+    next.push(value);
+  }
+  return next;
+}
+
+function readHermesThinkingEffort(args: string[]): string {
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    if (value === HERMES_REASONING_FLAG) {
+      return args[index + 1] ?? "";
+    }
+    if (value.startsWith(`${HERMES_REASONING_FLAG}=`)) {
+      return value.slice(`${HERMES_REASONING_FLAG}=`.length);
+    }
+  }
+  return "";
+}
+
+function withHermesThinkingEffort(args: string[], effort: string): string[] {
+  const next = stripHermesReasoningEffortArgs(args);
+  if (effort) {
+    next.push(HERMES_REASONING_FLAG, effort);
+  }
+  return next;
+}
+
 
 /* ---- Form ---- */
 
@@ -296,6 +340,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     adapterType === "claude_local" ||
     adapterType === "codex_local" ||
     adapterType === "gemini_local" ||
+    adapterType === "hermes_local" ||
     adapterType === "opencode_local" ||
     adapterType === "pi_local" ||
     adapterType === "cursor";
@@ -372,6 +417,10 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     ? val!.model
     : eff("adapterConfig", "model", String(config.model ?? ""));
 
+  const currentHermesExtraArgs = isCreate
+    ? parseCommaArgs(val!.extraArgs)
+    : normalizeArgList(eff("adapterConfig", "extraArgs", config.extraArgs));
+
   const thinkingEffortKey =
     adapterType === "codex_local"
       ? "modelReasoningEffort"
@@ -382,6 +431,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
           : "effort";
   const thinkingEffortOptions =
     adapterType === "codex_local"
+      ? codexThinkingEffortOptions
+      : adapterType === "hermes_local"
       ? codexThinkingEffortOptions
       : adapterType === "cursor"
         ? cursorModeOptions
@@ -400,6 +451,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
         ? eff("adapterConfig", "mode", String(config.mode ?? ""))
       : adapterType === "opencode_local"
         ? eff("adapterConfig", "variant", String(config.variant ?? ""))
+      : adapterType === "hermes_local"
+        ? readHermesThinkingEffort(currentHermesExtraArgs)
       : eff("adapterConfig", "effort", String(config.effort ?? ""));
   const showThinkingEffort = adapterType !== "gemini_local";
   const codexSearchEnabled = adapterType === "codex_local"
@@ -674,18 +727,26 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   value={
                     isCreate
                       ? val!.command
-                      : eff("adapterConfig", "command", String(config.command ?? ""))
+                      : adapterType === "hermes_local"
+                        ? eff("adapterConfig", "hermesCommand", String(config.hermesCommand ?? ""))
+                        : eff("adapterConfig", "command", String(config.command ?? ""))
                   }
                   onCommit={(v) =>
                     isCreate
                       ? set!({ command: v })
-                      : mark("adapterConfig", "command", v || undefined)
+                      : mark(
+                          "adapterConfig",
+                          adapterType === "hermes_local" ? "hermesCommand" : "command",
+                          v || undefined,
+                        )
                   }
                   immediate
                   className={inputClass}
                   placeholder={
                     adapterType === "codex_local"
                       ? "codex"
+                      : adapterType === "hermes_local"
+                        ? "hermes"
                       : adapterType === "gemini_local"
                         ? "gemini"
                         : adapterType === "pi_local"
@@ -729,7 +790,13 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     onChange={(v) =>
                       isCreate
                         ? set!({ thinkingEffort: v })
-                        : mark("adapterConfig", thinkingEffortKey, v || undefined)
+                        : adapterType === "hermes_local"
+                          ? mark(
+                              "adapterConfig",
+                              "extraArgs",
+                              withHermesThinkingEffort(currentHermesExtraArgs, v),
+                            )
+                          : mark("adapterConfig", thinkingEffortKey, v || undefined)
                     }
                     open={thinkingEffortOpen}
                     onOpenChange={setThinkingEffortOpen}
@@ -778,12 +845,20 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   value={
                     isCreate
                       ? val!.extraArgs
-                      : eff("adapterConfig", "extraArgs", formatArgList(config.extraArgs))
+                      : adapterType === "hermes_local"
+                        ? formatArgList(stripHermesReasoningEffortArgs(currentHermesExtraArgs))
+                        : eff("adapterConfig", "extraArgs", formatArgList(config.extraArgs))
                   }
                   onCommit={(v) =>
                     isCreate
                       ? set!({ extraArgs: v })
-                      : mark("adapterConfig", "extraArgs", v ? parseCommaArgs(v) : undefined)
+                      : adapterType === "hermes_local"
+                        ? mark(
+                            "adapterConfig",
+                            "extraArgs",
+                            withHermesThinkingEffort(parseCommaArgs(v), currentThinkingEffort),
+                          )
+                        : mark("adapterConfig", "extraArgs", v ? parseCommaArgs(v) : undefined)
                   }
                   immediate
                   className={inputClass}
