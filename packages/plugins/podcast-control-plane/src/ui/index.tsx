@@ -9,6 +9,7 @@ import {
   type PluginWidgetProps,
 } from "@paperclipai/plugin-sdk/ui";
 import { ACTION_KEYS, DATA_KEYS } from "../constants.js";
+import { type PodcastWorkflowStageView } from "../stages.js";
 import {
   WORKFLOW_STATUSES,
   WORKFLOW_TEMPLATES,
@@ -109,6 +110,22 @@ type WorkflowActionResult = {
   workflow: PodcastWorkflowSummary;
 };
 
+type WorkflowStagesData = {
+  stages: PodcastWorkflowStageView[];
+};
+
+type WorkflowStageSyncActionResult = {
+  issue: {
+    id: string;
+    title: string;
+    status: string;
+  };
+  stage: {
+    key: string;
+    displayName: string;
+  };
+};
+
 type WorkflowFormState = {
   workflowId: string | null;
   name: string;
@@ -144,6 +161,12 @@ function toneColor(status: PodcastWorkflowStatus) {
   if (status === "active") return "rgba(13, 148, 136, 0.75)";
   if (status === "archived") return "rgba(100, 116, 139, 0.75)";
   return "rgba(245, 158, 11, 0.82)";
+}
+
+function stageToneColor(status: PodcastWorkflowStageView["sync"]["status"]) {
+  if (status === "linked") return "rgba(13, 148, 136, 0.75)";
+  if (status === "stale") return "rgba(185, 28, 28, 0.74)";
+  return "rgba(71, 85, 105, 0.72)";
 }
 
 function ScaffoldPanel(props: {
@@ -319,6 +342,83 @@ function WorkflowList(props: {
   );
 }
 
+function WorkflowStageList(props: {
+  stages: PodcastWorkflowStageView[];
+  syncingStageKey: string | null;
+  onSync(stageKey: string): void;
+}) {
+  if (props.stages.length === 0) {
+    return <div style={{ fontSize: "0.95rem", color: "rgba(15, 23, 42, 0.64)" }}>No stages are defined for this workflow.</div>;
+  }
+
+  return (
+    <div style={cardListStyle}>
+      {props.stages.map((stage) => {
+        const isSyncing = props.syncingStageKey === stage.key;
+        const buttonLabel = isSyncing
+          ? "Syncing…"
+          : stage.sync.status === "linked"
+            ? "Update issue"
+            : stage.sync.status === "stale"
+              ? "Recreate issue"
+              : "Create issue";
+
+        return (
+          <section key={stage.key} style={panelStyle}>
+            <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1rem" }}>{stage.displayName}</h3>
+                <div style={{ fontSize: "0.82rem", color: "rgba(15, 23, 42, 0.62)" }}>{stage.key}</div>
+              </div>
+              <div
+                style={{
+                  borderRadius: "999px",
+                  padding: "0.2rem 0.65rem",
+                  fontSize: "0.8rem",
+                  background: stageToneColor(stage.sync.status),
+                  color: "#fff",
+                  textTransform: "capitalize",
+                }}
+              >
+                {stage.sync.status}
+              </div>
+            </div>
+
+            <div style={{ color: "rgba(15, 23, 42, 0.74)" }}>{stage.description}</div>
+
+            <div style={metaGridStyle}>
+              <div><strong>Issue:</strong> {stage.sync.issueTitle ?? stage.sync.issueId ?? "Not created yet"}</div>
+              <div><strong>Issue status:</strong> {stage.sync.issueStatus ?? "n/a"}</div>
+              <div><strong>Workspace:</strong> {stage.sync.projectWorkspaceId ?? "Unavailable"}</div>
+            </div>
+
+            {stage.blockedReason ? (
+              <div style={{ color: "#b45309" }}>{stage.blockedReason}</div>
+            ) : null}
+
+            {stage.sync.status === "stale" ? (
+              <div style={{ color: "#b91c1c" }}>
+                The previously linked issue could not be found. Sync again to create a fresh stage issue.
+              </div>
+            ) : null}
+
+            <div style={rowStyle}>
+              <button
+                type="button"
+                style={primaryButtonStyle}
+                disabled={isSyncing || !stage.canSync}
+                onClick={() => props.onSync(stage.key)}
+              >
+                {buttonLabel}
+              </button>
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function PodcastWorkflowManager(props: {
   companyId: string | null | undefined;
   projectId?: string | null;
@@ -330,6 +430,7 @@ function PodcastWorkflowManager(props: {
   const toast = usePluginToast();
   const upsertWorkflow = usePluginAction(ACTION_KEYS.upsertWorkflow);
   const deleteWorkflow = usePluginAction(ACTION_KEYS.deleteWorkflow);
+  const syncWorkflowStageIssue = usePluginAction(ACTION_KEYS.syncWorkflowStageIssue);
   const listParams = useMemo(
     () => (props.projectId ? { companyId, projectId: props.projectId } : { companyId }),
     [companyId, props.projectId],
@@ -345,6 +446,11 @@ function PodcastWorkflowManager(props: {
     [companyId, selectedWorkflowId],
   );
   const workflowDetailQuery = usePluginData<WorkflowDetailResult>(DATA_KEYS.workflowDetail, detailParams);
+  const workflowStagesQuery = usePluginData<WorkflowStagesData>(
+    DATA_KEYS.workflowStages,
+    companyId && selectedWorkflowId ? { companyId, workflowId: selectedWorkflowId } : {},
+  );
+  const [syncingStageKey, setSyncingStageKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedWorkflowId) return;
@@ -427,6 +533,33 @@ function PodcastWorkflowManager(props: {
     }
   }
 
+  async function handleStageSync(stageKey: string) {
+    if (!companyId || !selectedWorkflowId) return;
+    setSyncingStageKey(stageKey);
+    try {
+      const result = await syncWorkflowStageIssue({
+        companyId,
+        workflowId: selectedWorkflowId,
+        stageKey,
+      }) as WorkflowStageSyncActionResult;
+      workflowStagesQuery.refresh();
+      workflowsQuery.refresh();
+      toast({
+        title: "Stage issue synced",
+        body: `${result.stage.displayName} -> ${result.issue.title}`,
+        tone: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Stage sync failed",
+        body: error instanceof Error ? error.message : "Unknown plugin action failure",
+        tone: "error",
+      });
+    } finally {
+      setSyncingStageKey(null);
+    }
+  }
+
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <ScaffoldPanel
@@ -462,6 +595,39 @@ function PodcastWorkflowManager(props: {
             onSubmit={handleSubmit}
             onCancel={resetForm}
           />
+        </section>
+      ) : null}
+
+      {companyId ? (
+        <section style={panelStyle}>
+          <div style={{ display: "grid", gap: "0.35rem" }}>
+            <strong>Stage issue sync</strong>
+            <div style={{ color: "rgba(15, 23, 42, 0.68)" }}>
+              Each saved workflow stage can create or update a Paperclip issue tied to the bound project.
+            </div>
+          </div>
+
+          {!selectedWorkflowId ? (
+            <div style={{ color: "rgba(15, 23, 42, 0.68)" }}>
+              Select an existing workflow with <strong>Edit</strong> to manage stage issues.
+            </div>
+          ) : null}
+
+          {selectedWorkflowId && workflowStagesQuery.loading ? (
+            <div style={{ color: "rgba(15, 23, 42, 0.68)" }}>Loading stage sync status…</div>
+          ) : null}
+
+          {selectedWorkflowId && workflowStagesQuery.error ? (
+            <div style={{ color: "#b91c1c" }}>Stage status load failed: {workflowStagesQuery.error.message}</div>
+          ) : null}
+
+          {selectedWorkflowId && !workflowStagesQuery.loading && !workflowStagesQuery.error ? (
+            <WorkflowStageList
+              stages={workflowStagesQuery.data?.stages ?? []}
+              syncingStageKey={syncingStageKey}
+              onSync={handleStageSync}
+            />
+          ) : null}
         </section>
       ) : null}
 

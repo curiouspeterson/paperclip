@@ -20,11 +20,13 @@ export const DATA_KEYS = {
   workflowTemplates: "workflow-templates",
   workflowList: "workflow-list",
   workflowDetail: "workflow-detail",
+  workflowStages: "workflow-stages",
 } as const;
 
 export const ACTION_KEYS = {
   upsertWorkflow: "upsert-workflow",
   deleteWorkflow: "delete-workflow",
+  syncWorkflowStageIssue: "sync-workflow-stage-issue",
 } as const;
 
 export const STATE_KEYS = {
@@ -34,4 +36,5 @@ export const STATE_KEYS = {
 export const STATE_NAMESPACES = {
   workflowIndex: "podcast-control-plane",
   workflowRecord: "podcast-control-plane.workflow",
+  workflowStageIssue: "podcast-control-plane.workflow-stage-issue",
 } as const;

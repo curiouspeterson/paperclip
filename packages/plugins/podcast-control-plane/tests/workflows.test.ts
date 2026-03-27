@@ -1,7 +1,74 @@
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "@paperclipai/plugin-sdk/testing";
+import type { Project } from "@paperclipai/plugin-sdk";
 import manifest from "../src/manifest.js";
 import plugin from "../src/worker.js";
+import { ACTION_KEYS, DATA_KEYS, STATE_NAMESPACES } from "../src/constants.js";
+
+const COMPANY_ID = "11111111-1111-4111-8111-111111111111";
+const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
+const PRIMARY_WORKSPACE_ID = "33333333-3333-4333-8333-333333333333";
+
+function createProjectFixture(options: { primaryWorkspace?: boolean } = {}): Project {
+  const now = new Date();
+  const primaryWorkspace: NonNullable<Project["primaryWorkspace"]> | null = options.primaryWorkspace === false
+    ? null
+    : {
+      id: PRIMARY_WORKSPACE_ID,
+      companyId: COMPANY_ID,
+      projectId: PROJECT_ID,
+      name: "Romance Unzipped Repo",
+      sourceType: "local_path",
+      cwd: "/tmp/romance-unzipped",
+      repoUrl: null,
+      repoRef: null,
+      defaultRef: null,
+      visibility: "default",
+      setupCommand: null,
+      cleanupCommand: null,
+      remoteProvider: null,
+      remoteWorkspaceRef: null,
+      sharedWorkspaceKey: null,
+      metadata: null,
+      isPrimary: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+  return {
+    id: PROJECT_ID,
+    companyId: COMPANY_ID,
+    urlKey: "romance-unzipped",
+    goalId: null,
+    goalIds: [],
+    goals: [],
+    name: "Romance Unzipped",
+    description: "Podcast production pipeline",
+    status: "planned",
+    leadAgentId: null,
+    targetDate: null,
+    color: null,
+    pauseReason: null,
+    pausedAt: null,
+    executionWorkspacePolicy: null,
+    codebase: {
+      workspaceId: primaryWorkspace?.id ?? null,
+      repoUrl: null,
+      repoRef: null,
+      defaultRef: null,
+      repoName: null,
+      localFolder: "/tmp/romance-unzipped",
+      managedFolder: "/tmp/romance-unzipped",
+      effectiveLocalFolder: "/tmp/romance-unzipped",
+      origin: "local_folder",
+    },
+    workspaces: primaryWorkspace ? [primaryWorkspace] : [],
+    primaryWorkspace,
+    archivedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 describe("podcast workflow worker contract", () => {
   it("creates, updates, lists, and deletes company-scoped workflows in plugin state", async () => {
@@ -19,7 +86,7 @@ describe("podcast workflow worker contract", () => {
         description: string;
         projectId: string | null;
       };
-    }>("upsert-workflow", {
+    }>(ACTION_KEYS.upsertWorkflow, {
       companyId: "company-1",
       name: "Episode Pipeline",
       templateKey: "episode-pipeline",
@@ -69,7 +136,7 @@ describe("podcast workflow worker contract", () => {
 
     const list = await harness.getData<{
       workflows: Array<{ id: string; name: string; status: string; templateKey: string }>;
-    }>("workflow-list", { companyId: "company-1" });
+    }>(DATA_KEYS.workflowList, { companyId: "company-1" });
 
     expect(list.workflows).toEqual([
       expect.objectContaining({
@@ -88,7 +155,7 @@ describe("podcast workflow worker contract", () => {
         templateKey: string;
         projectId: string | null;
       };
-    }>("upsert-workflow", {
+    }>(ACTION_KEYS.upsertWorkflow, {
       companyId: "company-1",
       workflowId: created.workflow.id,
       name: "Episode Pipeline",
@@ -113,7 +180,7 @@ describe("podcast workflow worker contract", () => {
         projectId: string | null;
         description: string;
       } | null;
-    }>("workflow-detail", { companyId: "company-1", workflowId: created.workflow.id });
+    }>(DATA_KEYS.workflowDetail, { companyId: "company-1", workflowId: created.workflow.id });
 
     expect(detail.workflow).toEqual(
       expect.objectContaining({
@@ -125,12 +192,12 @@ describe("podcast workflow worker contract", () => {
 
     const projectList = await harness.getData<{
       workflows: Array<{ id: string }>;
-    }>("workflow-list", { companyId: "company-1", projectId: "project-1" });
+    }>(DATA_KEYS.workflowList, { companyId: "company-1", projectId: "project-1" });
 
     expect(projectList.workflows).toEqual([expect.objectContaining({ id: created.workflow.id })]);
 
     await expect(
-      harness.performAction("delete-workflow", {
+      harness.performAction(ACTION_KEYS.deleteWorkflow, {
         companyId: "company-1",
         workflowId: created.workflow.id,
       }),
@@ -140,7 +207,7 @@ describe("podcast workflow worker contract", () => {
     });
 
     await expect(
-      harness.getData("workflow-list", { companyId: "company-1" }),
+      harness.getData(DATA_KEYS.workflowList, { companyId: "company-1" }),
     ).resolves.toEqual({
       workflows: [],
       total: 0,
@@ -162,12 +229,198 @@ describe("podcast workflow worker contract", () => {
 
     await expect(harness.getData<{
       templates: Array<{ key: string; displayName: string }>;
-    }>("workflow-templates")).resolves.toEqual({
+    }>(DATA_KEYS.workflowTemplates)).resolves.toEqual({
       templates: [
         expect.objectContaining({ key: "episode-pipeline", displayName: "Episode Pipeline" }),
         expect.objectContaining({ key: "clips-social", displayName: "Clips + Social" }),
         expect.objectContaining({ key: "newsletter-promo", displayName: "Newsletter Promotion" }),
       ],
     });
+  });
+
+  it("lists workflow stages and syncs a stage to a reusable Paperclip issue", async () => {
+    const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
+    await plugin.definition.setup(harness.ctx);
+    harness.seed({
+      projects: [createProjectFixture()],
+    });
+
+    const created = await harness.performAction<{
+      workflow: {
+        id: string;
+        name: string;
+      };
+    }>(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      name: "Episode 26 Production",
+      templateKey: "episode-pipeline",
+      description: "Coordinate the episode transcript and release process.",
+      projectId: PROJECT_ID,
+    });
+
+    await expect(
+      harness.getData<{
+        stages: Array<{
+          key: string;
+          displayName: string;
+          sync: {
+            status: string;
+            issueId: string | null;
+          };
+        }>;
+      }>("workflow-stages", {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+      }),
+    ).resolves.toEqual({
+      stages: expect.arrayContaining([
+        expect.objectContaining({
+          key: "transcript",
+          displayName: "Transcript",
+          sync: expect.objectContaining({
+            status: "unsynced",
+            issueId: null,
+          }),
+        }),
+      ]),
+    });
+
+    const firstSync = await harness.performAction<{
+      issue: {
+        id: string;
+        title: string;
+        projectId: string | null;
+        status: string;
+      };
+      sync: {
+        issueId: string;
+        projectId: string;
+        projectWorkspaceId: string;
+        stageKey: string;
+      };
+    }>("sync-workflow-stage-issue", {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+    });
+
+    expect(firstSync.issue).toEqual(
+      expect.objectContaining({
+        title: "Episode 26 Production: Transcript",
+        projectId: PROJECT_ID,
+        status: "todo",
+      }),
+    );
+    expect(firstSync.sync).toEqual(
+      expect.objectContaining({
+        issueId: firstSync.issue.id,
+        projectId: PROJECT_ID,
+        projectWorkspaceId: PRIMARY_WORKSPACE_ID,
+        stageKey: "transcript",
+      }),
+    );
+
+    expect(
+      harness.getState({
+        scopeKind: "company",
+        scopeId: COMPANY_ID,
+        namespace: "podcast-control-plane.workflow-stage-issue",
+        stateKey: `${created.workflow.id}:transcript`,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        issueId: firstSync.issue.id,
+        projectWorkspaceId: PRIMARY_WORKSPACE_ID,
+      }),
+    );
+
+    await harness.performAction(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      name: "Episode 26 Launch",
+      templateKey: "episode-pipeline",
+      description: "Drive transcript production and launch readiness.",
+      projectId: PROJECT_ID,
+      status: "active",
+    });
+
+    const secondSync = await harness.performAction<{
+      issue: {
+        id: string;
+        title: string;
+        description: string | null;
+      };
+    }>("sync-workflow-stage-issue", {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+    });
+
+    expect(secondSync.issue.id).toBe(firstSync.issue.id);
+    expect(secondSync.issue).toEqual(
+      expect.objectContaining({
+        title: "Episode 26 Launch: Transcript",
+        description: expect.stringContaining("Drive transcript production and launch readiness."),
+      }),
+    );
+
+    await expect(
+      harness.getData<{
+        stages: Array<{
+          key: string;
+          sync: {
+            status: string;
+            issueId: string | null;
+            issueTitle: string | null;
+          };
+        }>;
+      }>("workflow-stages", {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+      }),
+    ).resolves.toEqual({
+      stages: expect.arrayContaining([
+        expect.objectContaining({
+          key: "transcript",
+          sync: expect.objectContaining({
+            status: "linked",
+            issueId: firstSync.issue.id,
+            issueTitle: "Episode 26 Launch: Transcript",
+          }),
+        }),
+      ]),
+    });
+
+    expect(harness.activity).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entityType: "issue",
+          entityId: firstSync.issue.id,
+        }),
+      ]),
+    );
+  });
+
+  it("rejects stage sync when the bound project has no primary workspace", async () => {
+    const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
+    await plugin.definition.setup(harness.ctx);
+    harness.seed({
+      projects: [createProjectFixture({ primaryWorkspace: false })],
+    });
+
+    const created = await harness.performAction<{ workflow: { id: string } }>(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      name: "Episode 26 Production",
+      templateKey: "episode-pipeline",
+      projectId: PROJECT_ID,
+    });
+
+    await expect(
+      harness.performAction("sync-workflow-stage-issue", {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+        stageKey: "transcript",
+      }),
+    ).rejects.toThrow("Workflow project must expose a primary workspace before stage issues can sync");
   });
 });

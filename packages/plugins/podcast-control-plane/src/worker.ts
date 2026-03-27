@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { definePlugin, runWorker, type PluginContext } from "@paperclipai/plugin-sdk";
-import { ACTION_KEYS, DATA_KEYS } from "./constants.js";
+import { ACTION_KEYS, DATA_KEYS, PLUGIN_ID } from "./constants.js";
+import {
+  buildWorkflowStageIssueDescription,
+  buildWorkflowStageIssueTitle,
+  createWorkflowStageSyncRecord,
+  deleteWorkflowStageSyncRecords,
+  getWorkflowStageTemplate,
+  listWorkflowStageViews,
+  readWorkflowStageSyncRecord,
+  writeWorkflowStageSyncRecord,
+} from "./stages.js";
 import {
   deleteWorkflowRecord,
   isWorkflowStatus,
@@ -47,12 +57,57 @@ function requireTemplateKey(params: Record<string, unknown>) {
   return params.templateKey;
 }
 
+function requireStageKey(params: Record<string, unknown>): string {
+  const stageKey = normalizeOptionalString(params.stageKey);
+  if (!stageKey) {
+    throw new Error("stageKey is required");
+  }
+  return stageKey;
+}
+
 function resolveWorkflowStatus(params: Record<string, unknown>, existing: PodcastWorkflowRecord | null) {
   const rawStatus = params.status ?? existing?.status ?? "draft";
   if (!isWorkflowStatus(rawStatus)) {
     throw new Error("status must be one of draft, active, or archived");
   }
   return rawStatus;
+}
+
+async function resolveWorkflowStageTarget(ctx: PluginContext, workflow: PodcastWorkflowRecord) {
+  if (!workflow.projectId) {
+    return {
+      canSync: false,
+      blockedReason: "Bind this workflow to a project before syncing stage issues.",
+      project: null,
+      primaryWorkspace: null,
+    };
+  }
+
+  const project = await ctx.projects.get(workflow.projectId, workflow.companyId);
+  if (!project) {
+    return {
+      canSync: false,
+      blockedReason: "The bound project could not be resolved for workflow stage sync.",
+      project: null,
+      primaryWorkspace: null,
+    };
+  }
+
+  if (!project.primaryWorkspace) {
+    return {
+      canSync: false,
+      blockedReason: "Workflow project must expose a primary workspace before stage issues can sync",
+      project,
+      primaryWorkspace: null,
+    };
+  }
+
+  return {
+    canSync: true,
+    blockedReason: null,
+    project,
+    primaryWorkspace: project.primaryWorkspace,
+  };
 }
 
 async function registerWorkflowData(ctx: PluginContext) {
@@ -91,6 +146,29 @@ async function registerWorkflowData(ctx: PluginContext) {
     const workflow = await readWorkflowRecord(ctx, companyId, workflowId);
     return { workflow };
   });
+
+  ctx.data.register(DATA_KEYS.workflowStages, async (params) => {
+    const companyId = normalizeOptionalString(params.companyId);
+    const workflowId = normalizeOptionalString(params.workflowId);
+    if (!companyId || !workflowId) {
+      return { stages: [] };
+    }
+
+    const workflow = await readWorkflowRecord(ctx, companyId, workflowId);
+    if (!workflow) {
+      return { stages: [] };
+    }
+
+    const target = await resolveWorkflowStageTarget(ctx, workflow);
+    return {
+      stages: await listWorkflowStageViews(ctx, workflow, {
+        canSync: target.canSync,
+        blockedReason: target.blockedReason,
+        projectId: target.project?.id ?? workflow.projectId,
+        projectWorkspace: target.primaryWorkspace ? { id: target.primaryWorkspace.id } : null,
+      }),
+    };
+  });
 }
 
 async function registerWorkflowActions(ctx: PluginContext) {
@@ -115,6 +193,10 @@ async function registerWorkflowActions(ctx: PluginContext) {
       updatedAt: now,
     };
 
+    if (existing && existing.templateKey !== workflow.templateKey) {
+      await deleteWorkflowStageSyncRecords(ctx, existing);
+    }
+
     await upsertWorkflowRecord(ctx, workflow);
     ctx.logger.info(existing ? "Updated podcast workflow" : "Created podcast workflow", {
       companyId,
@@ -130,11 +212,113 @@ async function registerWorkflowActions(ctx: PluginContext) {
   ctx.actions.register(ACTION_KEYS.deleteWorkflow, async (params) => {
     const companyId = requireCompanyId(params);
     const workflowId = requireWorkflowId(params);
+    const existing = await readWorkflowRecord(ctx, companyId, workflowId);
+    if (existing) {
+      await deleteWorkflowStageSyncRecords(ctx, existing);
+    }
     await deleteWorkflowRecord(ctx, companyId, workflowId);
     ctx.logger.info("Deleted podcast workflow", { companyId, workflowId });
     return {
       ok: true,
       workflowId,
+    };
+  });
+
+  ctx.actions.register(ACTION_KEYS.syncWorkflowStageIssue, async (params) => {
+    const companyId = requireCompanyId(params);
+    const workflowId = requireWorkflowId(params);
+    const stageKey = requireStageKey(params);
+    const workflow = await readWorkflowRecord(ctx, companyId, workflowId);
+    if (!workflow) {
+      throw new Error("Workflow not found");
+    }
+
+    const stage = getWorkflowStageTemplate(workflow.templateKey, stageKey);
+    if (!stage) {
+      throw new Error("stageKey must be a supported workflow stage for the selected template");
+    }
+
+    const target = await resolveWorkflowStageTarget(ctx, workflow);
+    if (!target.canSync || !target.project || !target.primaryWorkspace) {
+      throw new Error(target.blockedReason ?? "Workflow stage sync target is unavailable");
+    }
+
+    const nextTitle = buildWorkflowStageIssueTitle(workflow, stage);
+    const nextDescription = buildWorkflowStageIssueDescription({
+      workflow,
+      stage,
+      projectName: target.project.name,
+      workspace: {
+        name: target.primaryWorkspace.name,
+        path: target.primaryWorkspace.cwd ?? target.primaryWorkspace.name,
+      },
+    });
+
+    const existingSync = await readWorkflowStageSyncRecord(ctx, companyId, workflowId, stageKey);
+    const existingIssue = existingSync?.issueId
+      ? await ctx.issues.get(existingSync.issueId, companyId)
+      : null;
+    const canUpdateExistingIssue = Boolean(
+      existingIssue
+      && existingSync
+      && existingSync.projectId === target.project.id,
+    );
+
+    const issue = canUpdateExistingIssue && existingIssue
+      ? await ctx.issues.update(
+        existingIssue.id,
+        {
+          title: nextTitle,
+          description: nextDescription,
+        },
+        companyId,
+      )
+      : await ctx.issues.create({
+        companyId,
+        projectId: target.project.id,
+        title: nextTitle,
+        description: nextDescription,
+      });
+
+    const sync = createWorkflowStageSyncRecord({
+      companyId,
+      workflowId,
+      stageKey,
+      issue,
+      projectId: target.project.id,
+      projectWorkspaceId: target.primaryWorkspace.id,
+    });
+    await writeWorkflowStageSyncRecord(ctx, sync);
+
+    await ctx.activity.log({
+      companyId,
+      entityType: "issue",
+      entityId: issue.id,
+      message: existingIssue
+        ? `Podcast workflow synced stage "${stage.displayName}" to issue "${issue.title}"`
+        : `Podcast workflow created stage issue "${issue.title}"`,
+      metadata: {
+        plugin: PLUGIN_ID,
+        workflowId,
+        stageKey,
+        projectId: target.project.id,
+        projectWorkspaceId: target.primaryWorkspace.id,
+      },
+    });
+
+    ctx.logger.info(existingIssue ? "Updated podcast workflow stage issue" : "Created podcast workflow stage issue", {
+      companyId,
+      workflowId,
+      stageKey,
+      issueId: issue.id,
+      projectId: target.project.id,
+      projectWorkspaceId: target.primaryWorkspace.id,
+    });
+
+    return {
+      issue,
+      sync,
+      stage,
     };
   });
 }
