@@ -169,6 +169,22 @@ type WorkflowStageOutputActionResult = {
   };
 };
 
+type WorkflowRunsData = {
+  total: number;
+  runs: Array<{
+    workflowId: string;
+    workflowName: string;
+    stageKey: string;
+    stageDisplayName: string;
+    issueId: string;
+    commentId: string;
+    summary: string;
+    details: string;
+    artifacts: PodcastWorkflowArtifactReference[];
+    createdAt: string;
+  }>;
+};
+
 type CommentStageOutputData = {
   annotation: {
     workflowId: string;
@@ -589,6 +605,113 @@ function WorkflowStageList(props: {
   );
 }
 
+function WorkflowRunFeed(props: {
+  runs: WorkflowRunsData["runs"];
+  total: number;
+  stageFilter: string;
+  stageOptions: Array<{ key: string; displayName: string }>;
+  loading: boolean;
+  error: { message: string } | null;
+  onStageFilterChange(next: string): void;
+}) {
+  return (
+    <section style={panelStyle}>
+      <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+        <div style={{ display: "grid", gap: "0.35rem" }}>
+          <strong>Recorded stage outputs</strong>
+          <div style={{ color: "rgba(15, 23, 42, 0.68)" }}>
+            Browse prior workflow handoffs without reopening the linked issue timeline.
+          </div>
+        </div>
+        <div style={{ ...fieldStyle, minWidth: "200px" }}>
+          <label htmlFor="podcast-workflow-run-stage-filter">Stage filter</label>
+          <select
+            id="podcast-workflow-run-stage-filter"
+            style={inputStyle}
+            value={props.stageFilter}
+            onChange={(event) => props.onStageFilterChange(event.target.value)}
+          >
+            <option value="all">All stages</option>
+            {props.stageOptions.map((stage) => (
+              <option key={stage.key} value={stage.key}>
+                {stage.displayName}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {props.loading ? <div style={{ color: "rgba(15, 23, 42, 0.68)" }}>Loading workflow runs…</div> : null}
+      {props.error ? <div style={{ color: "#b91c1c" }}>Workflow run load failed: {props.error.message}</div> : null}
+      {!props.loading && !props.error && props.runs.length === 0 ? (
+        <div style={{ color: "rgba(15, 23, 42, 0.64)" }}>
+          {props.stageFilter === "all"
+            ? "No stage outputs have been recorded for this workflow yet."
+            : "No recorded outputs match the selected stage yet."}
+        </div>
+      ) : null}
+
+      {!props.loading && !props.error && props.runs.length > 0 ? (
+        <div style={cardListStyle}>
+          {props.runs.map((run) => (
+            <div key={`${run.commentId}:${run.createdAt}`} style={annotationCardStyle}>
+              <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+                <div style={{ display: "grid", gap: "0.2rem" }}>
+                  <strong>{run.stageDisplayName}</strong>
+                  <div style={{ fontSize: "0.85rem", color: "rgba(15, 23, 42, 0.66)" }}>
+                    {run.workflowName}
+                  </div>
+                </div>
+                <div style={{ fontSize: "0.8rem", color: "rgba(15, 23, 42, 0.58)" }}>
+                  {new Date(run.createdAt).toLocaleString()}
+                </div>
+              </div>
+
+              <div style={{ color: "rgba(15, 23, 42, 0.84)" }}>{run.summary}</div>
+
+              <div style={metaGridStyle}>
+                <div><strong>Issue:</strong> {run.issueId}</div>
+                <div><strong>Comment:</strong> {run.commentId}</div>
+              </div>
+
+              {run.details.trim().length > 0 ? (
+                <div style={{ fontSize: "0.9rem", color: "rgba(15, 23, 42, 0.72)", whiteSpace: "pre-wrap" }}>
+                  {run.details}
+                </div>
+              ) : null}
+
+              {run.artifacts.length > 0 ? (
+                <div style={artifactGridStyle}>
+                  {run.artifacts.map((artifact) => (
+                    <a
+                      key={`${run.commentId}:${artifact.label}:${artifact.href}`}
+                      href={artifact.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={artifactLinkStyle}
+                    >
+                      <strong>{artifact.label}</strong>
+                      <span style={{ fontSize: "0.82rem", color: "rgba(15, 23, 42, 0.7)", wordBreak: "break-all" }}>
+                        {artifact.href}
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {!props.loading && !props.error && props.total > props.runs.length ? (
+        <div style={{ fontSize: "0.85rem", color: "rgba(15, 23, 42, 0.58)" }}>
+          Showing {props.runs.length} of {props.total} recorded outputs.
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function PodcastWorkflowManager(props: {
   companyId: string | null | undefined;
   projectId?: string | null;
@@ -621,6 +744,17 @@ function PodcastWorkflowManager(props: {
     DATA_KEYS.workflowStages,
     companyId && selectedWorkflowId ? { companyId, workflowId: selectedWorkflowId } : {},
   );
+  const [runStageFilter, setRunStageFilter] = useState("all");
+  const workflowRunsQuery = usePluginData<WorkflowRunsData>(
+    DATA_KEYS.workflowRuns,
+    companyId && selectedWorkflowId
+      ? {
+        companyId,
+        workflowId: selectedWorkflowId,
+        stageKey: runStageFilter === "all" ? undefined : runStageFilter,
+      }
+      : {},
+  );
   const [syncingStageKey, setSyncingStageKey] = useState<string | null>(null);
   const [postingStageKey, setPostingStageKey] = useState<string | null>(null);
   const [stageOutputDrafts, setStageOutputDrafts] = useState<Record<string, StageOutputDraft>>({});
@@ -642,6 +776,10 @@ function PodcastWorkflowManager(props: {
 
   useEffect(() => {
     setStageOutputDrafts({});
+  }, [selectedWorkflowId]);
+
+  useEffect(() => {
+    setRunStageFilter("all");
   }, [selectedWorkflowId]);
 
   const workflows = workflowsQuery.data?.workflows ?? [];
@@ -753,6 +891,7 @@ function PodcastWorkflowManager(props: {
         artifacts: draft.artifacts.filter((artifact) => artifact.label.trim().length > 0 || artifact.href.trim().length > 0),
       }) as WorkflowStageOutputActionResult;
       workflowStagesQuery.refresh();
+      workflowRunsQuery.refresh();
       setStageOutputDrafts((current) => ({
         ...current,
         [stageKey]: { summary: "", details: "", artifacts: [{ label: "", href: "" }] },
@@ -855,6 +994,21 @@ function PodcastWorkflowManager(props: {
             />
           ) : null}
         </section>
+      ) : null}
+
+      {companyId && selectedWorkflowId ? (
+        <WorkflowRunFeed
+          runs={workflowRunsQuery.data?.runs ?? []}
+          total={workflowRunsQuery.data?.total ?? 0}
+          stageFilter={runStageFilter}
+          stageOptions={(workflowStagesQuery.data?.stages ?? []).map((stage) => ({
+            key: stage.key,
+            displayName: stage.displayName,
+          }))}
+          loading={workflowRunsQuery.loading}
+          error={workflowRunsQuery.error}
+          onStageFilterChange={setRunStageFilter}
+        />
       ) : null}
 
       <WorkflowList

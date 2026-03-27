@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import { definePlugin, runWorker, type PluginContext } from "@paperclipai/plugin-sdk";
 import { ACTION_KEYS, DATA_KEYS, PLUGIN_ID } from "./constants.js";
 import {
+  addWorkflowRunToIndex,
   type PodcastWorkflowArtifactReference,
   buildWorkflowStageOutputCommentBody,
   createWorkflowCommentAnnotationRecord,
   createWorkflowStageLatestRunRecord,
   createWorkflowStageRunRecord,
+  listWorkflowStageRunRecords,
   readWorkflowCommentAnnotationRecord,
   writeWorkflowStageLatestRunRecord,
   writeWorkflowCommentAnnotationRecord,
@@ -238,6 +240,56 @@ async function registerWorkflowData(ctx: PluginContext) {
       },
     };
   });
+
+  ctx.data.register(DATA_KEYS.workflowRuns, async (params) => {
+    const companyId = normalizeOptionalString(params.companyId);
+    const workflowId = normalizeOptionalString(params.workflowId);
+    if (!companyId || !workflowId) {
+      return {
+        total: 0,
+        runs: [],
+      };
+    }
+
+    const workflow = await readWorkflowRecord(ctx, companyId, workflowId);
+    if (!workflow) {
+      return {
+        total: 0,
+        runs: [],
+      };
+    }
+
+    const stageKey = normalizeNullableString(params.stageKey);
+    const runRecords = await listWorkflowStageRunRecords(ctx, companyId, workflowId);
+    const filteredRuns = stageKey
+      ? runRecords.filter((run) => run.stageKey === stageKey)
+      : runRecords;
+
+    const runs = await Promise.all(filteredRuns.map(async (run) => {
+      const annotation = await readWorkflowCommentAnnotationRecord(ctx, companyId, run.commentId);
+      const stageDisplayName = annotation?.stageDisplayName
+        ?? getWorkflowStageTemplate(workflow.templateKey, run.stageKey)?.displayName
+        ?? run.stageKey;
+
+      return {
+        workflowId,
+        workflowName: annotation?.workflowName ?? workflow.name,
+        stageKey: run.stageKey,
+        stageDisplayName,
+        issueId: run.issueId,
+        commentId: run.commentId,
+        summary: run.summary,
+        details: run.details,
+        artifacts: run.artifacts.map((artifact) => ({ ...artifact })),
+        createdAt: run.createdAt,
+      };
+    }));
+
+    return {
+      total: runs.length,
+      runs,
+    };
+  });
 }
 
 async function registerWorkflowActions(ctx: PluginContext) {
@@ -444,6 +496,7 @@ async function registerWorkflowActions(ctx: PluginContext) {
       artifacts,
     });
     await writeWorkflowStageRunRecord(ctx, run);
+    await addWorkflowRunToIndex(ctx, run);
     await writeWorkflowStageLatestRunRecord(ctx, createWorkflowStageLatestRunRecord(run));
     await writeWorkflowCommentAnnotationRecord(ctx, createWorkflowCommentAnnotationRecord({
       run,

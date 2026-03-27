@@ -24,6 +24,7 @@ export const DATA_KEYS = {
   workflowDetail: "workflow-detail",
   workflowStages: "workflow-stages",
   commentStageOutput: "comment-stage-output",
+  workflowRuns: "workflow-runs",
 } as const;
 
 export const ACTION_KEYS = {
@@ -42,6 +43,7 @@ export const STATE_NAMESPACES = {
   workflowRecord: "podcast-control-plane.workflow",
   workflowStageIssue: "podcast-control-plane.workflow-stage-issue",
   workflowRun: "podcast-control-plane.workflow-run",
+  workflowRunIndex: "podcast-control-plane.workflow-run-index",
   workflowStageRun: "podcast-control-plane.workflow-stage-run",
   workflowCommentRun: "podcast-control-plane.workflow-comment-run",
 } as const;

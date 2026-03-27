@@ -61,6 +61,14 @@ export interface PodcastWorkflowCommentAnnotationRecord {
   createdAt: string;
 }
 
+interface PodcastWorkflowRunIndexRecord {
+  version: 1;
+  companyId: string;
+  workflowId: string;
+  runIds: string[];
+  updatedAt: string;
+}
+
 function isArtifactReference(value: unknown): value is PodcastWorkflowArtifactReference {
   return Boolean(
     value
@@ -85,6 +93,15 @@ function workflowStageLatestRunKey(companyId: string, workflowId: string, stageK
     scopeId: companyId,
     namespace: STATE_NAMESPACES.workflowStageRun,
     stateKey: `${workflowId}:${stageKey}`,
+  };
+}
+
+function workflowRunIndexKey(companyId: string, workflowId: string): ScopeKey {
+  return {
+    scopeKind: "company",
+    scopeId: companyId,
+    namespace: STATE_NAMESPACES.workflowRunIndex,
+    stateKey: workflowId,
   };
 }
 
@@ -147,6 +164,96 @@ export async function writeWorkflowStageRunRecord(
   record: PodcastWorkflowStageRunRecord,
 ): Promise<void> {
   await ctx.state.set(workflowRunKey(record.companyId, record.id), record);
+}
+
+async function readWorkflowRunIndexRecord(
+  ctx: PluginContext,
+  companyId: string,
+  workflowId: string,
+): Promise<PodcastWorkflowRunIndexRecord> {
+  const stored = await ctx.state.get(workflowRunIndexKey(companyId, workflowId));
+  if (
+    stored
+    && typeof stored === "object"
+    && (stored as PodcastWorkflowRunIndexRecord).version === 1
+    && (stored as PodcastWorkflowRunIndexRecord).companyId === companyId
+    && (stored as PodcastWorkflowRunIndexRecord).workflowId === workflowId
+    && Array.isArray((stored as PodcastWorkflowRunIndexRecord).runIds)
+  ) {
+    return {
+      version: 1,
+      companyId,
+      workflowId,
+      runIds: [...(stored as PodcastWorkflowRunIndexRecord).runIds],
+      updatedAt:
+        typeof (stored as PodcastWorkflowRunIndexRecord).updatedAt === "string"
+          ? (stored as PodcastWorkflowRunIndexRecord).updatedAt
+          : new Date().toISOString(),
+    };
+  }
+
+  return {
+    version: 1,
+    companyId,
+    workflowId,
+    runIds: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function writeWorkflowRunIndexRecord(
+  ctx: PluginContext,
+  record: PodcastWorkflowRunIndexRecord,
+): Promise<void> {
+  await ctx.state.set(workflowRunIndexKey(record.companyId, record.workflowId), {
+    ...record,
+    runIds: [...record.runIds],
+    updatedAt: new Date().toISOString(),
+  } satisfies PodcastWorkflowRunIndexRecord);
+}
+
+export async function addWorkflowRunToIndex(
+  ctx: PluginContext,
+  run: PodcastWorkflowStageRunRecord,
+): Promise<void> {
+  const current = await readWorkflowRunIndexRecord(ctx, run.companyId, run.workflowId);
+  const nextRunIds = current.runIds.filter((entry) => entry !== run.id);
+  nextRunIds.unshift(run.id);
+  await writeWorkflowRunIndexRecord(ctx, {
+    version: 1,
+    companyId: run.companyId,
+    workflowId: run.workflowId,
+    runIds: nextRunIds,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function listWorkflowStageRunRecords(
+  ctx: PluginContext,
+  companyId: string,
+  workflowId: string,
+): Promise<PodcastWorkflowStageRunRecord[]> {
+  const index = await readWorkflowRunIndexRecord(ctx, companyId, workflowId);
+  const runs: PodcastWorkflowStageRunRecord[] = [];
+
+  for (const runId of index.runIds) {
+    const run = await readWorkflowStageRunRecord(ctx, companyId, runId);
+    if (run && run.workflowId === workflowId) {
+      runs.push(run);
+    }
+  }
+
+  if (runs.length !== index.runIds.length) {
+    await writeWorkflowRunIndexRecord(ctx, {
+      version: 1,
+      companyId,
+      workflowId,
+      runIds: runs.map((run) => run.id),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return runs;
 }
 
 export async function readWorkflowStageLatestRunRecord(

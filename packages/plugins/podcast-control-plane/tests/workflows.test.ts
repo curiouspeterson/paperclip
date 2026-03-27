@@ -786,6 +786,164 @@ describe("podcast workflow worker contract", () => {
     });
   });
 
+  it("lists recorded workflow runs newest-first and supports stage filtering", async () => {
+    const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
+    await plugin.definition.setup(harness.ctx);
+    harness.seed({
+      projects: [createProjectFixture()],
+    });
+
+    const created = await harness.performAction<{ workflow: { id: string } }>(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      name: "Episode 26 Production",
+      templateKey: "episode-pipeline",
+      description: "Coordinate the episode transcript and release process.",
+      projectId: PROJECT_ID,
+    });
+
+    await harness.performAction(ACTION_KEYS.syncWorkflowStageIssue, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+    });
+    await harness.performAction(ACTION_KEYS.syncWorkflowStageIssue, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "review",
+    });
+
+    await harness.performAction(ACTION_KEYS.recordWorkflowStageOutput, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+      summary: "Transcript imported and speaker labels normalized.",
+      details: "Removed sponsor break duplication.\nReady for editorial review.",
+      artifacts: [
+        {
+          label: "Transcript Doc",
+          href: "https://example.com/transcript-doc",
+        },
+      ],
+    });
+
+    await harness.performAction(ACTION_KEYS.recordWorkflowStageOutput, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "review",
+      summary: "Editorial review packet approved.",
+      details: "Host notes and timestamps signed off.",
+      artifacts: [
+        {
+          label: "Review Packet",
+          href: "https://example.com/review-packet",
+        },
+      ],
+    });
+
+    await harness.performAction(ACTION_KEYS.recordWorkflowStageOutput, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+      summary: "Transcript updated after final typo pass.",
+      details: "Final punctuation cleanup complete.",
+      artifacts: [
+        {
+          label: "Final Transcript",
+          href: "https://example.com/final-transcript",
+        },
+      ],
+    });
+
+    await expect(
+      harness.getData<{
+        total: number;
+        runs: Array<{
+          workflowId: string;
+          workflowName: string;
+          stageKey: string;
+          stageDisplayName: string;
+          summary: string;
+          artifacts: Array<{
+            label: string;
+            href: string;
+          }>;
+        }>;
+      }>(DATA_KEYS.workflowRuns, {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+      }),
+    ).resolves.toEqual({
+      total: 3,
+      runs: [
+        expect.objectContaining({
+          workflowId: created.workflow.id,
+          workflowName: "Episode 26 Production",
+          stageKey: "transcript",
+          stageDisplayName: "Transcript",
+          summary: "Transcript updated after final typo pass.",
+          artifacts: [
+            {
+              label: "Final Transcript",
+              href: "https://example.com/final-transcript",
+            },
+          ],
+        }),
+        expect.objectContaining({
+          workflowId: created.workflow.id,
+          workflowName: "Episode 26 Production",
+          stageKey: "review",
+          stageDisplayName: "Review",
+          summary: "Editorial review packet approved.",
+          artifacts: [
+            {
+              label: "Review Packet",
+              href: "https://example.com/review-packet",
+            },
+          ],
+        }),
+        expect.objectContaining({
+          workflowId: created.workflow.id,
+          workflowName: "Episode 26 Production",
+          stageKey: "transcript",
+          stageDisplayName: "Transcript",
+          summary: "Transcript imported and speaker labels normalized.",
+          artifacts: [
+            {
+              label: "Transcript Doc",
+              href: "https://example.com/transcript-doc",
+            },
+          ],
+        }),
+      ],
+    });
+
+    await expect(
+      harness.getData<{
+        total: number;
+        runs: Array<{
+          stageKey: string;
+          summary: string;
+        }>;
+      }>(DATA_KEYS.workflowRuns, {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+        stageKey: "transcript",
+      }),
+    ).resolves.toEqual({
+      total: 2,
+      runs: [
+        expect.objectContaining({
+          stageKey: "transcript",
+          summary: "Transcript updated after final typo pass.",
+        }),
+        expect.objectContaining({
+          stageKey: "transcript",
+          summary: "Transcript imported and speaker labels normalized.",
+        }),
+      ],
+    });
+  });
+
   it("rejects stage output recording until the stage issue has been synced", async () => {
     const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
     await plugin.definition.setup(harness.ctx);
