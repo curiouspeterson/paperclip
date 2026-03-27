@@ -296,4 +296,45 @@ describe("Hermes local Paperclip wrapper", () => {
     expect(result.errorMessage).toContain("Paperclip API server");
     expect(result.summary).toContain("Unable to connect to Paperclip API server");
   });
+
+  it("treats stored localhost-unreachable heartbeat summaries as Paperclip failures", async () => {
+    mockHermesExecute.mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      summary:
+        "Tried the assigned-issues Paperclip API call, but localhost:3100 is unreachable from this session.\n\n" +
+        "Result:\n" +
+        "- curl to http://127.0.0.1:3100/... failed with exit code 7\n" +
+        "- So I could not list assigned issues or continue checkout/completion flow\n\n" +
+        "If you want, I can retry once the Paperclip API is running and reachable from this environment.\n\n" +
+        "session_id: 20260327_080439_1dd08a\n",
+      provider: "codex",
+      model: "gpt-5.4",
+    });
+
+    const result = await execute({
+      runId: "run-5",
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Hermes Agent",
+        adapterType: "hermes_local",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {},
+      context: {},
+      onLog: async () => {},
+    });
+
+    expect(result.errorCode).toBe("paperclip_unreachable");
+    expect(result.errorMessage).toContain("localhost:3100 is unreachable from this session");
+    expect(result.summary).toContain("curl to http://127.0.0.1:3100/... failed with exit code 7");
+  });
 });

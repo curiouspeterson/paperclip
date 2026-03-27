@@ -24,6 +24,20 @@ function stripHermesTranscriptNoise(text: string): string {
     .trim();
 }
 
+function isPaperclipConnectivityFailure(text: string): boolean {
+  const mentionsPaperclip = /paperclip/i.test(text);
+  const mentionsApi = /\bapi\b|\/api\b/i.test(text);
+  const mentionsLocalRuntime = /\blocalhost(?::\d+)?\b|127\.0\.0\.1(?::\d+)?|http:\/\/127\.0\.0\.1(?::\d+)?/i.test(
+    text,
+  );
+  const mentionsConnectionFailure =
+    /not responding|did not respond|not reachable|unreachable|connection refused|unable to connect|could not connect|failed to connect|not running|appears to be down|appears unavailable|appears unreachable|did not accept the connection/i.test(
+      text,
+    ) || /curl (?:exit code|exited with code|returned exit code|exit)\s*:?\s*7\b|exit code:\s*7\b/i.test(text);
+
+  return (mentionsPaperclip || mentionsLocalRuntime) && mentionsApi && mentionsConnectionFailure;
+}
+
 export function normalizeHermesLocalPaperclipConfig(
   value: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
@@ -123,12 +137,7 @@ export function normalizeHermesLocalExecutionSummary(value: unknown): {
     };
   }
 
-  if (
-    /Paperclip API server/i.test(visibleText) &&
-    /(not responding|connection refused|unable to connect|server appears to be down|server appears unreachable)/i.test(
-      visibleText,
-    )
-  ) {
+  if (isPaperclipConnectivityFailure(visibleText)) {
     return {
       summary: visibleText,
       anomalyMessage: visibleText,
