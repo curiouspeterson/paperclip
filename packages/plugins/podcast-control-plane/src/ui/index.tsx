@@ -9,7 +9,7 @@ import {
   type PluginSettingsPageProps,
   type PluginWidgetProps,
 } from "@paperclipai/plugin-sdk/ui";
-import { ACTION_KEYS, DATA_KEYS } from "../constants.js";
+import { ACTION_KEYS, DATA_KEYS, PLUGIN_ID, SLOT_IDS } from "../constants.js";
 import { type PodcastWorkflowStageView } from "../stages.js";
 import { type PodcastWorkflowArtifactReference } from "../runs.js";
 import {
@@ -292,6 +292,13 @@ export function buildIssueCommentHref(
   return `${buildIssueDetailHref(companyPrefix, issueRef)}#comment-${encodeURIComponent(commentId)}`;
 }
 
+export function buildProjectWorkflowTabHref(
+  companyPrefix: string | null | undefined,
+  projectRef: string,
+): string {
+  return `${buildHostPath(companyPrefix, `/projects/${encodeURIComponent(projectRef)}`)}?tab=plugin:${PLUGIN_ID}:${SLOT_IDS.projectTab}`;
+}
+
 function toneColor(status: PodcastWorkflowStatus) {
   if (status === "active") return "rgba(13, 148, 136, 0.75)";
   if (status === "archived") return "rgba(100, 116, 139, 0.75)";
@@ -478,6 +485,7 @@ function WorkflowList(props: {
 }
 
 function WorkflowStageList(props: {
+  companyPrefix?: string | null;
   stages: PodcastWorkflowStageView[];
   syncingStageKey: string | null;
   postingStageKey: string | null;
@@ -496,6 +504,10 @@ function WorkflowStageList(props: {
         const isSyncing = props.syncingStageKey === stage.key;
         const isPosting = props.postingStageKey === stage.key;
         const draft = props.drafts[stage.key] ?? { summary: "", details: "", artifacts: [{ label: "", href: "" }] };
+        const issueHref = stage.sync.issueId ? buildIssueDetailHref(props.companyPrefix, stage.sync.issueId) : null;
+        const latestCommentHref = stage.lastRun
+          ? buildIssueCommentHref(props.companyPrefix, stage.lastRun.issueId, stage.lastRun.commentId)
+          : null;
         const buttonLabel = isSyncing
           ? "Syncing…"
           : stage.sync.status === "linked"
@@ -566,6 +578,16 @@ function WorkflowStageList(props: {
               >
                 {buttonLabel}
               </button>
+              {issueHref ? (
+                <a href={issueHref} style={actionLinkStyle}>
+                  Open stage issue
+                </a>
+              ) : null}
+              {latestCommentHref ? (
+                <a href={latestCommentHref} style={actionLinkStyle}>
+                  Jump to latest comment
+                </a>
+              ) : null}
             </div>
 
             <div style={{ ...formGridStyle, paddingTop: "0.25rem" }}>
@@ -1046,6 +1068,7 @@ function PodcastWorkflowManager(props: {
 
           {selectedWorkflowId && !workflowStagesQuery.loading && !workflowStagesQuery.error ? (
             <WorkflowStageList
+              companyPrefix={props.companyPrefix}
               stages={workflowStagesQuery.data?.stages ?? []}
               syncingStageKey={syncingStageKey}
               postingStageKey={postingStageKey}
@@ -1272,6 +1295,9 @@ export function PodcastIssueDetailTab({ context }: PluginDetailTabProps) {
   const latestCommentHref = linkedStage.latestRun
     ? buildIssueCommentHref(context.companyPrefix, linkedStage.issueId, linkedStage.latestRun.commentId)
     : null;
+  const projectWorkflowHref = linkedStage.workflowProjectId
+    ? buildProjectWorkflowTabHref(context.companyPrefix, linkedStage.workflowProjectId)
+    : null;
 
   return (
     <section style={panelStyle}>
@@ -1308,17 +1334,23 @@ export function PodcastIssueDetailTab({ context }: PluginDetailTabProps) {
         <div><strong>Synced:</strong> {new Date(linkedStage.syncedAt).toLocaleString()}</div>
       </div>
 
+      <div style={linkRowStyle}>
+        {projectWorkflowHref ? (
+          <a href={projectWorkflowHref} style={actionLinkStyle}>
+            Open project workflow
+          </a>
+        ) : null}
+        {latestCommentHref ? (
+          <a href={latestCommentHref} style={actionLinkStyle}>
+            Jump to latest workflow comment
+          </a>
+        ) : null}
+      </div>
+
       {linkedStage.latestRun ? (
         <div style={{ ...metaGridStyle, padding: "0.75rem", borderRadius: "0.65rem", background: "rgba(15, 23, 42, 0.04)" }}>
           <div><strong>Latest workflow output:</strong> {linkedStage.latestRun.summary}</div>
           <div><strong>Recorded:</strong> {new Date(linkedStage.latestRun.createdAt).toLocaleString()}</div>
-          {latestCommentHref ? (
-            <div>
-              <a href={latestCommentHref} style={actionLinkStyle}>
-                Jump to latest workflow comment
-              </a>
-            </div>
-          ) : null}
           {linkedStage.latestRun.artifacts.length > 0 ? (
             <div style={artifactGridStyle}>
               {linkedStage.latestRun.artifacts.map((artifact) => (
