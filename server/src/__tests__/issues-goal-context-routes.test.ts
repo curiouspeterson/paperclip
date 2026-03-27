@@ -20,6 +20,18 @@ const mockGoalService = vi.hoisted(() => ({
   getDefaultCompanyGoal: vi.fn(),
 }));
 
+const mockDocumentService = vi.hoisted(() => ({
+  getIssueDocumentPayload: vi.fn(),
+}));
+
+const mockExecutionWorkspaceService = vi.hoisted(() => ({
+  getByIdForCompany: vi.fn(),
+}));
+
+const mockWorkProductService = vi.hoisted(() => ({
+  listForIssue: vi.fn(),
+}));
+
 async function createApp() {
   vi.doMock("../services/index.js", () => ({
     accessService: () => ({
@@ -30,12 +42,8 @@ async function createApp() {
       getById: vi.fn(),
     }),
     budgetService: () => ({}),
-    documentService: () => ({
-      getIssueDocumentPayload: vi.fn(async () => ({})),
-    }),
-    executionWorkspaceService: () => ({
-      getById: vi.fn(),
-    }),
+    documentService: () => mockDocumentService,
+    executionWorkspaceService: () => mockExecutionWorkspaceService,
     goalService: () => mockGoalService,
     heartbeatService: () => ({
       wakeup: vi.fn(async () => undefined),
@@ -48,9 +56,7 @@ async function createApp() {
     routineService: () => ({
       syncRunStatusForIssue: vi.fn(async () => undefined),
     }),
-    workProductService: () => ({
-      listForIssue: vi.fn(async () => []),
-    }),
+    workProductService: () => mockWorkProductService,
   }));
   const [{ errorHandler }, { issueRoutes }] = await Promise.all([
     import("../middleware/index.js"),
@@ -118,6 +124,9 @@ describe("issue goal context routes", () => {
       latestCommentAt: null,
     });
     mockIssueService.getComment.mockResolvedValue(null);
+    mockDocumentService.getIssueDocumentPayload.mockResolvedValue({});
+    mockExecutionWorkspaceService.getByIdForCompany.mockResolvedValue(null);
+    mockWorkProductService.listForIssue.mockResolvedValue([]);
     mockProjectService.getByIdForCompany.mockResolvedValue({
       id: legacyProjectLinkedIssue.projectId,
       companyId: "company-1",

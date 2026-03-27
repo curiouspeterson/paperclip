@@ -12,6 +12,10 @@ export {
   type Db,
 } from "./client.js";
 export {
+  listUnsupportedAgentAdapterTypes,
+  type UnsupportedAgentAdapterTypeSummary,
+} from "./adapter-integrity.js";
+export {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
   type EmbeddedPostgresTestDatabase,

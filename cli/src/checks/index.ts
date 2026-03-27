@@ -7,6 +7,7 @@ export interface CheckResult {
   repairHint?: string;
 }
 
+export { agentAdapterIntegrityCheck } from "./agent-adapter-integrity-check.js";
 export { agentJwtSecretCheck } from "./agent-jwt-secret-check.js";
 export { configCheck } from "./config-check.js";
 export { deploymentAuthCheck } from "./deployment-auth-check.js";

@@ -3,6 +3,7 @@ import pc from "picocolors";
 import type { PaperclipConfig } from "../config/schema.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
 import {
+  agentAdapterIntegrityCheck,
   agentJwtSecretCheck,
   configCheck,
   databaseCheck,
@@ -101,12 +102,17 @@ export async function doctor(opts: {
     }),
   );
 
-  // 7. LLM check
+  // 7. Persisted agent adapter integrity check
+  const agentAdapterIntegrityResult = await agentAdapterIntegrityCheck(config);
+  results.push(agentAdapterIntegrityResult);
+  printResult(agentAdapterIntegrityResult);
+
+  // 8. LLM check
   const llmResult = await llmCheck(config);
   results.push(llmResult);
   printResult(llmResult);
 
-  // 8. Log directory check
+  // 9. Log directory check
   results.push(
     await runRepairableCheck({
       run: () => logCheck(config, configPath),
@@ -115,7 +121,7 @@ export async function doctor(opts: {
     }),
   );
 
-  // 9. Port check
+  // 10. Port check
   const portResult = await portCheck(config);
   results.push(portResult);
   printResult(portResult);

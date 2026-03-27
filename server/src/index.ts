@@ -28,6 +28,7 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
+import { warnOnUnsupportedAgentAdapterTypes } from "./services/adapter-integrity.js";
 import { heartbeatService, reconcilePersistedRuntimeServicesOnStartup, routineService } from "./services/index.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
@@ -547,6 +548,10 @@ export async function startServer(): Promise<StartedServer> {
   setupLiveEventsWebSocketServer(server, db as any, {
     deploymentMode: config.deploymentMode,
     resolveSessionFromHeaders,
+  });
+
+  void warnOnUnsupportedAgentAdapterTypes(activeDatabaseConnectionString, logger).catch((err) => {
+    logger.error({ err }, "startup agent adapter integrity audit failed");
   });
 
   void reconcilePersistedRuntimeServicesOnStartup(db as any)
