@@ -3,6 +3,11 @@ import { STATE_NAMESPACES } from "./constants.js";
 import type { PodcastWorkflowRecord } from "./workflows.js";
 import type { PodcastWorkflowStageTemplate } from "./stages.js";
 
+export interface PodcastWorkflowArtifactReference {
+  label: string;
+  href: string;
+}
+
 export interface PodcastWorkflowStageRunRecord {
   version: 1;
   id: string;
@@ -15,6 +20,7 @@ export interface PodcastWorkflowStageRunRecord {
   projectWorkspaceId: string;
   summary: string;
   details: string;
+  artifacts: PodcastWorkflowArtifactReference[];
   createdAt: string;
 }
 
@@ -35,7 +41,17 @@ export interface PodcastWorkflowStageLastRunView {
   commentId: string;
   issueId: string;
   summary: string;
+  artifacts: PodcastWorkflowArtifactReference[];
   createdAt: string;
+}
+
+function isArtifactReference(value: unknown): value is PodcastWorkflowArtifactReference {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && typeof (value as PodcastWorkflowArtifactReference).label === "string"
+    && typeof (value as PodcastWorkflowArtifactReference).href === "string",
+  );
 }
 
 function workflowRunKey(companyId: string, runId: string): ScopeKey {
@@ -77,6 +93,8 @@ export async function readWorkflowStageRunRecord(
     || typeof record.projectWorkspaceId !== "string"
     || typeof record.summary !== "string"
     || typeof record.details !== "string"
+    || !Array.isArray(record.artifacts)
+    || !record.artifacts.every(isArtifactReference)
     || typeof record.createdAt !== "string"
   ) {
     return null;
@@ -94,6 +112,7 @@ export async function readWorkflowStageRunRecord(
     projectWorkspaceId: record.projectWorkspaceId,
     summary: record.summary,
     details: record.details,
+    artifacts: record.artifacts.map((artifact) => ({ ...artifact })),
     createdAt: record.createdAt,
   };
 }
@@ -164,6 +183,7 @@ export async function readWorkflowStageLastRunView(
     commentId: run.commentId,
     issueId: run.issueId,
     summary: run.summary,
+    artifacts: run.artifacts.map((artifact) => ({ ...artifact })),
     createdAt: run.createdAt,
   };
 }
@@ -179,6 +199,7 @@ export function createWorkflowStageRunRecord(input: {
   projectWorkspaceId: string;
   summary: string;
   details: string;
+  artifacts: PodcastWorkflowArtifactReference[];
 }): PodcastWorkflowStageRunRecord {
   return {
     version: 1,
@@ -192,6 +213,7 @@ export function createWorkflowStageRunRecord(input: {
     projectWorkspaceId: input.projectWorkspaceId,
     summary: input.summary,
     details: input.details,
+    artifacts: input.artifacts.map((artifact) => ({ ...artifact })),
     createdAt: new Date().toISOString(),
   };
 }
@@ -217,6 +239,7 @@ export function buildWorkflowStageOutputCommentBody(input: {
   stage: PodcastWorkflowStageTemplate;
   summary: string;
   details: string;
+  artifacts: PodcastWorkflowArtifactReference[];
 }): string {
   const sections = [
     `Podcast workflow update`,
@@ -230,6 +253,14 @@ export function buildWorkflowStageOutputCommentBody(input: {
 
   if (input.details.trim().length > 0) {
     sections.push("", "Details:", input.details.trim());
+  }
+
+  if (input.artifacts.length > 0) {
+    sections.push(
+      "",
+      "Artifacts:",
+      ...input.artifacts.map((artifact) => `- ${artifact.label}: ${artifact.href}`),
+    );
   }
 
   return sections.join("\n");

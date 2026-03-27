@@ -10,6 +10,7 @@ import {
 } from "@paperclipai/plugin-sdk/ui";
 import { ACTION_KEYS, DATA_KEYS } from "../constants.js";
 import { type PodcastWorkflowStageView } from "../stages.js";
+import { type PodcastWorkflowArtifactReference } from "../runs.js";
 import {
   WORKFLOW_STATUSES,
   WORKFLOW_TEMPLATES,
@@ -130,6 +131,7 @@ type WorkflowStageOutputActionResult = {
   run: {
     id: string;
     summary: string;
+    artifacts: PodcastWorkflowArtifactReference[];
   };
   comment: {
     id: string;
@@ -143,6 +145,7 @@ type WorkflowStageOutputActionResult = {
 type StageOutputDraft = {
   summary: string;
   details: string;
+  artifacts: PodcastWorkflowArtifactReference[];
 };
 
 type WorkflowFormState = {
@@ -379,7 +382,7 @@ function WorkflowStageList(props: {
       {props.stages.map((stage) => {
         const isSyncing = props.syncingStageKey === stage.key;
         const isPosting = props.postingStageKey === stage.key;
-        const draft = props.drafts[stage.key] ?? { summary: "", details: "" };
+        const draft = props.drafts[stage.key] ?? { summary: "", details: "", artifacts: [{ label: "", href: "" }] };
         const buttonLabel = isSyncing
           ? "Syncing…"
           : stage.sync.status === "linked"
@@ -422,6 +425,12 @@ function WorkflowStageList(props: {
                 <div><strong>Latest output:</strong> {stage.lastRun.summary}</div>
                 <div><strong>Comment:</strong> {stage.lastRun.commentId}</div>
                 <div><strong>Recorded:</strong> {new Date(stage.lastRun.createdAt).toLocaleString()}</div>
+                {stage.lastRun.artifacts.length > 0 ? (
+                  <div>
+                    <strong>Artifacts:</strong>{" "}
+                    {stage.lastRun.artifacts.map((artifact) => artifact.label).join(", ")}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -466,6 +475,59 @@ function WorkflowStageList(props: {
                   onChange={(event) => props.onDraftChange(stage.key, { details: event.target.value })}
                   placeholder="Add reviewer notes, artifact references, or follow-up context."
                 />
+              </div>
+              <div style={fieldStyle}>
+                <label>Artifacts</label>
+                <div style={formGridStyle}>
+                  {draft.artifacts.map((artifact, index) => (
+                    <div key={`${stage.key}-artifact-${index}`} style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.4fr) auto" }}>
+                      <input
+                        style={inputStyle}
+                        value={artifact.label}
+                        onChange={(event) => {
+                          const nextArtifacts = draft.artifacts.map((entry, entryIndex) => (
+                            entryIndex === index ? { ...entry, label: event.target.value } : entry
+                          ));
+                          props.onDraftChange(stage.key, { artifacts: nextArtifacts });
+                        }}
+                        placeholder="Artifact label"
+                      />
+                      <input
+                        style={inputStyle}
+                        value={artifact.href}
+                        onChange={(event) => {
+                          const nextArtifacts = draft.artifacts.map((entry, entryIndex) => (
+                            entryIndex === index ? { ...entry, href: event.target.value } : entry
+                          ));
+                          props.onDraftChange(stage.key, { artifacts: nextArtifacts });
+                        }}
+                        placeholder="Artifact URL or reference"
+                      />
+                      <button
+                        type="button"
+                        style={buttonStyle}
+                        disabled={draft.artifacts.length === 1}
+                        onClick={() => {
+                          const nextArtifacts = draft.artifacts.filter((_, entryIndex) => entryIndex !== index);
+                          props.onDraftChange(stage.key, { artifacts: nextArtifacts.length > 0 ? nextArtifacts : [{ label: "", href: "" }] });
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  <div>
+                    <button
+                      type="button"
+                      style={buttonStyle}
+                      onClick={() => props.onDraftChange(stage.key, {
+                        artifacts: [...draft.artifacts, { label: "", href: "" }],
+                      })}
+                    >
+                      Add artifact
+                    </button>
+                  </div>
+                </div>
               </div>
               <div style={rowStyle}>
                 <button
@@ -635,7 +697,7 @@ function PodcastWorkflowManager(props: {
 
   async function handleStageOutput(stageKey: string) {
     if (!companyId || !selectedWorkflowId) return;
-    const draft = stageOutputDrafts[stageKey] ?? { summary: "", details: "" };
+    const draft = stageOutputDrafts[stageKey] ?? { summary: "", details: "", artifacts: [{ label: "", href: "" }] };
     if (!draft.summary.trim()) return;
 
     setPostingStageKey(stageKey);
@@ -646,11 +708,12 @@ function PodcastWorkflowManager(props: {
         stageKey,
         summary: draft.summary,
         details: draft.details || undefined,
+        artifacts: draft.artifacts.filter((artifact) => artifact.label.trim().length > 0 || artifact.href.trim().length > 0),
       }) as WorkflowStageOutputActionResult;
       workflowStagesQuery.refresh();
       setStageOutputDrafts((current) => ({
         ...current,
-        [stageKey]: { summary: "", details: "" },
+        [stageKey]: { summary: "", details: "", artifacts: [{ label: "", href: "" }] },
       }));
       toast({
         title: "Stage output posted",
@@ -741,6 +804,7 @@ function PodcastWorkflowManager(props: {
                   [stageKey]: {
                     summary: patch.summary ?? current[stageKey]?.summary ?? "",
                     details: patch.details ?? current[stageKey]?.details ?? "",
+                    artifacts: patch.artifacts ?? current[stageKey]?.artifacts ?? [{ label: "", href: "" }],
                   },
                 }));
               }}

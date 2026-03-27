@@ -555,6 +555,129 @@ describe("podcast workflow worker contract", () => {
     });
   });
 
+  it("preserves structured artifact references on recorded stage output", async () => {
+    const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
+    await plugin.definition.setup(harness.ctx);
+    harness.seed({
+      projects: [createProjectFixture()],
+    });
+
+    const created = await harness.performAction<{ workflow: { id: string } }>(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      name: "Episode 26 Production",
+      templateKey: "episode-pipeline",
+      description: "Coordinate the episode transcript and release process.",
+      projectId: PROJECT_ID,
+    });
+
+    await harness.performAction(ACTION_KEYS.syncWorkflowStageIssue, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+    });
+
+    const outputResult = await harness.performAction<{
+      run: {
+        id: string;
+        artifacts: Array<{
+          label: string;
+          href: string;
+        }>;
+      };
+      comment: {
+        body: string;
+      };
+    }>(ACTION_KEYS.recordWorkflowStageOutput, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+      summary: "Transcript imported and speaker labels normalized.",
+      details: "Removed sponsor break duplication.\nReady for editorial review.",
+      artifacts: [
+        {
+          label: "Transcript Doc",
+          href: "https://example.com/transcript-doc",
+        },
+        {
+          label: "Editorial Notes",
+          href: "paperclip://documents/editorial-notes",
+        },
+      ],
+    });
+
+    expect(outputResult.run.artifacts).toEqual([
+      {
+        label: "Transcript Doc",
+        href: "https://example.com/transcript-doc",
+      },
+      {
+        label: "Editorial Notes",
+        href: "paperclip://documents/editorial-notes",
+      },
+    ]);
+
+    expect(outputResult.comment.body).toContain("Artifacts:");
+    expect(outputResult.comment.body).toContain("- Transcript Doc: https://example.com/transcript-doc");
+    expect(outputResult.comment.body).toContain("- Editorial Notes: paperclip://documents/editorial-notes");
+
+    expect(
+      harness.getState({
+        scopeKind: "company",
+        scopeId: COMPANY_ID,
+        namespace: "podcast-control-plane.workflow-run",
+        stateKey: outputResult.run.id,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        artifacts: [
+          {
+            label: "Transcript Doc",
+            href: "https://example.com/transcript-doc",
+          },
+          {
+            label: "Editorial Notes",
+            href: "paperclip://documents/editorial-notes",
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      harness.getData<{
+        stages: Array<{
+          key: string;
+          lastRun: {
+            artifacts: Array<{
+              label: string;
+              href: string;
+            }>;
+          } | null;
+        }>;
+      }>(DATA_KEYS.workflowStages, {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+      }),
+    ).resolves.toEqual({
+      stages: expect.arrayContaining([
+        expect.objectContaining({
+          key: "transcript",
+          lastRun: expect.objectContaining({
+            artifacts: [
+              {
+                label: "Transcript Doc",
+                href: "https://example.com/transcript-doc",
+              },
+              {
+                label: "Editorial Notes",
+                href: "paperclip://documents/editorial-notes",
+              },
+            ],
+          }),
+        }),
+      ]),
+    });
+  });
+
   it("rejects stage output recording until the stage issue has been synced", async () => {
     const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
     await plugin.definition.setup(harness.ctx);

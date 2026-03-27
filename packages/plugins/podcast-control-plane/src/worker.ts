@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { definePlugin, runWorker, type PluginContext } from "@paperclipai/plugin-sdk";
 import { ACTION_KEYS, DATA_KEYS, PLUGIN_ID } from "./constants.js";
 import {
+  type PodcastWorkflowArtifactReference,
   buildWorkflowStageOutputCommentBody,
   createWorkflowStageLatestRunRecord,
   createWorkflowStageRunRecord,
@@ -78,6 +79,27 @@ function requireOutputSummary(params: Record<string, unknown>): string {
     throw new Error("summary is required");
   }
   return summary;
+}
+
+function resolveArtifactReferences(params: Record<string, unknown>): PodcastWorkflowArtifactReference[] {
+  const input = params.artifacts;
+  if (input == null) return [];
+  if (!Array.isArray(input)) {
+    throw new Error("artifacts must be an array");
+  }
+
+  return input
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        throw new Error("artifact entries must be objects");
+      }
+      const label = normalizeOptionalString((entry as { label?: unknown }).label);
+      const href = normalizeOptionalString((entry as { href?: unknown }).href);
+      if (!label || !href) {
+        throw new Error("artifact entries must include label and href");
+      }
+      return { label, href };
+    });
 }
 
 function resolveWorkflowStatus(params: Record<string, unknown>, existing: PodcastWorkflowRecord | null) {
@@ -343,6 +365,7 @@ async function registerWorkflowActions(ctx: PluginContext) {
     const stageKey = requireStageKey(params);
     const summary = requireOutputSummary(params);
     const details = normalizeOptionalString(params.details);
+    const artifacts = resolveArtifactReferences(params);
     const workflow = await readWorkflowRecord(ctx, companyId, workflowId);
     if (!workflow) {
       throw new Error("Workflow not found");
@@ -370,6 +393,7 @@ async function registerWorkflowActions(ctx: PluginContext) {
         stage,
         summary,
         details,
+        artifacts,
       }),
       companyId,
     );
@@ -385,6 +409,7 @@ async function registerWorkflowActions(ctx: PluginContext) {
       projectWorkspaceId: sync.projectWorkspaceId,
       summary,
       details,
+      artifacts,
     });
     await writeWorkflowStageRunRecord(ctx, run);
     await writeWorkflowStageLatestRunRecord(ctx, createWorkflowStageLatestRunRecord(run));
