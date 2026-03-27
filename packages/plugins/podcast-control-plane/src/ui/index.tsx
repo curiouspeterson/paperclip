@@ -126,6 +126,25 @@ type WorkflowStageSyncActionResult = {
   };
 };
 
+type WorkflowStageOutputActionResult = {
+  run: {
+    id: string;
+    summary: string;
+  };
+  comment: {
+    id: string;
+  };
+  stage: {
+    key: string;
+    displayName: string;
+  };
+};
+
+type StageOutputDraft = {
+  summary: string;
+  details: string;
+};
+
 type WorkflowFormState = {
   workflowId: string | null;
   name: string;
@@ -345,7 +364,11 @@ function WorkflowList(props: {
 function WorkflowStageList(props: {
   stages: PodcastWorkflowStageView[];
   syncingStageKey: string | null;
+  postingStageKey: string | null;
+  drafts: Record<string, StageOutputDraft>;
+  onDraftChange(stageKey: string, patch: Partial<StageOutputDraft>): void;
   onSync(stageKey: string): void;
+  onPostOutput(stageKey: string): void;
 }) {
   if (props.stages.length === 0) {
     return <div style={{ fontSize: "0.95rem", color: "rgba(15, 23, 42, 0.64)" }}>No stages are defined for this workflow.</div>;
@@ -355,6 +378,8 @@ function WorkflowStageList(props: {
     <div style={cardListStyle}>
       {props.stages.map((stage) => {
         const isSyncing = props.syncingStageKey === stage.key;
+        const isPosting = props.postingStageKey === stage.key;
+        const draft = props.drafts[stage.key] ?? { summary: "", details: "" };
         const buttonLabel = isSyncing
           ? "Syncing…"
           : stage.sync.status === "linked"
@@ -392,6 +417,14 @@ function WorkflowStageList(props: {
               <div><strong>Workspace:</strong> {stage.sync.projectWorkspaceId ?? "Unavailable"}</div>
             </div>
 
+            {stage.lastRun ? (
+              <div style={{ ...metaGridStyle, padding: "0.75rem", borderRadius: "0.65rem", background: "rgba(15, 23, 42, 0.04)" }}>
+                <div><strong>Latest output:</strong> {stage.lastRun.summary}</div>
+                <div><strong>Comment:</strong> {stage.lastRun.commentId}</div>
+                <div><strong>Recorded:</strong> {new Date(stage.lastRun.createdAt).toLocaleString()}</div>
+              </div>
+            ) : null}
+
             {stage.blockedReason ? (
               <div style={{ color: "#b45309" }}>{stage.blockedReason}</div>
             ) : null}
@@ -412,6 +445,39 @@ function WorkflowStageList(props: {
                 {buttonLabel}
               </button>
             </div>
+
+            <div style={{ ...formGridStyle, paddingTop: "0.25rem" }}>
+              <div style={fieldStyle}>
+                <label htmlFor={`podcast-stage-summary-${stage.key}`}>Output summary</label>
+                <input
+                  id={`podcast-stage-summary-${stage.key}`}
+                  style={inputStyle}
+                  value={draft.summary}
+                  onChange={(event) => props.onDraftChange(stage.key, { summary: event.target.value })}
+                  placeholder="Summarize what this stage produced."
+                />
+              </div>
+              <div style={fieldStyle}>
+                <label htmlFor={`podcast-stage-details-${stage.key}`}>Details</label>
+                <textarea
+                  id={`podcast-stage-details-${stage.key}`}
+                  style={textareaStyle}
+                  value={draft.details}
+                  onChange={(event) => props.onDraftChange(stage.key, { details: event.target.value })}
+                  placeholder="Add reviewer notes, artifact references, or follow-up context."
+                />
+              </div>
+              <div style={rowStyle}>
+                <button
+                  type="button"
+                  style={buttonStyle}
+                  disabled={isPosting || stage.sync.status !== "linked" || draft.summary.trim().length === 0}
+                  onClick={() => props.onPostOutput(stage.key)}
+                >
+                  {isPosting ? "Posting…" : "Post update"}
+                </button>
+              </div>
+            </div>
           </section>
         );
       })}
@@ -431,6 +497,7 @@ function PodcastWorkflowManager(props: {
   const upsertWorkflow = usePluginAction(ACTION_KEYS.upsertWorkflow);
   const deleteWorkflow = usePluginAction(ACTION_KEYS.deleteWorkflow);
   const syncWorkflowStageIssue = usePluginAction(ACTION_KEYS.syncWorkflowStageIssue);
+  const recordWorkflowStageOutput = usePluginAction(ACTION_KEYS.recordWorkflowStageOutput);
   const listParams = useMemo(
     () => (props.projectId ? { companyId, projectId: props.projectId } : { companyId }),
     [companyId, props.projectId],
@@ -451,6 +518,8 @@ function PodcastWorkflowManager(props: {
     companyId && selectedWorkflowId ? { companyId, workflowId: selectedWorkflowId } : {},
   );
   const [syncingStageKey, setSyncingStageKey] = useState<string | null>(null);
+  const [postingStageKey, setPostingStageKey] = useState<string | null>(null);
+  const [stageOutputDrafts, setStageOutputDrafts] = useState<Record<string, StageOutputDraft>>({});
 
   useEffect(() => {
     if (!selectedWorkflowId) return;
@@ -466,6 +535,10 @@ function PodcastWorkflowManager(props: {
       ));
     }
   }, [props.projectId, selectedWorkflowId]);
+
+  useEffect(() => {
+    setStageOutputDrafts({});
+  }, [selectedWorkflowId]);
 
   const workflows = workflowsQuery.data?.workflows ?? [];
   const templates = templatesQuery.data?.templates ?? listWorkflowFallbackTemplates();
@@ -560,6 +633,41 @@ function PodcastWorkflowManager(props: {
     }
   }
 
+  async function handleStageOutput(stageKey: string) {
+    if (!companyId || !selectedWorkflowId) return;
+    const draft = stageOutputDrafts[stageKey] ?? { summary: "", details: "" };
+    if (!draft.summary.trim()) return;
+
+    setPostingStageKey(stageKey);
+    try {
+      const result = await recordWorkflowStageOutput({
+        companyId,
+        workflowId: selectedWorkflowId,
+        stageKey,
+        summary: draft.summary,
+        details: draft.details || undefined,
+      }) as WorkflowStageOutputActionResult;
+      workflowStagesQuery.refresh();
+      setStageOutputDrafts((current) => ({
+        ...current,
+        [stageKey]: { summary: "", details: "" },
+      }));
+      toast({
+        title: "Stage output posted",
+        body: `${result.stage.displayName} -> ${result.run.summary}`,
+        tone: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Stage output failed",
+        body: error instanceof Error ? error.message : "Unknown plugin action failure",
+        tone: "error",
+      });
+    } finally {
+      setPostingStageKey(null);
+    }
+  }
+
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <ScaffoldPanel
@@ -625,7 +733,19 @@ function PodcastWorkflowManager(props: {
             <WorkflowStageList
               stages={workflowStagesQuery.data?.stages ?? []}
               syncingStageKey={syncingStageKey}
+              postingStageKey={postingStageKey}
+              drafts={stageOutputDrafts}
+              onDraftChange={(stageKey, patch) => {
+                setStageOutputDrafts((current) => ({
+                  ...current,
+                  [stageKey]: {
+                    summary: patch.summary ?? current[stageKey]?.summary ?? "",
+                    details: patch.details ?? current[stageKey]?.details ?? "",
+                  },
+                }));
+              }}
               onSync={handleStageSync}
+              onPostOutput={handleStageOutput}
             />
           ) : null}
         </section>

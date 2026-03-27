@@ -423,4 +423,160 @@ describe("podcast workflow worker contract", () => {
       }),
     ).rejects.toThrow("Workflow project must expose a primary workspace before stage issues can sync");
   });
+
+  it("records a workflow stage output as a linked issue comment and latest run state", async () => {
+    const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
+    await plugin.definition.setup(harness.ctx);
+    harness.seed({
+      projects: [createProjectFixture()],
+    });
+
+    const created = await harness.performAction<{ workflow: { id: string } }>(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      name: "Episode 26 Production",
+      templateKey: "episode-pipeline",
+      description: "Coordinate the episode transcript and release process.",
+      projectId: PROJECT_ID,
+    });
+
+    const syncResult = await harness.performAction<{
+      issue: {
+        id: string;
+        title: string;
+      };
+    }>(ACTION_KEYS.syncWorkflowStageIssue, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+    });
+
+    const outputResult = await harness.performAction<{
+      run: {
+        id: string;
+        workflowId: string;
+        stageKey: string;
+        issueId: string;
+        commentId: string;
+        summary: string;
+        details: string;
+      };
+      comment: {
+        id: string;
+        issueId: string;
+        body: string;
+      };
+    }>(ACTION_KEYS.recordWorkflowStageOutput, {
+      companyId: COMPANY_ID,
+      workflowId: created.workflow.id,
+      stageKey: "transcript",
+      summary: "Transcript imported and speaker labels normalized.",
+      details: "Removed sponsor break duplication.\nReady for editorial review.",
+    });
+
+    expect(outputResult.run).toEqual(
+      expect.objectContaining({
+        workflowId: created.workflow.id,
+        stageKey: "transcript",
+        issueId: syncResult.issue.id,
+        summary: "Transcript imported and speaker labels normalized.",
+        details: "Removed sponsor break duplication.\nReady for editorial review.",
+      }),
+    );
+    expect(outputResult.comment).toEqual(
+      expect.objectContaining({
+        id: outputResult.run.commentId,
+        issueId: syncResult.issue.id,
+      }),
+    );
+    expect(outputResult.comment.body).toContain("Episode 26 Production");
+    expect(outputResult.comment.body).toContain("Transcript");
+    expect(outputResult.comment.body).toContain("Transcript imported and speaker labels normalized.");
+    expect(outputResult.comment.body).toContain("Removed sponsor break duplication.");
+
+    const comments = await harness.ctx.issues.listComments(syncResult.issue.id, COMPANY_ID);
+    expect(comments).toHaveLength(1);
+    expect(comments[0]).toEqual(expect.objectContaining({ id: outputResult.comment.id }));
+
+    expect(
+      harness.getState({
+        scopeKind: "company",
+        scopeId: COMPANY_ID,
+        namespace: "podcast-control-plane.workflow-run",
+        stateKey: outputResult.run.id,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        id: outputResult.run.id,
+        issueId: syncResult.issue.id,
+        commentId: outputResult.comment.id,
+        summary: "Transcript imported and speaker labels normalized.",
+      }),
+    );
+
+    expect(
+      harness.getState({
+        scopeKind: "company",
+        scopeId: COMPANY_ID,
+        namespace: "podcast-control-plane.workflow-stage-run",
+        stateKey: `${created.workflow.id}:transcript`,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        latestRunId: outputResult.run.id,
+        latestCommentId: outputResult.comment.id,
+      }),
+    );
+
+    await expect(
+      harness.getData<{
+        stages: Array<{
+          key: string;
+          lastRun: {
+            runId: string;
+            commentId: string;
+            summary: string;
+          } | null;
+        }>;
+      }>(DATA_KEYS.workflowStages, {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+      }),
+    ).resolves.toEqual({
+      stages: expect.arrayContaining([
+        expect.objectContaining({
+          key: "transcript",
+          lastRun: expect.objectContaining({
+            runId: outputResult.run.id,
+            commentId: outputResult.comment.id,
+            summary: "Transcript imported and speaker labels normalized.",
+          }),
+        }),
+      ]),
+    });
+  });
+
+  it("rejects stage output recording until the stage issue has been synced", async () => {
+    const harness = createTestHarness({ manifest, capabilities: manifest.capabilities });
+    await plugin.definition.setup(harness.ctx);
+    harness.seed({
+      projects: [createProjectFixture()],
+    });
+
+    const created = await harness.performAction<{ workflow: { id: string } }>(ACTION_KEYS.upsertWorkflow, {
+      companyId: COMPANY_ID,
+      name: "Episode 26 Production",
+      templateKey: "episode-pipeline",
+      description: "Coordinate the episode transcript and release process.",
+      projectId: PROJECT_ID,
+    });
+
+    await expect(
+      harness.performAction(ACTION_KEYS.recordWorkflowStageOutput, {
+        companyId: COMPANY_ID,
+        workflowId: created.workflow.id,
+        stageKey: "transcript",
+        summary: "Transcript imported and speaker labels normalized.",
+      }),
+    ).rejects.toThrow("Sync the stage issue before recording workflow output");
+  });
 });

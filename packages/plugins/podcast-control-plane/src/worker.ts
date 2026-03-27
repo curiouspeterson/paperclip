@@ -2,6 +2,13 @@ import { randomUUID } from "node:crypto";
 import { definePlugin, runWorker, type PluginContext } from "@paperclipai/plugin-sdk";
 import { ACTION_KEYS, DATA_KEYS, PLUGIN_ID } from "./constants.js";
 import {
+  buildWorkflowStageOutputCommentBody,
+  createWorkflowStageLatestRunRecord,
+  createWorkflowStageRunRecord,
+  writeWorkflowStageLatestRunRecord,
+  writeWorkflowStageRunRecord,
+} from "./runs.js";
+import {
   buildWorkflowStageIssueDescription,
   buildWorkflowStageIssueTitle,
   createWorkflowStageSyncRecord,
@@ -63,6 +70,14 @@ function requireStageKey(params: Record<string, unknown>): string {
     throw new Error("stageKey is required");
   }
   return stageKey;
+}
+
+function requireOutputSummary(params: Record<string, unknown>): string {
+  const summary = normalizeOptionalString(params.summary);
+  if (!summary) {
+    throw new Error("summary is required");
+  }
+  return summary;
 }
 
 function resolveWorkflowStatus(params: Record<string, unknown>, existing: PodcastWorkflowRecord | null) {
@@ -318,6 +333,91 @@ async function registerWorkflowActions(ctx: PluginContext) {
     return {
       issue,
       sync,
+      stage,
+    };
+  });
+
+  ctx.actions.register(ACTION_KEYS.recordWorkflowStageOutput, async (params) => {
+    const companyId = requireCompanyId(params);
+    const workflowId = requireWorkflowId(params);
+    const stageKey = requireStageKey(params);
+    const summary = requireOutputSummary(params);
+    const details = normalizeOptionalString(params.details);
+    const workflow = await readWorkflowRecord(ctx, companyId, workflowId);
+    if (!workflow) {
+      throw new Error("Workflow not found");
+    }
+
+    const stage = getWorkflowStageTemplate(workflow.templateKey, stageKey);
+    if (!stage) {
+      throw new Error("stageKey must be a supported workflow stage for the selected template");
+    }
+
+    const sync = await readWorkflowStageSyncRecord(ctx, companyId, workflowId, stageKey);
+    if (!sync) {
+      throw new Error("Sync the stage issue before recording workflow output");
+    }
+
+    const issue = await ctx.issues.get(sync.issueId, companyId);
+    if (!issue) {
+      throw new Error("The linked stage issue could not be resolved. Sync the stage issue again first.");
+    }
+
+    const comment = await ctx.issues.createComment(
+      issue.id,
+      buildWorkflowStageOutputCommentBody({
+        workflow,
+        stage,
+        summary,
+        details,
+      }),
+      companyId,
+    );
+
+    const run = createWorkflowStageRunRecord({
+      id: randomUUID(),
+      companyId,
+      workflowId,
+      stageKey,
+      issueId: issue.id,
+      commentId: comment.id,
+      projectId: sync.projectId,
+      projectWorkspaceId: sync.projectWorkspaceId,
+      summary,
+      details,
+    });
+    await writeWorkflowStageRunRecord(ctx, run);
+    await writeWorkflowStageLatestRunRecord(ctx, createWorkflowStageLatestRunRecord(run));
+
+    await ctx.activity.log({
+      companyId,
+      entityType: "issue",
+      entityId: issue.id,
+      message: `Podcast workflow recorded output for stage "${stage.displayName}" on issue "${issue.title}"`,
+      metadata: {
+        plugin: PLUGIN_ID,
+        workflowId,
+        stageKey,
+        runId: run.id,
+        issueId: issue.id,
+        commentId: comment.id,
+        projectId: sync.projectId,
+        projectWorkspaceId: sync.projectWorkspaceId,
+      },
+    });
+
+    ctx.logger.info("Recorded podcast workflow stage output", {
+      companyId,
+      workflowId,
+      stageKey,
+      runId: run.id,
+      issueId: issue.id,
+      commentId: comment.id,
+    });
+
+    return {
+      run,
+      comment,
       stage,
     };
   });

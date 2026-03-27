@@ -1,5 +1,6 @@
 import type { Issue, PluginContext } from "@paperclipai/plugin-sdk";
 import { STATE_NAMESPACES } from "./constants.js";
+import { readWorkflowStageLastRunView, type PodcastWorkflowStageLastRunView } from "./runs.js";
 import type { PodcastWorkflowRecord, PodcastWorkflowTemplateKey } from "./workflows.js";
 
 export interface PodcastWorkflowStageTemplate {
@@ -34,6 +35,7 @@ export interface PodcastWorkflowStageView extends PodcastWorkflowStageTemplate {
     projectWorkspaceId: string | null;
     syncedAt: string | null;
   };
+  lastRun: PodcastWorkflowStageLastRunView | null;
 }
 
 export interface WorkflowStageSyncTarget {
@@ -205,6 +207,7 @@ function toLinkedStageView(
   issue: Issue,
   syncRecord: PodcastWorkflowStageSyncRecord,
   target: WorkflowStageSyncTarget,
+  lastRun: PodcastWorkflowStageLastRunView | null,
 ): PodcastWorkflowStageView {
   return {
     ...stage,
@@ -219,6 +222,7 @@ function toLinkedStageView(
       projectWorkspaceId: syncRecord.projectWorkspaceId,
       syncedAt: syncRecord.syncedAt,
     },
+    lastRun,
   };
 }
 
@@ -226,6 +230,7 @@ function toFallbackStageView(
   stage: PodcastWorkflowStageTemplate,
   target: WorkflowStageSyncTarget,
   syncRecord: PodcastWorkflowStageSyncRecord | null,
+  lastRun: PodcastWorkflowStageLastRunView | null,
 ): PodcastWorkflowStageView {
   return {
     ...stage,
@@ -240,6 +245,7 @@ function toFallbackStageView(
       projectWorkspaceId: syncRecord?.projectWorkspaceId ?? target.projectWorkspace?.id ?? null,
       syncedAt: syncRecord?.syncedAt ?? null,
     },
+    lastRun,
   };
 }
 
@@ -253,18 +259,19 @@ export async function listWorkflowStageViews(
 
   for (const stage of stages) {
     const syncRecord = await readWorkflowStageSyncRecord(ctx, workflow.companyId, workflow.id, stage.key);
+    const lastRun = await readWorkflowStageLastRunView(ctx, workflow.companyId, workflow.id, stage.key);
     if (!syncRecord) {
-      results.push(toFallbackStageView(stage, target, null));
+      results.push(toFallbackStageView(stage, target, null, lastRun));
       continue;
     }
 
     const issue = await ctx.issues.get(syncRecord.issueId, workflow.companyId);
     if (issue) {
-      results.push(toLinkedStageView(stage, issue, syncRecord, target));
+      results.push(toLinkedStageView(stage, issue, syncRecord, target, lastRun));
       continue;
     }
 
-    results.push(toFallbackStageView(stage, target, syncRecord));
+    results.push(toFallbackStageView(stage, target, syncRecord, lastRun));
   }
 
   return results;
