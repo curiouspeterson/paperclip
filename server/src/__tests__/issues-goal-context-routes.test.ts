@@ -21,6 +21,7 @@ const mockGoalService = vi.hoisted(() => ({
 }));
 
 async function createApp() {
+  vi.resetModules();
   vi.doMock("../services/index.js", () => ({
     accessService: () => ({
       canUser: vi.fn(),
@@ -52,10 +53,8 @@ async function createApp() {
       listForIssue: vi.fn(async () => []),
     }),
   }));
-  const [{ errorHandler }, { issueRoutes }] = await Promise.all([
-    import("../middleware/index.js"),
-    import("../routes/issues.js"),
-  ]);
+  const { errorHandler } = await import("../middleware/index.js");
+  const { issueRoutes } = await import("../routes/issues.js");
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
