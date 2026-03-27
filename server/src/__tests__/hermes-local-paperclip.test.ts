@@ -1,17 +1,21 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockHermesExecute = vi.hoisted(() => vi.fn());
+const mockHermesTestEnvironment = vi.hoisted(() => vi.fn());
 
 vi.mock("hermes-paperclip-adapter/server", () => ({
   execute: mockHermesExecute,
-  testEnvironment: vi.fn(),
+  testEnvironment: mockHermesTestEnvironment,
   sessionCodec: {
     deserialize: vi.fn(),
     serialize: vi.fn(),
   },
 }));
 
-import { execute } from "../adapters/hermes-local/index.js";
+import { execute, testEnvironment } from "../adapters/hermes-local/index.js";
 
 describe("Hermes local Paperclip wrapper", () => {
   beforeEach(() => {
@@ -112,6 +116,112 @@ describe("Hermes local Paperclip wrapper", () => {
         }),
       }),
     );
+  });
+
+  it("resolves hermes from HOME/.local/bin when PATH does not include it", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-hermes-path-"));
+    const localBin = path.join(root, ".local", "bin");
+    const hermesPath = path.join(localBin, "hermes");
+    const previousHome = process.env.HOME;
+    const previousPath = process.env.PATH;
+    await fs.mkdir(localBin, { recursive: true });
+    await fs.writeFile(hermesPath, "#!/bin/sh\nexit 0\n", "utf8");
+    await fs.chmod(hermesPath, 0o755);
+
+    mockHermesExecute.mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      summary: "Completed work.",
+      provider: "codex",
+      model: "gpt-5.4",
+    });
+
+    try {
+      process.env.HOME = root;
+      process.env.PATH = "/usr/bin:/bin";
+
+      await execute({
+        runId: "run-2b",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Hermes Agent",
+          adapterType: "hermes_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {},
+        context: {},
+        onLog: async () => {},
+      });
+
+      expect(mockHermesExecute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            hermesCommand: hermesPath,
+            model: "gpt-5.4",
+            provider: "codex",
+          }),
+        }),
+      );
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the resolved hermes command for environment checks when PATH is stripped", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-hermes-env-test-"));
+    const localBin = path.join(root, ".local", "bin");
+    const hermesPath = path.join(localBin, "hermes");
+    const previousHome = process.env.HOME;
+    const previousPath = process.env.PATH;
+    await fs.mkdir(localBin, { recursive: true });
+    await fs.writeFile(hermesPath, "#!/bin/sh\nexit 0\n", "utf8");
+    await fs.chmod(hermesPath, 0o755);
+
+    mockHermesTestEnvironment.mockResolvedValueOnce({
+      adapterType: "hermes_local",
+      status: "pass",
+      checks: [],
+      testedAt: "2026-03-27T00:00:00.000Z",
+    });
+
+    try {
+      process.env.HOME = root;
+      process.env.PATH = "/usr/bin:/bin";
+
+      await testEnvironment({
+        companyId: "company-1",
+        adapterType: "hermes_local",
+        config: {},
+      });
+
+      expect(mockHermesTestEnvironment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            hermesCommand: hermesPath,
+            model: "gpt-5.4",
+            provider: "codex",
+          }),
+        }),
+      );
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("treats provider login failures as execution errors instead of successes", async () => {
