@@ -117,6 +117,19 @@ const artifactLinkStyle = {
   textDecoration: "none",
 } as const;
 
+const linkRowStyle = {
+  display: "flex",
+  gap: "0.5rem",
+  alignItems: "center",
+  flexWrap: "wrap",
+} as const;
+
+const actionLinkStyle = {
+  ...buttonStyle,
+  color: "inherit",
+  textDecoration: "none",
+} as const;
+
 type WorkflowTemplatesData = {
   templates: Array<{
     key: string;
@@ -235,6 +248,22 @@ function workflowToForm(workflow: PodcastWorkflowSummary): WorkflowFormState {
     description: workflow.description,
     projectId: workflow.projectId ?? "",
   };
+}
+
+function buildHostPath(companyPrefix: string | null | undefined, suffix: string): string {
+  return companyPrefix ? `/${companyPrefix}${suffix}` : suffix;
+}
+
+export function buildIssueDetailHref(companyPrefix: string | null | undefined, issueRef: string): string {
+  return buildHostPath(companyPrefix, `/issues/${encodeURIComponent(issueRef)}`);
+}
+
+export function buildIssueCommentHref(
+  companyPrefix: string | null | undefined,
+  issueRef: string,
+  commentId: string,
+): string {
+  return `${buildIssueDetailHref(companyPrefix, issueRef)}#comment-${encodeURIComponent(commentId)}`;
 }
 
 function toneColor(status: PodcastWorkflowStatus) {
@@ -606,6 +635,7 @@ function WorkflowStageList(props: {
 }
 
 function WorkflowRunFeed(props: {
+  companyPrefix?: string | null;
   runs: WorkflowRunsData["runs"];
   total: number;
   stageFilter: string;
@@ -653,53 +683,67 @@ function WorkflowRunFeed(props: {
 
       {!props.loading && !props.error && props.runs.length > 0 ? (
         <div style={cardListStyle}>
-          {props.runs.map((run) => (
-            <div key={`${run.commentId}:${run.createdAt}`} style={annotationCardStyle}>
-              <div style={{ ...rowStyle, justifyContent: "space-between" }}>
-                <div style={{ display: "grid", gap: "0.2rem" }}>
-                  <strong>{run.stageDisplayName}</strong>
-                  <div style={{ fontSize: "0.85rem", color: "rgba(15, 23, 42, 0.66)" }}>
-                    {run.workflowName}
+          {props.runs.map((run) => {
+            const issueHref = buildIssueDetailHref(props.companyPrefix, run.issueId);
+            const commentHref = buildIssueCommentHref(props.companyPrefix, run.issueId, run.commentId);
+
+            return (
+              <div key={`${run.commentId}:${run.createdAt}`} style={annotationCardStyle}>
+                <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+                  <div style={{ display: "grid", gap: "0.2rem" }}>
+                    <strong>{run.stageDisplayName}</strong>
+                    <div style={{ fontSize: "0.85rem", color: "rgba(15, 23, 42, 0.66)" }}>
+                      {run.workflowName}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "rgba(15, 23, 42, 0.58)" }}>
+                    {new Date(run.createdAt).toLocaleString()}
                   </div>
                 </div>
-                <div style={{ fontSize: "0.8rem", color: "rgba(15, 23, 42, 0.58)" }}>
-                  {new Date(run.createdAt).toLocaleString()}
+
+                <div style={{ color: "rgba(15, 23, 42, 0.84)" }}>{run.summary}</div>
+
+                <div style={metaGridStyle}>
+                  <div><strong>Issue:</strong> {run.issueId}</div>
+                  <div><strong>Comment:</strong> {run.commentId}</div>
                 </div>
+
+                <div style={linkRowStyle}>
+                  <a href={issueHref} style={actionLinkStyle}>
+                    Open issue
+                  </a>
+                  <a href={commentHref} style={actionLinkStyle}>
+                    Jump to comment
+                  </a>
+                </div>
+
+                {run.details.trim().length > 0 ? (
+                  <div style={{ fontSize: "0.9rem", color: "rgba(15, 23, 42, 0.72)", whiteSpace: "pre-wrap" }}>
+                    {run.details}
+                  </div>
+                ) : null}
+
+                {run.artifacts.length > 0 ? (
+                  <div style={artifactGridStyle}>
+                    {run.artifacts.map((artifact) => (
+                      <a
+                        key={`${run.commentId}:${artifact.label}:${artifact.href}`}
+                        href={artifact.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={artifactLinkStyle}
+                      >
+                        <strong>{artifact.label}</strong>
+                        <span style={{ fontSize: "0.82rem", color: "rgba(15, 23, 42, 0.7)", wordBreak: "break-all" }}>
+                          {artifact.href}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-
-              <div style={{ color: "rgba(15, 23, 42, 0.84)" }}>{run.summary}</div>
-
-              <div style={metaGridStyle}>
-                <div><strong>Issue:</strong> {run.issueId}</div>
-                <div><strong>Comment:</strong> {run.commentId}</div>
-              </div>
-
-              {run.details.trim().length > 0 ? (
-                <div style={{ fontSize: "0.9rem", color: "rgba(15, 23, 42, 0.72)", whiteSpace: "pre-wrap" }}>
-                  {run.details}
-                </div>
-              ) : null}
-
-              {run.artifacts.length > 0 ? (
-                <div style={artifactGridStyle}>
-                  {run.artifacts.map((artifact) => (
-                    <a
-                      key={`${run.commentId}:${artifact.label}:${artifact.href}`}
-                      href={artifact.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={artifactLinkStyle}
-                    >
-                      <strong>{artifact.label}</strong>
-                      <span style={{ fontSize: "0.82rem", color: "rgba(15, 23, 42, 0.7)", wordBreak: "break-all" }}>
-                        {artifact.href}
-                      </span>
-                    </a>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : null}
 
@@ -714,6 +758,7 @@ function WorkflowRunFeed(props: {
 
 function PodcastWorkflowManager(props: {
   companyId: string | null | undefined;
+  companyPrefix?: string | null;
   projectId?: string | null;
   title: string;
   summary: string;
@@ -998,6 +1043,7 @@ function PodcastWorkflowManager(props: {
 
       {companyId && selectedWorkflowId ? (
         <WorkflowRunFeed
+          companyPrefix={props.companyPrefix}
           runs={workflowRunsQuery.data?.runs ?? []}
           total={workflowRunsQuery.data?.total ?? 0}
           stageFilter={runStageFilter}
@@ -1099,6 +1145,7 @@ export function PodcastControlPlanePage({ context }: PluginPageProps) {
   return (
     <PodcastWorkflowManager
       companyId={context.companyId}
+      companyPrefix={context.companyPrefix}
       projectId={context.projectId ?? null}
       title="Podcast Control Plane"
       summary="Manage company-scoped workflow definitions for episode production, promotion, and repeatable podcast operations."
@@ -1146,6 +1193,7 @@ export function PodcastProjectDetailTab({ context }: PluginDetailTabProps) {
   return (
     <PodcastWorkflowManager
       companyId={context.companyId}
+      companyPrefix={context.companyPrefix}
       projectId={context.entityId ?? null}
       title="Podcast Project Workflows"
       summary="Project-scoped view of podcast workflow definitions bound to this project."
