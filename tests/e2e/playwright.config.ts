@@ -9,6 +9,7 @@ export default defineConfig({
   testMatch: "**/*.spec.ts",
   timeout: 60_000,
   retries: 0,
+  workers: 1,
   use: {
     baseURL: BASE_URL,
     headless: true,
