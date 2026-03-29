@@ -6,26 +6,11 @@ import { authApi } from "../api/auth";
 import { healthApi } from "../api/health";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { AGENT_ADAPTER_TYPES } from "@paperclipai/shared";
 import type { AgentAdapterType, JoinRequest } from "@paperclipai/shared";
+import { listInviteJoinAdapterOptions } from "../lib/invite-join-adapters";
 
 type JoinType = "human" | "agent";
-const joinAdapterOptions: AgentAdapterType[] = [...AGENT_ADAPTER_TYPES];
-
-const adapterLabels: Record<string, string> = {
-  claude_local: "Claude (local)",
-  codex_local: "Codex (local)",
-  gemini_local: "Gemini CLI (local)",
-  hermes_local: "Hermes (local)",
-  opencode_local: "OpenCode (local)",
-  pi_local: "Pi (local)",
-  openclaw_gateway: "OpenClaw Gateway",
-  cursor: "Cursor (local)",
-  process: "Process",
-  http: "HTTP",
-};
-
-const ENABLED_INVITE_ADAPTERS = new Set(["claude_local", "codex_local", "gemini_local", "hermes_local", "opencode_local", "pi_local", "cursor"]);
+const joinAdapterOptions = listInviteJoinAdapterOptions();
 
 function dateTime(value: string) {
   return new Date(value).toLocaleString();
@@ -75,6 +60,12 @@ export function InviteLandingPage() {
     if (allowedJoinTypes === "both") return ["human", "agent"] as JoinType[];
     return [allowedJoinTypes] as JoinType[];
   }, [invite?.inviteType, allowedJoinTypes]);
+
+  useEffect(() => {
+    if (!joinAdapterOptions.some((option) => option.type === adapterType && option.selectable)) {
+      setAdapterType(joinAdapterOptions.find((option) => option.selectable)?.type ?? "claude_local");
+    }
+  }, [adapterType]);
 
   useEffect(() => {
     if (!availableJoinTypes.includes(joinType)) {
@@ -267,9 +258,10 @@ export function InviteLandingPage() {
                 value={adapterType}
                 onChange={(event) => setAdapterType(event.target.value as AgentAdapterType)}
               >
-                {joinAdapterOptions.map((type) => (
-                  <option key={type} value={type} disabled={!ENABLED_INVITE_ADAPTERS.has(type)}>
-                    {adapterLabels[type]}{!ENABLED_INVITE_ADAPTERS.has(type) ? " (Coming soon)" : ""}
+                {joinAdapterOptions.map((option) => (
+                  <option key={option.type} value={option.type} disabled={!option.selectable}>
+                    {option.label}
+                    {!option.selectable ? ` (${option.disabledLabel ?? "Coming soon"})` : ""}
                   </option>
                 ))}
               </select>
