@@ -119,6 +119,7 @@ Paperclip’s core identity is a **control plane for autonomous AI companies**, 
 - Do not build enterprise-grade RBAC first. The repo now includes coarse company-scoped memberships and permission grants plus deployment-wide `instance_admin`; avoid expanding that into enterprise-style RBAC ahead of core workflow quality.
 - Do not lead with raw bash logs and transcripts. Default view should be human-readable intent/progress, with raw detail beneath.
 - Do not force users to understand provider/API-key plumbing unless absolutely necessary. There are active onboarding/auth issues already; friction here is clearly real.
+- Do not normalize dedicated polling watcher agents for operational review. The better long-term pattern is a QA agent plus routine-created review issues, documented in `doc/QA-ROUTINE-PATTERN.md`.
 
 ## Specific design goals
 

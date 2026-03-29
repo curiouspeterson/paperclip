@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@/lib/router";
 import { ChevronDown, ChevronRight, MoreHorizontal, Play, Plus, Repeat } from "lucide-react";
+import type { RoutineTemplateId } from "../lib/routine-templates";
 import { routinesApi } from "../api/routines";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
@@ -10,6 +11,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToast } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
 import { getRecentAssigneeIds, sortAgentsByRecency, trackRecentAssignee } from "../lib/recent-assignees";
+import { getRoutineTemplate, listRoutineTemplates } from "../lib/routine-templates";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { AgentIcon } from "../components/AgentIconPicker";
@@ -76,6 +78,7 @@ export function Routines() {
   const [statusMutationRoutineId, setStatusMutationRoutineId] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<RoutineTemplateId | "custom">("custom");
   const [draft, setDraft] = useState({
     title: "",
     description: "",
@@ -85,6 +88,8 @@ export function Routines() {
     concurrencyPolicy: "coalesce_if_active",
     catchUpPolicy: "skip_missed",
   });
+  const routineTemplates = useMemo(() => listRoutineTemplates(), []);
+  const selectedTemplate = selectedTemplateId === "custom" ? null : getRoutineTemplate(selectedTemplateId);
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Routines" }]);
@@ -126,6 +131,7 @@ export function Routines() {
         concurrencyPolicy: "coalesce_if_active",
         catchUpPolicy: "skip_missed",
       });
+      setSelectedTemplateId("custom");
       setComposerOpen(false);
       setAdvancedOpen(false);
       await queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) });
@@ -270,6 +276,46 @@ export function Routines() {
             >
               Cancel
             </Button>
+          </div>
+
+          <div className="border-b border-border/60 px-5 py-4">
+            <div className="grid gap-2 md:grid-cols-[220px_minmax(0,1fr)] md:items-start">
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Start from</p>
+                <Select
+                  value={selectedTemplateId}
+                  onValueChange={(value) => {
+                    const nextValue = value as RoutineTemplateId | "custom";
+                    setSelectedTemplateId(nextValue);
+                    if (nextValue === "custom") return;
+                    const template = getRoutineTemplate(nextValue);
+                    if (!template) return;
+                    setDraft((current) => ({
+                      ...current,
+                      title: template.title,
+                      description: template.description,
+                      priority: template.priority,
+                      concurrencyPolicy: template.concurrencyPolicy,
+                      catchUpPolicy: template.catchUpPolicy,
+                    }));
+                    setAdvancedOpen(true);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a routine template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="custom">Custom routine</SelectItem>
+                    {routineTemplates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>{template.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                {selectedTemplate ? selectedTemplate.helperText : "Use a template when you want a recommended routine pattern without adding a dedicated watcher agent."}
+              </div>
+            </div>
           </div>
 
           <div className="px-5 pt-5 pb-3">
