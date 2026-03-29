@@ -6,6 +6,10 @@ import { OpenClawGatewayConfigFields } from "./config-fields";
 export const openClawGatewayUIAdapter: UIAdapterModule = {
   type: "openclaw_gateway",
   label: "OpenClaw Gateway",
+  inviteJoin: {
+    selectable: false,
+    disabledLabel: "Use OpenClaw onboarding instructions",
+  },
   parseStdoutLine: parseOpenClawGatewayStdoutLine,
   ConfigFields: OpenClawGatewayConfigFields,
   buildAdapterConfig: buildOpenClawGatewayConfig,
