@@ -22,6 +22,7 @@ import {
 } from "@paperclipai/db";
 import {
   extractAgentMentionIds,
+  ISSUE_STATUSES,
   extractProjectMentionIds,
   ISSUE_CHECKOUT_EXPECTED_STATUSES,
 } from "@paperclipai/shared";
@@ -36,13 +37,12 @@ import { redactCurrentUserText } from "../log-redaction.js";
 import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallback.js";
 import { getDefaultCompanyGoal } from "./goals.js";
 
-const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const ISSUE_CHECKOUT_ALLOWED_STATUS_SET = new Set<string>(ISSUE_CHECKOUT_EXPECTED_STATUSES);
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
 const ISSUE_GOAL_TRACE_ERROR = "Issue must trace to a goal via goalId, parentId, projectId, or a company goal";
 
 function assertTransition(from: string, to: string) {
-  if (!ALL_ISSUE_STATUSES.includes(to)) {
+  if (!ISSUE_STATUSES.includes(to as (typeof ISSUE_STATUSES)[number])) {
     throw conflict(`Unknown issue status: ${to}`);
   }
   if (to === "in_progress") {

@@ -15,6 +15,7 @@ import {
 import type {
   CreateRoutine,
   CreateRoutineTrigger,
+  IssueStatus,
   Routine,
   RoutineDetail,
   RoutineListItem,
@@ -25,6 +26,7 @@ import type {
   UpdateRoutine,
   UpdateRoutineTrigger,
 } from "@paperclipai/shared";
+import { ISSUE_OPEN_STATUSES, isIssueTerminalStatus } from "@paperclipai/shared";
 import { conflict, forbidden, notFound, unauthorized, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { getDefaultCompanyGoal } from "./goals.js";
@@ -36,9 +38,8 @@ import { heartbeatService } from "./heartbeat.js";
 import { queueIssueAssignmentWakeup, type IssueAssignmentWakeupDeps } from "./issue-assignment-wakeup.js";
 import { logActivity } from "./activity-log.js";
 
-const OPEN_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked"];
 const LIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running"];
-const TERMINAL_ISSUE_STATUSES = new Set(["done", "cancelled"]);
+const OPEN_ISSUE_STATUS_VALUES: IssueStatus[] = [...ISSUE_OPEN_STATUSES];
 const MAX_CATCH_UP_RUNS = 25;
 const ROUTINE_GOAL_TRACE_ERROR = "Routine must trace to a goal via goalId, parentIssueId, projectId, or a company goal";
 const WEEKDAY_INDEX: Record<string, number> = {
@@ -355,7 +356,7 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
           eq(issues.companyId, companyId),
           eq(issues.originKind, "routine_execution"),
           inArray(issues.originId, routineIds),
-          inArray(issues.status, OPEN_ISSUE_STATUSES),
+          inArray(issues.status, OPEN_ISSUE_STATUS_VALUES),
           isNull(issues.hiddenAt),
         ),
       )
@@ -393,7 +394,7 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
             eq(issues.companyId, companyId),
             eq(issues.originKind, "routine_execution"),
             inArray(issues.originId, missingRoutineIds),
-            inArray(issues.status, OPEN_ISSUE_STATUSES),
+            inArray(issues.status, OPEN_ISSUE_STATUS_VALUES),
             isNull(issues.hiddenAt),
           ),
         )
@@ -466,7 +467,7 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
           eq(issues.companyId, routine.companyId),
           eq(issues.originKind, "routine_execution"),
           eq(issues.originId, routine.id),
-          inArray(issues.status, OPEN_ISSUE_STATUSES),
+          inArray(issues.status, OPEN_ISSUE_STATUS_VALUES),
           isNull(issues.hiddenAt),
         ),
       )
@@ -491,7 +492,7 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
           eq(issues.companyId, routine.companyId),
           eq(issues.originKind, "routine_execution"),
           eq(issues.originId, routine.id),
-          inArray(issues.status, OPEN_ISSUE_STATUSES),
+          inArray(issues.status, OPEN_ISSUE_STATUS_VALUES),
           isNull(issues.hiddenAt),
         ),
       )
@@ -1335,7 +1336,7 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
           completedAt: new Date(),
         });
       }
-      if (issue.status === "blocked" || issue.status === "cancelled") {
+      if (issue.status === "blocked" || (isIssueTerminalStatus(issue.status) && issue.status !== "done")) {
         return finalizeRun(issue.originRunId, {
           status: "failed",
           failureReason: `Execution issue moved to ${issue.status}`,

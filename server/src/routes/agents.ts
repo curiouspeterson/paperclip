@@ -49,6 +49,7 @@ import { redactEventPayload } from "../redaction.js";
 import { redactCurrentUserValue } from "../log-redaction.js";
 import { renderOrgChartSvg, renderOrgChartPng, type OrgNode, type OrgChartStyle, ORG_CHART_STYLES } from "./org-chart-svg.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
+import { listIssueLiveRuns, pickIssueActiveRunId } from "../services/issue-live-runs.js";
 import { runClaudeLogin } from "@paperclipai/adapter-claude-local/server";
 import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
@@ -2248,29 +2249,7 @@ export function agentRoutes(db: Db) {
     }
     assertCompanyAccess(req, issue.companyId);
 
-    const liveRuns = await db
-      .select({
-        id: heartbeatRuns.id,
-        status: heartbeatRuns.status,
-        invocationSource: heartbeatRuns.invocationSource,
-        triggerDetail: heartbeatRuns.triggerDetail,
-        startedAt: heartbeatRuns.startedAt,
-        finishedAt: heartbeatRuns.finishedAt,
-        createdAt: heartbeatRuns.createdAt,
-        agentId: heartbeatRuns.agentId,
-        agentName: agentsTable.name,
-        adapterType: agentsTable.adapterType,
-      })
-      .from(heartbeatRuns)
-      .innerJoin(agentsTable, eq(heartbeatRuns.agentId, agentsTable.id))
-      .where(
-        and(
-          eq(heartbeatRuns.companyId, issue.companyId),
-          inArray(heartbeatRuns.status, ["queued", "running"]),
-          sql`${heartbeatRuns.contextSnapshot} ->> 'issueId' = ${issue.id}`,
-        ),
-      )
-      .orderBy(desc(heartbeatRuns.createdAt));
+    const liveRuns = await listIssueLiveRuns(db, issue.companyId, issue.id);
 
     res.json(liveRuns);
   });
@@ -2286,17 +2265,33 @@ export function agentRoutes(db: Db) {
     }
     assertCompanyAccess(req, issue.companyId);
 
+    const liveRuns = await listIssueLiveRuns(db, issue.companyId, issue.id);
     let run = issue.executionRunId ? await heartbeat.getRun(issue.executionRunId) : null;
-    if (run && run.status !== "queued" && run.status !== "running") {
-      run = null;
+    let assigneeRun = null;
+
+    const linkedRunId = pickIssueActiveRunId({
+      issue,
+      liveRuns,
+      executionRun: run,
+      assigneeRun,
+    });
+
+    if (linkedRunId && (!run || run.id !== linkedRunId)) {
+      run = await heartbeat.getRun(linkedRunId);
     }
 
-    if (!run && issue.assigneeAgentId && issue.status === "in_progress") {
-      const candidateRun = await heartbeat.getActiveRunForAgent(issue.assigneeAgentId);
-      const candidateContext = asRecord(candidateRun?.contextSnapshot);
-      const candidateIssueId = asNonEmptyString(candidateContext?.issueId);
-      if (candidateRun && candidateIssueId === issue.id) {
-        run = candidateRun;
+    if (!run && issue.assigneeAgentId) {
+      assigneeRun = await heartbeat.getActiveRunForAgent(issue.assigneeAgentId);
+      const fallbackRunId = pickIssueActiveRunId({
+        issue,
+        liveRuns,
+        executionRun: run,
+        assigneeRun,
+      });
+      if (fallbackRunId) {
+        run = assigneeRun && assigneeRun.id === fallbackRunId
+          ? assigneeRun
+          : await heartbeat.getRun(fallbackRunId);
       }
     }
     if (!run) {

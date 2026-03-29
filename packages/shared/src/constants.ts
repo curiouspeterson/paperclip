@@ -126,6 +126,49 @@ export const ISSUE_STATUSES = [
 ] as const;
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
 
+export const ISSUE_TERMINAL_STATUSES = [
+  "done",
+  "cancelled",
+] as const satisfies readonly IssueStatus[];
+
+export const ISSUE_CLOSED_STATUSES = ISSUE_TERMINAL_STATUSES;
+
+export const ISSUE_OPEN_STATUSES = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "in_review",
+  "blocked",
+] as const satisfies readonly IssueStatus[];
+
+export const ISSUE_WAKEABLE_STATUSES = [
+  "todo",
+  "in_progress",
+  "in_review",
+  "blocked",
+] as const satisfies readonly IssueStatus[];
+
+const ISSUE_CLOSED_STATUS_SET = new Set<string>(ISSUE_CLOSED_STATUSES);
+const ISSUE_OPEN_STATUS_SET = new Set<string>(ISSUE_OPEN_STATUSES);
+const ISSUE_TERMINAL_STATUS_SET = new Set<string>(ISSUE_TERMINAL_STATUSES);
+const ISSUE_WAKEABLE_STATUS_SET = new Set<string>(ISSUE_WAKEABLE_STATUSES);
+
+export function isIssueClosedStatus(value: string): value is (typeof ISSUE_CLOSED_STATUSES)[number] {
+  return ISSUE_CLOSED_STATUS_SET.has(value);
+}
+
+export function isIssueOpenStatus(value: string): value is (typeof ISSUE_OPEN_STATUSES)[number] {
+  return ISSUE_OPEN_STATUS_SET.has(value);
+}
+
+export function isIssueTerminalStatus(value: string): value is (typeof ISSUE_TERMINAL_STATUSES)[number] {
+  return ISSUE_TERMINAL_STATUS_SET.has(value);
+}
+
+export function isIssueWakeableStatus(value: string): value is (typeof ISSUE_WAKEABLE_STATUSES)[number] {
+  return ISSUE_WAKEABLE_STATUS_SET.has(value);
+}
+
 export const ISSUE_CHECKOUT_EXPECTED_STATUSES = [
   "todo",
   "backlog",

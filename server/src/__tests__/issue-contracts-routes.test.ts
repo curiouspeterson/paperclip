@@ -274,6 +274,64 @@ describe("issue contract routes", () => {
     expect(res.body.title).toBe("Updated title");
   });
 
+  it.each(["done", "cancelled"] as const)(
+    "does not wake a newly assigned agent when the patched issue is terminal with status %s",
+    async (status) => {
+      mockIssueService.getById.mockResolvedValue(makeIssue({
+        status: "todo",
+        assigneeAgentId: AGENT_ONE_ID,
+      }));
+      mockIssueService.update.mockResolvedValue(makeIssue({
+        status,
+        assigneeAgentId: AGENT_TWO_ID,
+      }));
+
+      const res = await request(
+        await createApp({
+          type: "board",
+          userId: "board-user",
+          companyIds: [COMPANY_ID],
+          source: "local_implicit",
+          isInstanceAdmin: false,
+        }),
+      )
+        .patch("/api/issues/11111111-1111-4111-8111-111111111111")
+        .send({ assigneeAgentId: AGENT_TWO_ID, status });
+
+      expect(res.status).toBe(200);
+      expect(mockHeartbeatService.wakeup).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["done", "cancelled"] as const)(
+    "does not wake the assignee when a backlog issue is patched directly to terminal status %s",
+    async (status) => {
+      mockIssueService.getById.mockResolvedValue(makeIssue({
+        status: "backlog",
+        assigneeAgentId: AGENT_ONE_ID,
+      }));
+      mockIssueService.update.mockResolvedValue(makeIssue({
+        status,
+        assigneeAgentId: AGENT_ONE_ID,
+      }));
+
+      const res = await request(
+        await createApp({
+          type: "board",
+          userId: "board-user",
+          companyIds: [COMPANY_ID],
+          source: "local_implicit",
+          isInstanceAdmin: false,
+        }),
+      )
+        .patch("/api/issues/11111111-1111-4111-8111-111111111111")
+        .send({ status });
+
+      expect(res.status).toBe(200);
+      expect(mockHeartbeatService.wakeup).not.toHaveBeenCalled();
+    },
+  );
+
   it("scopes issue detail hydration to the issue company", async () => {
     mockIssueService.getById.mockResolvedValue(makeIssue({
       projectId: "project-foreign",

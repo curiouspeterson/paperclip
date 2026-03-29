@@ -1,4 +1,5 @@
 import { logger } from "../middleware/logger.js";
+import { isIssueWakeableStatus } from "@paperclipai/shared";
 
 type WakeupTriggerDetail = "manual" | "ping" | "callback" | "system";
 type WakeupSource = "timer" | "assignment" | "on_demand" | "automation";
@@ -28,7 +29,7 @@ export function queueIssueAssignmentWakeup(input: {
   requestedByActorId?: string | null;
   rethrowOnError?: boolean;
 }) {
-  if (!input.issue.assigneeAgentId || input.issue.status === "backlog") return;
+  if (!input.issue.assigneeAgentId || !isIssueWakeableStatus(input.issue.status)) return;
   if (process.env.PAPERCLIP_E2E_DISABLE_ASSIGNMENT_WAKEUPS === "true") {
     return Promise.resolve(null);
   }
