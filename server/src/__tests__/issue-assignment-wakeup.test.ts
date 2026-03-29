@@ -55,4 +55,23 @@ describe("queueIssueAssignmentWakeup", () => {
     expect(result).toBeNull();
     expect(wakeup).not.toHaveBeenCalled();
   });
+
+  it.each(["done", "cancelled"] as const)(
+    "skips wakeup for assigned terminal issues with status %s",
+    async (status) => {
+      delete process.env.PAPERCLIP_E2E_DISABLE_ASSIGNMENT_WAKEUPS;
+      const wakeup = vi.fn().mockResolvedValue({ id: "run-1" });
+
+      const result = await queueIssueAssignmentWakeup({
+        heartbeat: { wakeup },
+        issue: { id: "issue-1", assigneeAgentId: "agent-1", status },
+        reason: "issue_assigned",
+        mutation: "create",
+        contextSource: "issue.create",
+      });
+
+      expect(result).toBeUndefined();
+      expect(wakeup).not.toHaveBeenCalled();
+    },
+  );
 });

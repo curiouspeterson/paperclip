@@ -174,7 +174,7 @@ Invariant: every business record belongs to exactly one company.
 - `status` enum: `active | paused | idle | running | error | pending_approval | terminated`
 - `reports_to` uuid fk `agents.id` null
 - `capabilities` text null
-- `adapter_type` enum: `process | http | claude_local | codex_local | opencode_local | pi_local | cursor | openclaw_gateway | hermes_local`
+- `adapter_type` enum: `process | http | claude_local | codex_local | gemini_local | opencode_local | pi_local | cursor | openclaw_gateway | hermes_local`
 - `adapter_config` jsonb not null
 - `context_mode` enum: `thin | fat` default `thin`
 - `budget_monthly_cents` int not null default 0

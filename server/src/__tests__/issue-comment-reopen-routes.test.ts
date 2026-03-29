@@ -64,7 +64,7 @@ async function createApp() {
   return app;
 }
 
-function makeIssue(status: "todo" | "done") {
+function makeIssue(status: "todo" | "done" | "cancelled") {
   return {
     id: "11111111-1111-4111-8111-111111111111",
     companyId: "company-1",
@@ -118,32 +118,35 @@ describe("issue comment reopen routes", () => {
     );
   });
 
-  it("reopens closed issues via the PATCH comment path", async () => {
-    mockIssueService.getById.mockResolvedValue(makeIssue("done"));
-    mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
-      ...makeIssue("done"),
-      ...patch,
-    }));
+  it.each(["done", "cancelled"] as const)(
+    "reopens closed issues via the PATCH comment path for status %s",
+    async (status) => {
+      mockIssueService.getById.mockResolvedValue(makeIssue(status));
+      mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+        ...makeIssue(status),
+        ...patch,
+      }));
 
-    const res = await request(await createApp())
-      .patch("/api/issues/11111111-1111-4111-8111-111111111111")
-      .send({ comment: "hello", reopen: true, assigneeAgentId: "33333333-3333-4333-8333-333333333333" });
+      const res = await request(await createApp())
+        .patch("/api/issues/11111111-1111-4111-8111-111111111111")
+        .send({ comment: "hello", reopen: true, assigneeAgentId: "33333333-3333-4333-8333-333333333333" });
 
-    expect(res.status).toBe(200);
-    expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", {
-      assigneeAgentId: "33333333-3333-4333-8333-333333333333",
-      status: "todo",
-    });
-    expect(mockLogActivity).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        action: "issue.updated",
-        details: expect.objectContaining({
-          reopened: true,
-          reopenedFrom: "done",
-          status: "todo",
+      expect(res.status).toBe(200);
+      expect(mockIssueService.update).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", {
+        assigneeAgentId: "33333333-3333-4333-8333-333333333333",
+        status: "todo",
+      });
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          action: "issue.updated",
+          details: expect.objectContaining({
+            reopened: true,
+            reopenedFrom: status,
+            status: "todo",
+          }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 });

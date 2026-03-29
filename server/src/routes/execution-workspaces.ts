@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
 import { issues, projects, projectWorkspaces } from "@paperclipai/db";
-import { updateExecutionWorkspaceSchema } from "@paperclipai/shared";
+import { isIssueTerminalStatus, updateExecutionWorkspaceSchema } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { executionWorkspaceService, logActivity, workspaceOperationService } from "../services/index.js";
 import { parseProjectExecutionWorkspacePolicy } from "../services/execution-workspace-policy.js";
@@ -11,8 +11,6 @@ import {
   stopRuntimeServicesForExecutionWorkspace,
 } from "../services/workspace-runtime.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
-
-const TERMINAL_ISSUE_STATUSES = new Set(["done", "cancelled"]);
 
 export function executionWorkspaceRoutes(db: Db) {
   const router = Router();
@@ -66,7 +64,7 @@ export function executionWorkspaceRoutes(db: Db) {
         })
         .from(issues)
         .where(and(eq(issues.companyId, existing.companyId), eq(issues.executionWorkspaceId, existing.id)));
-      const activeLinkedIssues = linkedIssues.filter((issue) => !TERMINAL_ISSUE_STATUSES.has(issue.status));
+      const activeLinkedIssues = linkedIssues.filter((issue) => !isIssueTerminalStatus(issue.status));
 
       if (activeLinkedIssues.length > 0) {
         res.status(409).json({
