@@ -19,8 +19,10 @@
  * @see PLUGIN_SPEC.md §19.0.3 — Bundle Serving
  */
 import {
+  cloneElement,
   Component,
   createElement,
+  isValidElement,
   useEffect,
   useMemo,
   useRef,
@@ -209,12 +211,56 @@ function buildPluginUiUrl(contribution: PluginUiContribution): string {
  */
 const shimBlobUrls: Record<string, string> = {};
 
-function applyJsxRuntimeKey(
+function normalizeJsxRuntimeChildren(children: unknown): unknown {
+  if (!Array.isArray(children)) return children;
+  return children.map((child, index) => {
+    if (Array.isArray(child)) return normalizeJsxRuntimeChildren(child);
+    if (!isValidElement(child) || child.key != null) return child;
+    return cloneElement(child, { key: String(index) });
+  });
+}
+
+function normalizeJsxRuntimeProps(
   props: Record<string, unknown> | null | undefined,
   key: string | number | undefined,
 ): Record<string, unknown> {
-  if (key === undefined) return props ?? {};
-  return { ...(props ?? {}), key };
+  const nextProps = { ...(props ?? {}) };
+  if (Array.isArray(nextProps.children)) {
+    nextProps.children = normalizeJsxRuntimeChildren(nextProps.children);
+  }
+  if (key !== undefined) {
+    nextProps.key = key;
+  }
+  return nextProps;
+}
+
+function buildJsxRuntimeShimSource(): string {
+  return `
+    const R = globalThis.__paperclipPluginBridge__?.react;
+    const cloneElement = R.cloneElement;
+    const isValidElement = R.isValidElement;
+    function normalizeJsxRuntimeChildren(children) {
+      if (!Array.isArray(children)) return children;
+      return children.map((child, index) => {
+        if (Array.isArray(child)) return normalizeJsxRuntimeChildren(child);
+        if (!isValidElement(child) || child.key != null) return child;
+        return cloneElement(child, { key: String(index) });
+      });
+    }
+    function normalizeJsxRuntimeProps(props, key) {
+      const nextProps = { ...(props ?? {}) };
+      if (Array.isArray(nextProps.children)) {
+        nextProps.children = normalizeJsxRuntimeChildren(nextProps.children);
+      }
+      if (key !== undefined) {
+        nextProps.key = key;
+      }
+      return nextProps;
+    }
+    export const jsx = (type, props, key) => R.createElement(type, normalizeJsxRuntimeProps(props, key));
+    export const jsxs = (type, props, key) => R.createElement(type, normalizeJsxRuntimeProps(props, key));
+    export const Fragment = R.Fragment;
+  `;
 }
 
 function getShimBlobUrl(specifier: "react" | "react-dom" | "react-dom/client" | "react/jsx-runtime" | "sdk-ui"): string {
@@ -237,13 +283,7 @@ function getShimBlobUrl(specifier: "react" | "react-dom" | "react-dom/client" | 
       `;
       break;
     case "react/jsx-runtime":
-      source = `
-        const R = globalThis.__paperclipPluginBridge__?.react;
-        const withKey = ${applyJsxRuntimeKey.toString()};
-        export const jsx = (type, props, key) => R.createElement(type, withKey(props, key));
-        export const jsxs = (type, props, key) => R.createElement(type, withKey(props, key));
-        export const Fragment = R.Fragment;
-      `;
+      source = buildJsxRuntimeShimSource();
       break;
     case "react-dom":
     case "react-dom/client":
@@ -850,5 +890,6 @@ export function _resetPluginModuleLoader(): void {
   }
 }
 
-export const _applyJsxRuntimeKeyForTests = applyJsxRuntimeKey;
+export const _normalizeJsxRuntimePropsForTests = normalizeJsxRuntimeProps;
+export const _buildJsxRuntimeShimSourceForTests = buildJsxRuntimeShimSource;
 export const _rewriteBareSpecifiersForTests = rewriteBareSpecifiers;

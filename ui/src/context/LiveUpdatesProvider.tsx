@@ -682,12 +682,20 @@ export function LiveUpdatesProvider({ children }: { children: ReactNode }) {
     let closed = false;
     let reconnectAttempt = 0;
     let reconnectTimer: number | null = null;
+    let initialConnectTimer: number | null = null;
     let socket: WebSocket | null = null;
 
     const clearReconnect = () => {
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer);
         reconnectTimer = null;
+      }
+    };
+
+    const clearInitialConnect = () => {
+      if (initialConnectTimer !== null) {
+        window.clearTimeout(initialConnectTimer);
+        initialConnectTimer = null;
       }
     };
 
@@ -739,10 +747,14 @@ export function LiveUpdatesProvider({ children }: { children: ReactNode }) {
       };
     };
 
-    connect();
+    initialConnectTimer = window.setTimeout(() => {
+      initialConnectTimer = null;
+      connect();
+    }, 0);
 
     return () => {
       closed = true;
+      clearInitialConnect();
       clearReconnect();
       if (socket) {
         socket.onopen = null;
