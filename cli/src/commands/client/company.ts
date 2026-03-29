@@ -349,22 +349,11 @@ export function buildSelectedFilesFromImportSelection(
 }
 
 export function buildDefaultImportAdapterOverrides(
-  preview: Pick<CompanyPortabilityPreviewResult, "manifest" | "selectedAgentSlugs">,
+  _preview: Pick<CompanyPortabilityPreviewResult, "manifest" | "selectedAgentSlugs">,
 ): Record<string, { adapterType: string }> | undefined {
-  const selectedAgentSlugs = new Set(preview.selectedAgentSlugs);
-  const overrides = Object.fromEntries(
-    preview.manifest.agents
-      .filter((agent) => selectedAgentSlugs.size === 0 || selectedAgentSlugs.has(agent.slug))
-      .filter((agent) => agent.adapterType === "process")
-      .map((agent) => [
-        agent.slug,
-        {
-          // TODO: replace this temporary claude_local fallback with adapter selection in the import TUI.
-          adapterType: "claude_local",
-        },
-      ]),
-  );
-  return Object.keys(overrides).length > 0 ? overrides : undefined;
+  // Preserve imported adapter types by default. Explicit adapter remapping belongs
+  // in a future import prompt instead of a silent CLI-side fallback.
+  return undefined;
 }
 
 function buildDefaultImportAdapterMessages(
