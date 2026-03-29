@@ -38,6 +38,8 @@
     "build": "tsc && cp -r src/migrations dist/migrations",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
+    "test": "node ../../scripts/run-vitest.mjs",
+    "test:run": "node ../../scripts/run-vitest.mjs run",
     "generate": "tsc -p tsconfig.json && drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
     "seed": "tsx src/seed.ts"

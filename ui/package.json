@@ -18,6 +18,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
+    "test": "node ../scripts/run-vitest.mjs",
+    "test:run": "node ../scripts/run-vitest.mjs run",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "prepack": "rm -f package.dev.json && cp package.json package.dev.json && node ../scripts/generate-ui-package-json.mjs",
     "postpack": "if [ -f package.dev.json ]; then mv package.dev.json package.json; fi"

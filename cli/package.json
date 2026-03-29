@@ -33,7 +33,9 @@
     "dev": "tsx src/index.ts",
     "build": "node --input-type=module -e \"import esbuild from 'esbuild'; import config from './esbuild.config.mjs'; await esbuild.build(config);\" && chmod +x dist/index.js",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node ../scripts/run-vitest.mjs",
+    "test:run": "node ../scripts/run-vitest.mjs run"
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0",
@@ -57,6 +59,7 @@
   "devDependencies": {
     "@types/node": "^22.12.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
   }
 }
