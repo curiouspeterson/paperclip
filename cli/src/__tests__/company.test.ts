@@ -499,7 +499,7 @@ describe("import selection catalog", () => {
 });
 
 describe("default adapter overrides", () => {
-  it("maps process-only imported agents to claude_local", () => {
+  it("does not silently rewrite imported process agents", () => {
     const preview: CompanyPortabilityPreviewResult = {
       include: {
         company: false,
@@ -578,10 +578,6 @@ describe("default adapter overrides", () => {
       errors: [],
     };
 
-    expect(buildDefaultImportAdapterOverrides(preview)).toEqual({
-      "legacy-agent": {
-        adapterType: "claude_local",
-      },
-    });
+    expect(buildDefaultImportAdapterOverrides(preview)).toBeUndefined();
   });
 });
